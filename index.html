@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="ia3-fft.js"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -127,6 +128,22 @@ dialog .foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;bor
 .live-tile{background:var(--soft);border-radius:10px}
 .live-tile .v{font-size:22px}
 .live-note{font-size:12px;margin:0;padding:4px 14px 12px}
+.sens-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;padding:8px 14px 4px;border-top:1px solid var(--line);margin-top:6px}
+@media (max-width:760px){.sens-grid{grid-template-columns:minmax(0,1fr)}}
+.sens-grid h4{margin:6px 0 8px;font-size:12px;font-weight:600;color:var(--muted)}
+.sens-note{font-size:12px;margin:8px 0 0}
+table.thr{width:auto;min-width:100%;font-size:13px}
+table.thr th,table.thr td{padding:4px 8px}
+#fftPanel{margin-bottom:12px}
+#fftPanel .ph{flex-wrap:wrap}
+.fft-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:8px 14px 0}
+@media (max-width:1000px){.fft-grid{grid-template-columns:minmax(0,1fr)}}
+.fft-box{height:280px;padding:4px 0 0}
+.sub-h{font-size:12px;font-weight:600;color:var(--muted);margin:2px 0 4px}
+.diag{padding:10px 14px 12px;border-top:1px solid var(--line);margin-top:10px}
+.diag ul{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:8px}
+.diag li .muted{font-size:12px;margin-top:2px}
+.diag-note{font-size:12px;margin:10px 0 0}
 </style>
 </head>
 <body>
@@ -233,9 +250,25 @@ const series=a=>S.readings.filter(r=>r.asset===a).sort((x,y)=>x.t-y.t);
 function overall(r){const v=[r.vx,r.vy,r.vz].filter(x=>x!=null);return v.length?Math.max(...v):(r.vo??null)}
 function accMax(r){const v=[r.ax,r.ay,r.az].filter(x=>x!=null);return v.length?Math.max(...v):(r.ao??null)}
 function zone(v,z){if(v==null)return null;return v<z[0]?'A':v<z[1]?'B':v<z[2]?'C':'D'}
+// Readings are judged either by ISO 10816-3 zones (c.z) or, once read from the sensor, by the
+// sensor's own per-axis warning/alarm thresholds - the ones the i-ALERT app alarms on
+const useSensorThr=c=>c.thrSrc==='sensor'&&!!c.sensorThr;
+function tempLimits(c){
+  const s=useSensorThr(c)?c.sensorThr:null;
+  return{tw:s&&s.tw!=null?s.tw:c.tw,ta:s&&s.ta!=null?s.ta:c.ta};
+}
+const axesOf=r=>[r.vx,r.vy,r.vz].some(v=>v!=null)?[r.vx,r.vy,r.vz]:[r.vo];
+function vibZone(axes,c){
+  const a=axes.filter(v=>v!=null);if(!a.length)return null;
+  if(!useSensorThr(c))return zone(Math.max(...a),c.z);
+  const{warn,alarm}=c.sensorThr;let z='B';
+  axes.forEach((v,i)=>{if(v==null)return;
+    if(alarm[i]!=null&&v>=alarm[i])z='D';else if(warn[i]!=null&&v>=warn[i]&&z!=='D')z='C'});
+  return z;
+}
 function status(r,c){
-  let z=zone(overall(r),c.z);
-  if(r.temp!=null){if(r.temp>=c.ta)z='D';else if(r.temp>=c.tw&&(z==null||z<'C'))z='C'}
+  let z=vibZone(axesOf(r),c);const{tw,ta}=tempLimits(c);
+  if(r.temp!=null){if(r.temp>=ta)z='D';else if(r.temp>=tw&&(z==null||z<'C'))z='C'}
   return z;
 }
 
@@ -407,7 +440,7 @@ function renderMain(ns){
   const a=S.sel,c=cfg(a),all=series(a),last=all[all.length-1];
   const from=S.range?last.t-S.range*DAY:-Infinity;
   const rs=all.filter(r=>r.t>=from);
-  const ov=overall(last),z=status(last,c),vz=zone(ov,c.z);
+  const ov=overall(last),z=status(last,c),vz=vibZone(axesOf(last),c),tl=tempLimits(c);
   // compare with ~7 days earlier
   let prev=null;for(let i=all.length-1;i>=0;i--)if(all[i].t<=last.t-7*DAY){prev=all[i];break}
   let delta='';
@@ -427,7 +460,7 @@ function renderMain(ns){
     ${kpi('Velocity รวม (สูงสุดของ 3 แกน)',fv(ov),uv(),delta,'hero z'+(vz||''))}
     ${kpi('Velocity X / Y / Z',`${fv(last.vx)}<small>/</small>${fv(last.vy)}<small>/</small>${fv(last.vz)}`,'','หน่วย '+uv()).replace('class="v num"','class="v num" style="font-size:18px;margin-top:10px"')}
     ${kpi('Acceleration สูงสุด',fn(accMax(last),3),'g',`X ${fn(last.ax,3)} · Y ${fn(last.ay,3)} · Z ${fn(last.az,3)}`)}
-    ${kpi('อุณหภูมิผิว',ft(last.temp),ut(),last.temp==null?'':last.temp>=c.ta?'<span class="up">เกินขีดอันตราย</span>':last.temp>=c.tw?'<span class="up">เกินขีดเตือน</span>':'ปกติ')}
+    ${kpi('อุณหภูมิผิว',ft(last.temp),ut(),last.temp==null?'':last.temp>=tl.ta?'<span class="up">เกินขีดอันตราย</span>':last.temp>=tl.tw?'<span class="up">เกินขีดเตือน</span>':'ปกติ')}
     ${kpi('ความเร็วรอบ',last.rpm!=null?Math.round(last.rpm):'–','RPM',dFull(last.t))}
     ${kpi('สูงสุดในช่วงที่เลือก',fv(maxOv),uv(),`${rs.length} ค่า · เตือน ${alarms.length} ครั้ง`)}
   </div>
@@ -436,6 +469,7 @@ function renderMain(ns){
     <div class="panel"><div class="ph"><h3>Acceleration (g)</h3></div><div class="cbox"><canvas id="cA"></canvas></div></div>
     <div class="panel"><div class="ph"><h3>อุณหภูมิ (${ut()}) และ RPM</h3></div><div class="cbox"><canvas id="cT"></canvas></div></div>
   </div>
+  <div class="panel" id="fftPanel"></div>
   <div class="grid2">
     <div class="panel"><div class="ph"><h3>ค่าที่อ่านได้ (ล่าสุด 200 ค่า)</h3></div>
       <div class="tablewrap"><table><thead><tr><th>เวลา</th><th>X</th><th>Y</th><th>Z</th><th>รวม</th><th>โซน</th><th>Acc (g)</th><th>${ut()}</th><th>RPM</th></tr></thead><tbody>
@@ -447,6 +481,9 @@ function renderMain(ns){
       </div>
       <div class="panel"><div class="ph"><h3>ตั้งค่าเกณฑ์ของเครื่องนี้</h3></div>
         <div class="form">
+          <label class="full">ตัดสินสถานะด้วยเกณฑ์<select id="thrSrc">
+            <option value="sensor" ${c.thrSrc==='sensor'&&c.sensorThr?'selected':''} ${c.sensorThr?'':'disabled'}>ตามที่ตั้งไว้ในเซนเซอร์ (เหมือนแอป i-ALERT)${c.sensorThr?'':' - เชื่อมต่อเซนเซอร์ก่อน'}</option>
+            <option value="iso" ${useSensorThr(c)?'':'selected'}>ISO 10816-3 (ตั้งค่าด้านล่าง)</option></select></label>
           <label class="full">ประเภทเครื่อง (ISO 10816-3)<select id="cCls">${Object.entries(CLASSES).map(([k,v])=>`<option value="${k}" ${c.cls===k?'selected':''}>${v.n}</option>`).join('')}</select>
             <div class="zbar"><i style="background:var(--za)"></i><i style="background:var(--zb)"></i><i style="background:var(--zc)"></i><i style="background:var(--zd)"></i></div></label>
           <label>A→B ปกติ (${uv()})<input type="number" step="any" id="z0" value="${+zs[0].toFixed(3)}"></label>
@@ -465,6 +502,7 @@ function renderMain(ns){
   </div>`;
 
   m.querySelectorAll('#range button').forEach(b=>b.onclick=()=>{S.range=+b.dataset.d;save();render()});
+  $('#thrSrc').onchange=e=>{c.thrSrc=e.target.value;save();render();toast(e.target.value==='sensor'?'ใช้เกณฑ์จากเซนเซอร์':'ใช้เกณฑ์ ISO 10816-3')};
   $('#cCls').onchange=e=>{const p=CLASSES[e.target.value].z;if(p)['z0','z1','z2'].forEach((id,i)=>$('#'+id).value=+cv(p[i]).toFixed(3))};
   ['z0','z1','z2'].forEach(id=>$('#'+id).oninput=()=>$('#cCls').value='custom');
   $('#bSave').onclick=()=>{
@@ -479,6 +517,7 @@ function renderMain(ns){
 
   drawCharts(rs,c);
   fillLive();
+  renderFFT();
 }
 
 function css(){const g=getComputedStyle(document.documentElement),v=n=>g.getPropertyValue(n).trim();
@@ -504,13 +543,18 @@ function drawCharts(rs,cf){
   const x0=rs[0].t,x1=rs[rs.length-1].t,cvf=v=>+cv(v).toFixed(4);
   const vds=[line('X',c.x,pts('vx',cvf)),line('Y',c.y,pts('vy',cvf)),line('Z',c.z,pts('vz',cvf))].filter(d=>d.data.length);
   if(!vds.length)vds.push(line('Overall',c.x,pts('vo',cvf)));
-  vds.push(ref('ปกติ '+fv(cf.z[0]),c.zb,cv(cf.z[0]),x0,x1),ref('เฝ้าระวัง '+fv(cf.z[1]),c.zc,cv(cf.z[1]),x0,x1),ref('อันตราย '+fv(cf.z[2]),c.zd,cv(cf.z[2]),x0,x1));
+  if(useSensorThr(cf)){ // lowest per-axis level, so the line marks where the first axis trips
+    const lo=a=>{const v=a.filter(x=>x!=null);return v.length?Math.min(...v):null};
+    const w=lo(cf.sensorThr.warn),al=lo(cf.sensorThr.alarm);
+    if(w!=null)vds.push(ref('warning (เซนเซอร์) '+fv(w),c.zc,cv(w),x0,x1));
+    if(al!=null)vds.push(ref('alarm (เซนเซอร์) '+fv(al),c.zd,cv(al),x0,x1));
+  }else vds.push(ref('ปกติ '+fv(cf.z[0]),c.zb,cv(cf.z[0]),x0,x1),ref('เฝ้าระวัง '+fv(cf.z[1]),c.zc,cv(cf.z[1]),x0,x1),ref('อันตราย '+fv(cf.z[2]),c.zd,cv(cf.z[2]),x0,x1));
   charts.push(new Chart($('#cV'),{type:'line',data:{datasets:vds},options:opts(uv())}));
   const ads=[line('X',c.x,pts('ax')),line('Y',c.y,pts('ay')),line('Z',c.z,pts('az'))].filter(d=>d.data.length);
   if(!ads.length)ads.push(line('Overall',c.x,pts('ao')));
   charts.push(new Chart($('#cA'),{type:'line',data:{datasets:ads},options:opts('g')}));
   const tds=[line('อุณหภูมิ',c.t,pts('temp',v=>+ct(v).toFixed(2)),{yAxisID:'y'}),
-    ref('เตือน',c.zc,ct(cf.tw),x0,x1),ref('อันตราย',c.zd,ct(cf.ta),x0,x1)];
+    ref('เตือน',c.zc,ct(tempLimits(cf).tw),x0,x1),ref('อันตราย',c.zd,ct(tempLimits(cf).ta),x0,x1)];
   const rp=pts('rpm');if(rp.length)tds.push(line('RPM',c.r,rp,{yAxisID:'y2',borderWidth:1,hidden:true}));
   const o=opts(ut(),rp.length?{y2:{position:'right',title:{display:true,text:'RPM',color:c.muted},ticks:{color:c.muted},grid:{display:false}}}:null);
   o.scales.y.beginAtZero=false;
@@ -553,7 +597,15 @@ function parseSys(dv,fallbackScale){
   const devType=u8(118),scale=devType===9?1289:devType===8?816:fallbackScale;
   const buf=new Uint8Array(HDR+REC);buf.set(new Uint8Array(dv.buffer,dv.byteOffset+144,REC),HDR);
   const rpm=u16(172),r4=v=>Math.round(v*1e4)/1e4;
+  // Thresholds: High (@18-22, temp @14) = alarm, Low (@24-28, temp @16) = warning; 0xFFFF / 0x7FFF = not set
+  const vth=o=>{const v=u16(o);return v>=0xFFFF?null:r4(v/scale*25.4)};
+  const tth=o=>{const v=dv.getInt16(o,true);return v>=0x7FFF?null:v/100};
+  const st=u16(4),bit=n=>!!((st>>n)&1); // device status bits (ITTiAlert3DeviceStatus)
   return{clock:u32(68),lastTrend:u32(144),devType,rev:u8(119),scale,
+    thr:{alarm:[18,20,22].map(vth),warn:[24,26,28].map(vth),ta:tth(14),tw:tth(16)},
+    flags:{alarmMonth:bit(1),alarmWeek:bit(2),alarm2d:bit(3),battery:bit(6),running:bit(9),
+      tempAlarm:bit(10),tempWarn:bit(11),vibAlarm:bit(14),vibWarn:bit(15)},
+    lastAlarm:u32(60),lastAlarmFFT:u32(140),alarmSec:u32(80),
     rec:parseTrend(buf,scale)[0]||null,
     rpm:rpm===65534||rpm===65535||rpm<30?null:rpm,
     kurt:[180,182,184].map(o=>u16(o)/100),
@@ -596,7 +648,9 @@ function parseTrend(buf,scale){
   }
   return out;
 }
-function bulkRequest(ch,from){
+// opcode 1 = trends (header: count, bytes; payload = count x 28-byte records)
+// opcode 3 = alarm FFT/TWF (header: records remaining, bytes per record; payload = ONE record)
+function bulkRequest(ch,from,opcode=1){
   return new Promise((resolve,reject)=>{
     const chunks=[];let got=0,expected=null,idle,lastPct=0;
     const finish=err=>{clearTimeout(idle);ble.abort=null;ch.removeEventListener('characteristicvaluechanged',on);ch.stopNotifications().catch(()=>{});
@@ -610,27 +664,32 @@ function bulkRequest(ch,from){
       if(expected==null){
         if(bytes.length!==HDR)return; // 10-byte busy-status packets can arrive first
         const dv=new DataView(bytes.buffer),n=dv.getUint16(2,true),nb=dv.getUint32(4,true);
-        expected=HDR+n*REC;
-        if(nb>0&&nb%REC===0&&nb!==n*REC)expected=HDR+nb;
+        if(opcode===1){
+          expected=HDR+n*REC;
+          if(nb>0&&nb%REC===0&&nb!==n*REC)expected=HDR+nb;
+          bleLog(`เซนเซอร์ส่งข้อมูล ${n} ค่า`);
+        }else{
+          expected=n>0?HDR+nb:HDR;
+          bleLog(n>0?`มีข้อมูล FFT ตอน alarm เหลือ ${n} ชุด กำลังรับ 1 ชุด (${Math.round(nb/1024)} KB)`:'ไม่มีข้อมูล FFT ตอน alarm เพิ่มเติม');
+        }
         chunks.push(bytes);got=HDR;
-        bleLog(`เซนเซอร์ส่งข้อมูล ${n} ค่า`);
         if(expected===HDR)return finish();
         return arm(IDLE_MS);
       }
       if(!bytes.length)return finish();
       chunks.push(bytes);got+=bytes.length;
       const pct=Math.min(100,Math.round((got-HDR)/(expected-HDR)*100));
-      if(pct>=lastPct+20||(got>=expected&&pct!==lastPct)){lastPct=pct-pct%20;bleLog(`รับข้อมูล ${got>=expected?100:lastPct}%`)}
+      if(pct>=lastPct+20||(got>=expected&&pct!==lastPct)){lastPct=pct-pct%20;bleLog(`รับข้อมูล ${got>=expected?100:lastPct}%`);if(ble.onProgress)ble.onProgress(pct)}
       if(got>=expected)return finish();
       arm(IDLE_MS);
     };
-    ble.abort=msg=>{ // keep whole records already received; next fetch resumes after the newest one
-      if(expected!=null&&got>=HDR+REC){bleLog('เซนเซอร์ตัดกลางทาง เก็บข้อมูลที่ได้มาแล้วไว้ก่อน');finish()}else finish(msg)};
+    ble.abort=msg=>{ // trends: keep whole records already received; an FFT record is useless when partial
+      if(opcode===1&&expected!=null&&got>=HDR+REC){bleLog('เซนเซอร์ตัดกลางทาง เก็บข้อมูลที่ได้มาแล้วไว้ก่อน');finish()}else finish(msg)};
     (async()=>{
       try{
         ch.addEventListener('characteristicvaluechanged',on);
         await ch.startNotifications();
-        const cmd=new Uint8Array([1,0,from&255,(from>>>8)&255,(from>>>16)&255,(from>>>24)&255]); // opcode 1 = trends
+        const cmd=new Uint8Array([opcode,0,from&255,(from>>>8)&255,(from>>>16)&255,(from>>>24)&255]);
         arm(15000);
         if(ch.properties.write)await ch.writeValueWithResponse(cmd);else await ch.writeValueWithoutResponse(cmd);
       }catch(e){finish(e.message)}
@@ -710,6 +769,194 @@ async function bleFetch(){
   }
 }
 
+// ---- alarm FFT/TWF records (opcode 3) ----
+// Raw records (~49 KB each) are kept in IndexedDB; localStorage is too small for them
+const FFT_LAST=0xFFFFFFFE,FFT_TS_OFF=49152,FFT_MAX=30;
+const FFTDB={
+  db:null,
+  open(){return this.db||(this.db=new Promise((res,rej)=>{
+    const q=indexedDB.open('vibmon-fft',1);
+    q.onupgradeneeded=()=>q.result.createObjectStore('rec',{keyPath:'key'});
+    q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)}))},
+  async put(r){const db=await this.open();return new Promise((res,rej)=>{
+    const t=db.transaction('rec','readwrite');t.objectStore('rec').put(r);t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})},
+  async list(asset){const db=await this.open();return new Promise((res,rej)=>{
+    const q=db.transaction('rec').objectStore('rec').getAll();
+    q.onsuccess=()=>res(q.result.filter(r=>r.asset===asset).sort((a,b)=>b.ts-a.ts));q.onerror=()=>rej(q.error)})},
+  async remove(asset){const all=await this.list(asset),db=await this.open();return new Promise((res,rej)=>{
+    const t=db.transaction('rec','readwrite');all.forEach(r=>t.objectStore('rec').delete(r.key));t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}
+};
+// Same loop as the app: ask from the newest stored record's timestamp, one record per request,
+// until the sensor reports none left. FFT_LAST asks for only the most recent alarm capture.
+async function bleFetchFFT(latestOnly){
+  if(ble.busy||!ble.device)return;
+  ble.busy=true;updateBleButton();fillLive();
+  const dev=ble.device,asset=ble.cfg.asset;
+  try{
+    const ch=await bleConnect(dev);
+    if(ch.sys&&!ble.live)applySys(parseSys(await ch.sys.readValue(),ble.cfg.scale));
+    const s=ble.live&&ble.live.sys,have=await FFTDB.list(asset);
+    let from=latestOnly?FFT_LAST:(have.length?have[0].ts:0),added=0;
+    bleLog(latestOnly?'ขอข้อมูล FFT ตอน alarm ครั้งล่าสุด':from?'ขอข้อมูล FFT ตอน alarm หลัง '+dFull(from*1000):'ขอข้อมูล FFT ตอน alarm ทั้งหมด');
+    for(let i=0;i<FFT_MAX;i++){
+      const buf=await bulkRequest(ch,from,3);
+      if(buf.length<=HDR+FFT_TS_OFF)break;
+      const bytes=buf.slice(HDR),ts=new DataView(bytes.buffer).getUint32(FFT_TS_OFF,true);
+      if(!validTs(ts)){bleLog('ข้อมูล FFT มีเวลาไม่ถูกต้อง หยุดดึง');break}
+      if(!have.some(h=>h.ts===ts)){await FFTDB.put({key:asset+'|'+ts,asset,ts,rev:s?s.rev:null,devType:s?s.devType:null,bytes});added++}
+      bleLog(`ได้ FFT ตอน alarm: ${dFull(ts*1000)}`);
+      if(latestOnly||(from!==0&&ts<=from))break;
+      from=ts;
+    }
+    toast(added?`ได้ข้อมูล FFT ตอน alarm ${added} ชุด`:'ไม่มีข้อมูล FFT ตอน alarm ใหม่');
+    await renderFFT();
+  }catch(e){bleLog('ดึง FFT ไม่สำเร็จ: '+e.message);toast('ดึง FFT ไม่สำเร็จ: '+e.message)}
+  finally{
+    ble.busy=false;
+    if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
+    updateBleButton();fillLive();
+  }
+}
+
+// ---- FFT / waveform panel (decoding in ia3-fft.js, ported from the app) ----
+const FUI={key:null,band:'low',qty:'vel'}; // low band first: 1X/2X peaks are unreadable on the 0-5 kHz axis
+let fftCharts=[];
+function decodeRec(r){
+  // rev/devType are saved with the record; fall back on the record length for older entries
+  return IA3FFT.decodeAlarmRecord(r.bytes,{rev:r.rev!=null?r.rev:(r.bytes.length>=49380?16:9),devType:r.devType!=null?r.devType:8});
+}
+// Spectrum points for one axis: velocity (mm/s, or in/s when chosen) or acceleration (g)
+function specPoints(dec,band,qty,axis){
+  const key=qty==='acc'?'gfft':'vfft',conv=v=>qty==='acc'?v:cv(v),out=[];
+  if(dec.single){const B=dec.single;for(let i=1;i<B.freq.length;i++)out.push({x:B.freq[i],y:conv(B[key][axis][i])});return out}
+  if(band==='combined'&&dec.high&&dec.high.startBin!=null){
+    const c=IA3FFT.combine(dec.low,dec.high,key,axis);
+    return c.freq.map((f,i)=>({x:f,y:conv(c.val[i])}));
+  }
+  const B=band==='high'?dec.high:dec.low;
+  if(!B||B.startBin==null)return out;
+  for(let i=Math.max(1,B.startBin);i<=B.endBin;i++)out.push({x:B.freq[i],y:conv(B[key][axis][i])});
+  return out;
+}
+function twfPoints(dec,band,axis){
+  const B=dec.single||(band==='high'?dec.high:dec.low);
+  if(!B||!B.twfSampleRate)return[];
+  const a=B.twf[axis],dt=1000/B.twfSampleRate,out=new Array(a.length);
+  for(let i=0;i<a.length;i++)out[i]={x:i*dt,y:a[i]};
+  return out;
+}
+async function renderFFT(){
+  if(!$('#fftPanel'))return;
+  let list=[];
+  try{list=await FFTDB.list(S.sel)}catch(e){}
+  const el=$('#fftPanel');if(!el)return; // query after the await: the page may have re-rendered
+  fftCharts.forEach(c=>c.destroy());fftCharts=[];
+  if(!list.length){
+    el.innerHTML=`<div class="ph"><h3>FFT และ waveform ตอนเกิด alarm</h3></div>
+      <p class="muted" style="padding:6px 14px 14px;margin:0">ยังไม่มีข้อมูล เชื่อมต่อเซนเซอร์ แล้วกด "ดึง FFT ตอน alarm" ในแผงค่าสด (ประมาณ 10 วินาทีต่อชุด)</p>`;
+    return;
+  }
+  const rec=list.find(r=>r.key===FUI.key)||list[0];FUI.key=rec.key;
+  let dec;
+  try{dec=decodeRec(rec)}catch(e){el.innerHTML=`<div class="ph"><h3>FFT และ waveform ตอนเกิด alarm</h3></div><p class="muted" style="padding:6px 14px 14px">ถอดข้อมูลไม่ได้: ${esc(e.message)}</p>`;return}
+  const hasHigh=!!(dec.high&&dec.high.startBin!=null),band=hasHigh?FUI.band:'low';
+  const bandInfo=B=>B&&B.startFreq!=null?`${B.startFreq}–${B.endFreq} Hz, ${B.hzPerBin} Hz/bin`:'';
+  const s=ble.live&&ble.cfg&&ble.cfg.asset===S.sel?ble.live.sys:null;
+  const diag=diagnose(dec,s?s.rpm:null,s?s.kurt:null,cfg(S.sel));
+  el.innerHTML=`
+    <div class="ph"><h3>FFT และ waveform ตอนเกิด alarm (${list.length} ครั้ง)</h3>
+      <div class="row">
+        <select id="fftRec">${list.map((r,i)=>`<option value="${esc(r.key)}" ${r.key===rec.key?'selected':''}>${dFull(r.ts*1000)}${i===0?' (ล่าสุด)':''}</option>`).join('')}</select>
+        ${dec.single?'':`<select id="fftBand"><option value="combined" ${band==='combined'?'selected':''}>ช่วงความถี่: รวม</option><option value="low" ${band==='low'?'selected':''}>ความถี่ต่ำ (ละเอียด)</option>${hasHigh?`<option value="high" ${band==='high'?'selected':''}>ความถี่สูง</option>`:''}</select>`}
+        <div class="seg" id="fftQty"><button data-q="vel" class="${FUI.qty==='vel'?'on':''}">Velocity</button><button data-q="acc" class="${FUI.qty==='acc'?'on':''}">Acceleration</button></div>
+      </div></div>
+    <div class="fft-grid">
+      <div><div class="sub-h">สเปกตรัม (${FUI.qty==='acc'?'g':uv()}) ${dec.single?'':'· ต่ำ '+bandInfo(dec.low)+(hasHigh?' · สูง '+bandInfo(dec.high):'')}</div><div class="cbox fft-box"><canvas id="cFft"></canvas></div></div>
+      <div><div class="sub-h">Waveform (g) · ${band==='high'?'ความถี่สูง':'ความถี่ต่ำ'}</div><div class="cbox fft-box"><canvas id="cTwf"></canvas></div></div>
+    </div>
+    ${diagHtml(diag)}`;
+  $('#fftRec').onchange=e=>{FUI.key=e.target.value;renderFFT()};
+  if($('#fftBand'))$('#fftBand').onchange=e=>{FUI.band=e.target.value;renderFFT()};
+  el.querySelectorAll('#fftQty button').forEach(b=>b.onclick=()=>{FUI.qty=b.dataset.q;renderFFT()});
+  const c=css(),axes=[['x','X (Vertical)',c.x],['y','Y (Axial)',c.y],['z','Z (Horizontal)',c.z]];
+  const thin=(label,color,data)=>({label,data,borderColor:color,backgroundColor:color,borderWidth:1,pointRadius:0,pointHoverRadius:3,tension:0,spanGaps:false});
+  const fds=axes.map(([a,l,col])=>thin(l,col,specPoints(dec,band,FUI.qty,a)));
+  const ys=fds.flatMap(d=>d.data.map(p=>p.y).filter(Number.isFinite));
+  if(diag.f1&&ys.length){ // mark 1X..5X of running speed
+    const top=ys.reduce((m,v)=>v>m?v:m,0);
+    fds.push({label:`nX (1X = ${diag.f1.toFixed(1)} Hz)`,type:'scatter',data:[1,2,3,4,5].map(n=>({x:n*diag.f1,y:top*1.02})),
+      borderColor:c.muted,backgroundColor:c.muted,pointStyle:'triangle',pointRadius:5,rotation:180,isRef:true});
+  }
+  const fo=opts(FUI.qty==='acc'?'g':uv());
+  fo.scales.x={type:'linear',title:{display:true,text:'ความถี่ (Hz)',color:c.muted},ticks:{color:c.muted},grid:{color:c.line}};
+  fo.plugins.tooltip.callbacks.title=it=>it.length?it[0].parsed.x.toFixed(1)+' Hz':'';
+  fftCharts.push(new Chart($('#cFft'),{type:'line',data:{datasets:fds},options:fo}));
+  const to=opts('g');
+  to.scales.y.beginAtZero=false;
+  to.scales.x={type:'linear',title:{display:true,text:'เวลา (ms)',color:c.muted},ticks:{color:c.muted},grid:{color:c.line}};
+  to.plugins.tooltip.callbacks.title=it=>it.length?it[0].parsed.x.toFixed(1)+' ms':'';
+  fftCharts.push(new Chart($('#cTwf'),{type:'line',data:{datasets:axes.map(([a,l,col])=>thin(l,col,twfPoints(dec,band,a)))},options:to}));
+}
+
+// ---- rule-based fault hints from the alarm spectrum (velocity, low band) ----
+// Standard vibration-analysis rules of thumb; a starting point for a technician, not a verdict.
+function diagnose(dec,rpm,kurt,c){
+  const B=dec.single||dec.low;
+  if(!B||!B.vfft)return{items:[],note:'ข้อมูลไม่พอสำหรับวิเคราะห์'};
+  const bin=B.hzPerBin,s=Math.max(1,B.startBin||1),e=B.endBin||B.freq.length-1,V=B.vfft;
+  const amp=(a,hz,tol=2)=>{if(!(hz>0))return 0;const k=Math.round(hz/bin);let m=0;
+    for(let i=Math.max(s,k-tol);i<=Math.min(e,k+tol);i++)if(Number.isFinite(V[a][i]))m=Math.max(m,V[a][i]);return m};
+  let f1=rpm?rpm/60:(c.rpm?c.rpm/60:null),f1Src=rpm?'RPM จากเซนเซอร์':c.rpm?'RPM ที่ตั้งไว้':'';
+  if(!f1){ // no speed known: take the largest radial peak between 8 and 60 Hz as 1X
+    let best=0,bk=0;
+    for(let i=Math.max(s,Math.round(8/bin));i<=Math.min(e,Math.round(60/bin));i++){
+      const v=Math.max(V.x[i]||0,V.z[i]||0);if(v>best){best=v;bk=i}}
+    f1=bk?bk*bin:null;f1Src='ประมาณจากยอดสูงสุด (ไม่ทราบ RPM)';
+  }
+  if(!f1)return{items:[],note:'หาความเร็วรอบไม่ได้'};
+  const H=n=>({x:amp('x',n*f1),y:amp('y',n*f1),z:amp('z',n*f1)}),rad=h=>Math.max(h.x,h.z);
+  const rss=a=>{let q=0;for(let i=s;i<=e;i++){const v=V[a][i];if(Number.isFinite(v))q+=v*v}return Math.sqrt(q)};
+  const h1=H(1),h2=H(2),r1=rad(h1),totRad=Math.max(rss('x'),rss('z'))||1e-9;
+  const items=[],add=(name,level,why)=>items.push({name,level,why});
+  const f=v=>fv(v)+' '+uv();
+  if(r1>0){
+    const share=r1/totRad;
+    let harm=0;for(let n=3;n<=10;n++)if(rad(H(n))>=0.2*r1)harm++;
+    // a clean 1X means unbalance; 1X with a comb of harmonics points to looseness instead
+    if(share>=0.6&&h1.y<0.5*r1&&harm<3)add('ไม่สมดุล (Unbalance)','สูง',`ยอดที่ 1X เด่นมาก (${Math.round(share*100)}% ของแนวรัศมี) และแนวแกนต่ำ`);
+    else if(share>=0.4&&h1.y<0.5*r1)add('ไม่สมดุล (Unbalance)','ปานกลาง',`ยอดที่ 1X ค่อนข้างเด่น (${Math.round(share*100)}% ของแนวรัศมี)`);
+    const r2=rad(h2);
+    if(r2>=r1)add('แนวเพลาไม่ตรง (Misalignment)','สูง',`2X (${f(r2)}) สูงกว่า 1X (${f(r1)})`);
+    else if(r2>=0.5*r1)add('แนวเพลาไม่ตรง (Misalignment)','ปานกลาง',`2X (${f(r2)}) สูงเกินครึ่งหนึ่งของ 1X`);
+    if(h1.y>=r1)add('แนวเพลาไม่ตรงเชิงมุม / ปัญหาแนวแกน','สูง',`1X แนวแกน Y (${f(h1.y)}) สูงเท่าหรือมากกว่าแนวรัศมี`);
+    else if(h1.y>=0.5*r1)add('แนวเพลาไม่ตรงเชิงมุม / ปัญหาแนวแกน','ปานกลาง',`1X แนวแกน Y (${f(h1.y)}) สูงเกินครึ่งของแนวรัศมี`);
+    const half=Math.max(rad(H(0.5)),rad(H(1.5)),rad(H(2.5)));
+    if(harm>=5||half>=0.3*r1)add('หลวม / ฐานยึดไม่แน่น (Looseness)','สูง',`พบ harmonic ${harm} ตัวใน 3X–10X${half>=0.2*r1?' และมี sub-harmonic (0.5X, 1.5X)':''}`);
+    else if(harm>=3||half>=0.2*r1)add('หลวม / ฐานยึดไม่แน่น (Looseness)','ปานกลาง',`พบ harmonic ${harm} ตัวใน 3X–10X`);
+    let vn=0,va=0;for(let n=3;n<=9;n++){const hn=H(n),v=Math.max(rad(hn),hn.y);if(v>va){va=v;vn=n}}
+    if(va>=0.8*r1&&vn>=3)add('ยอดที่ความถี่ใบพัด (Vane pass)','ปานกลาง',`ยอดสูงที่ ${vn}X (${f(va)}) ถ้าใบพัดมี ${vn} ใบ อาจเป็นปัญหาการไหล/ช่องว่างใบพัด`);
+  }
+  const e100=Math.max(amp('x',100,1),amp('z',100,1));
+  if(Math.abs(2*f1-100)>3&&e100>=0.5*Math.max(r1,1e-9))add('ไฟฟ้า/มอเตอร์ (2× ความถี่ไฟ 100 Hz)','ปานกลาง',`ยอดที่ 100 Hz (${f(e100)}) ไม่ตรงกับ 2X`);
+  const k=kurt?Math.max(...kurt):null;
+  let hiG=null;
+  if(dec.high&&dec.high.gfft&&dec.high.startBin!=null){ // RMS acceleration 1-5 kHz from the high band
+    const G=dec.high.gfft,hb=dec.high.hzPerBin;let q=0;
+    for(let i=Math.max(dec.high.startBin,Math.round(1000/hb));i<=dec.high.endBin;i++)for(const a of['x','y','z']){const v=G[a][i];if(Number.isFinite(v))q+=v*v}
+    hiG=Math.sqrt(q/3);
+  }
+  if((k!=null&&k>6)||(hiG!=null&&hiG>1.5))add('ตลับลูกปืน / การหล่อลื่น (Bearing)','สูง',[k!=null?`kurtosis ${k.toFixed(1)}`:'',hiG!=null?`ความเร่งความถี่สูง ${hiG.toFixed(2)} g`:''].filter(Boolean).join(' · '));
+  else if((k!=null&&k>4)||(hiG!=null&&hiG>0.5))add('ตลับลูกปืน / การหล่อลื่น (Bearing)','ปานกลาง',[k!=null?`kurtosis ${k.toFixed(1)}`:'',hiG!=null?`ความเร่งความถี่สูง ${hiG.toFixed(2)} g`:''].filter(Boolean).join(' · '));
+  const rank={'สูง':0,'ปานกลาง':1};items.sort((a,b)=>rank[a.level]-rank[b.level]);
+  return{items,f1,f1Src,r1,note:''};
+}
+function diagHtml(d){
+  const body=d.items.length?d.items.map(it=>`<li><span class="tag ${it.level==='สูง'?'zD':'zC'}">${it.level}</span> <b>${it.name}</b><div class="muted">${it.why}</div></li>`).join('')
+    :`<li><span class="tag zB">ไม่พบรูปแบบเด่น</span> <span class="muted">${d.note||'สเปกตรัมไม่เข้ารูปแบบความผิดปกติทั่วไป'}</span></li>`;
+  return `<div class="diag"><div class="sub-h">วิเคราะห์สาเหตุเบื้องต้น${d.f1?` · 1X = ${d.f1.toFixed(1)} Hz (${Math.round(d.f1*60)} RPM, ${d.f1Src})`:''}</div>
+    <ul>${body}</ul><p class="muted diag-note">วิเคราะห์อัตโนมัติจากหลักทั่วไปของการวิเคราะห์การสั่นสะเทือน ใช้เป็นแนวทางเบื้องต้นเท่านั้น ควรให้ช่างหรือผู้เชี่ยวชาญยืนยันก่อนตัดสินใจซ่อม</p></div>`;
+}
+
 // ---- live readings: re-read the system structure (read-only, nothing is written to the sensor) ----
 const LIVE_MS=15000;
 function applySys(s){
@@ -721,6 +968,11 @@ function applySys(s){
     const f=$('#bleForm');if(f)f.scale.value=String(s.scale);
   }
   if(ble.device)S.sensors[ble.device.id]={asset:ble.cfg.asset,scale:ble.cfg.scale};
+  const ac=cfg(ble.cfg.asset);
+  if(s.thr.alarm.some(v=>v!=null)||s.thr.warn.some(v=>v!=null)){
+    ac.sensorThr=s.thr;
+    if(ac.thrSrc==null){ac.thrSrc='sensor';bleLog('ใช้เกณฑ์ warning/alarm ตามที่ตั้งไว้ในเซนเซอร์ (เปลี่ยนเป็น ISO ได้ในส่วนตั้งค่า)')}
+  }
   if(s.rec){ // the newest trend is a normal reading too
     const hit=S.readings.find(r=>r.asset===ble.cfg.asset&&r.t===s.rec.t);
     if(hit){if(s.rpm!=null)hit.rpm=s.rpm}
@@ -761,13 +1013,36 @@ function toggleLive(){
 function liveTile(label,value,unit,sub,cls=''){
   return `<div class="kpi live-tile ${cls}"><div class="l">${label}</div><div class="v num">${value}${unit?`<small>${unit}</small>`:''}</div><div class="s">${sub||''}</div></div>`;
 }
+const validTs=t=>t>1420070400&&t<Date.now()/1000+86400;
+function fmtDur(sec){
+  if(!sec)return '0 นาที';
+  const h=sec/3600;return h>=48?`${Math.round(h/24)} วัน`:h>=1?`${h.toFixed(1)} ชม.`:`${Math.round(sec/60)} นาที`;
+}
+// Alarm flags + thresholds as configured inside the sensor (read-only)
+function sensorStatusHtml(s){
+  const F=s.flags,T=s.thr,chip=(on,label,cls)=>on?`<span class="tag ${cls}">${label}</span>`:'';
+  const recent=F.alarm2d?chip(true,'มี alarm ใน 48 ชม.','zD'):F.alarmWeek?chip(true,'มี alarm ในสัปดาห์นี้','zC'):F.alarmMonth?chip(true,'มี alarm ในเดือนนี้','zC'):'';
+  const chips=[chip(F.vibAlarm,'alarm การสั่น ตอนนี้','zD'),chip(F.vibWarn&&!F.vibAlarm,'warning การสั่น ตอนนี้','zC'),
+    chip(F.tempAlarm,'alarm อุณหภูมิ ตอนนี้','zD'),chip(F.tempWarn&&!F.tempAlarm,'warning อุณหภูมิ ตอนนี้','zC'),
+    chip(F.battery,'แบตเตอรี่ต่ำ','zC'),recent].join('');
+  const cell=v=>`<td class="num">${v==null?'–':fv(v)}</td>`,tcell=v=>`<td class="num">${v==null?'–':ft(v)}</td>`;
+  return `<div class="sens-grid">
+    <div><h4>สถานะจากเซนเซอร์</h4>
+      <div class="row">${chips||'<span class="tag zB">ไม่มี alarm</span>'}<span class="tag">${F.running?'เครื่องเดินอยู่':'เครื่องหยุด'}</span></div>
+      <p class="muted sens-note">alarm ครั้งล่าสุด: ${validTs(s.lastAlarm)?dFull(s.lastAlarm*1000):'ไม่มีบันทึก'} · เวลาที่อยู่ใน alarm รวม ${fmtDur(s.alarmSec)}</p></div>
+    <div><h4>เกณฑ์ที่ตั้งไว้ในเซนเซอร์ (${uv()} / ${ut()})</h4>
+      <table class="thr"><thead><tr><th></th><th>X</th><th>Y</th><th>Z</th><th>อุณหภูมิ</th></tr></thead><tbody>
+      <tr><td>warning</td>${T.warn.map(cell).join('')}${tcell(T.tw)}</tr>
+      <tr><td>alarm</td>${T.alarm.map(cell).join('')}${tcell(T.ta)}</tr></tbody></table></div>
+  </div>`;
+}
 function fillLive(){
   const el=$('#livePanel');if(!el)return;
   if(!ble.live){el.hidden=true;return}
   el.hidden=false;
   const s=ble.live.sys,r=s.rec,c=cfg(ble.cfg.asset);
-  const ov=r?Math.max(r.vx,r.vy,r.vz):null,z=zone(ov,c.z);
-  const chk=Math.max(...s.checkV),zc=zone(chk,c.z);
+  const ov=r?Math.max(r.vx,r.vy,r.vz):null,z=r?vibZone([r.vx,r.vy,r.vz],c):null;
+  const chk=Math.max(...s.checkV),zc=vibZone(s.checkV,c),tl=tempLimits(c);
   const time=t=>new Date(t).toLocaleTimeString('th-TH',{hour12:false});
   const xyz=(a,f)=>a.map(f).join(' / ');
   const fmtSec=v=>v>=3600?`${+(v/3600).toFixed(1)} ชม.`:v>=60?`${Math.round(v/60)} นาที`:`${v} วินาที`;
@@ -775,20 +1050,25 @@ function fillLive(){
     <div class="ph"><h3>ค่าสดจากเซนเซอร์
       <span class="tag ${ble.liveTimer?'zA':''}">${ble.liveTimer?(ble.busy?'กำลังอ่าน…':'อ่านต่อเนื่อง · ล่าสุด '+time(ble.live.at)):'อ่านเมื่อ '+time(ble.live.at)}</span></h3>
       <div class="row"><button class="btn" id="bLiveOnce" ${ble.busy?'disabled':''}>อ่านอีกครั้ง</button>
-      <button class="btn ${ble.liveTimer?'live':''}" id="bLiveLoop">${ble.liveTimer?'หยุดอ่านต่อเนื่อง':`อ่านต่อเนื่องทุก ${LIVE_MS/1000} วินาที`}</button></div></div>
+      <button class="btn ${ble.liveTimer?'live':''}" id="bLiveLoop">${ble.liveTimer?'หยุดอ่านต่อเนื่อง':`อ่านต่อเนื่องทุก ${LIVE_MS/1000} วินาที`}</button>
+      <button class="btn" id="bFftLast" ${ble.busy?'disabled':''}>ดึง FFT ตอน alarm ล่าสุด</button>
+      <button class="btn" id="bFftAll" ${ble.busy?'disabled':''} title="ประมาณ 10 วินาทีต่อชุด">ดึง FFT ตอน alarm ทั้งหมด</button></div></div>
     <div class="kpis live-grid">
       ${liveTile('ค่าวัดล่าสุด (velocity รวม)',fv(ov),uv(),r?`${z?ZL[z]+' · ':''}วัดเมื่อ ${dFull(r.t)}`:'ยังไม่มีค่า','hero z'+(z||''))}
       ${liveTile('Velocity X / Y / Z',r?xyz([r.vx,r.vy,r.vz],fv):'–','',uv())}
       ${liveTile('ตรวจ alarm ครั้งล่าสุด',fv(chk),uv(),`${zc?ZL[zc]+' · ':''}X/Y/Z ${xyz(s.checkV,fv)} · ตรวจทุก ${fmtSec(s.wakeSec)}`,'z'+(zc||''))}
       ${liveTile('Acceleration X / Y / Z',r?xyz([r.ax,r.ay,r.az],v=>fn(v,3)):'–','g','ตรวจ alarm: '+xyz(s.checkG,v=>fn(v,3)))}
-      ${liveTile('อุณหภูมิ',r?ft(r.temp):'–',ut(),r&&r.temp>=c.ta?'<span class="up">เกินขีดอันตราย</span>':r&&r.temp>=c.tw?'<span class="up">เกินขีดเตือน</span>':'')}
+      ${liveTile('อุณหภูมิ',r?ft(r.temp):'–',ut(),r&&r.temp>=tl.ta?'<span class="up">เกินขีดอันตราย</span>':r&&r.temp>=tl.tw?'<span class="up">เกินขีดเตือน</span>':'')}
       ${liveTile('ความเร็วรอบ',s.rpm!=null?s.rpm:'–','RPM',s.rpm==null?'สัญญาณไม่พอวัดรอบ':'')}
       ${liveTile('Kurtosis X / Y / Z',xyz(s.kurt,v=>v.toFixed(2)),'','มากกว่า 3 มาก = มีแรงกระแทก (เช่น bearing เสีย)')}
       ${liveTile('แบตเตอรี่',s.battV?s.battV.toFixed(2):'–','V',`ชั่วโมงทำงาน ${Math.round(s.runH).toLocaleString('th-TH')} ชม.`)}
     </div>
+    ${sensorStatusHtml(s)}
     <p class="muted live-note">รุ่น ${s.devType===9?'Digital Accelerometer':s.devType===8?'มาตรฐาน':'ไม่ทราบ ('+s.devType+')'} · firmware rev ${s.rev} · บันทึก trend ทุก ${fmtSec(s.trendSec)} · ค่า "วัดล่าสุด" จะเปลี่ยนเมื่อเซนเซอร์บันทึก trend ใหม่ ส่วน "ตรวจ alarm" อัปเดตบ่อยกว่า</p>`;
   $('#bLiveOnce').onclick=bleLiveRead;
   $('#bLiveLoop').onclick=toggleLive;
+  $('#bFftLast').onclick=()=>bleFetchFFT(true);
+  $('#bFftAll').onclick=()=>bleFetchFFT(false);
 }
 function updateBleButton(){
   const b=$('#bBle');
