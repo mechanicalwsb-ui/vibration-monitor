@@ -119,6 +119,24 @@ dialog .foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;bor
 .ble-log{background:var(--soft);border-radius:8px;padding:8px 10px;font-size:12px;max-height:160px;overflow:auto;min-height:44px;color:var(--muted)}
 .ble-log div+div{margin-top:2px}
 .btn.live{border-color:var(--za);color:var(--za)}
+.conn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:12.5px;background:var(--panel);color:var(--muted);min-width:0;max-width:100%}
+.conn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conn i{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+#bleChip{cursor:pointer;max-width:360px}
+#bleChip:hover{background:var(--soft)}
+#bleState{border-radius:8px;padding:8px 12px}
+#bleState span{white-space:normal}
+.conn.ok{color:var(--ink);border-color:color-mix(in srgb,var(--za) 45%,transparent)}
+.conn.ok i{background:var(--za)}
+.conn.ok-soft i{background:var(--za);opacity:.55}
+.conn.wait i{background:var(--zc);animation:connpulse 1s infinite}
+.conn.busy{color:var(--ink)}
+.conn.busy i{background:var(--accent);animation:connpulse .7s infinite}
+.conn.bad{color:var(--zd);border-color:color-mix(in srgb,var(--zd) 45%,transparent)}
+.conn.bad i{background:var(--zd)}
+@keyframes connpulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.conn i{animation:none!important}}
+@media (max-width:600px){#bleChip{max-width:100%;order:-1;flex:1 1 100%}}
 .check{flex-direction:row!important;align-items:center;gap:8px;flex-wrap:wrap}
 .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 #livePanel{margin-bottom:12px}
@@ -152,6 +170,7 @@ table.thr th,table.thr td{padding:4px 8px}
     <div class="brand"><b>Vibration Monitor</b><span>แดชบอร์ดสำหรับข้อมูลเซนเซอร์ i-ALERT3</span></div>
     <div class="actions">
       <button class="btn primary" id="bImport">นำเข้า CSV</button>
+      <button type="button" class="conn" id="bleChip" title="สถานะการเชื่อมต่อเซนเซอร์"><i></i><span>ยังไม่ได้เชื่อมต่อเซนเซอร์</span></button>
       <button class="btn" id="bBle">เชื่อมต่อเซนเซอร์</button>
       <button class="btn" id="bAdd">+ เพิ่มค่า</button>
       <button class="btn" id="bDemo">ข้อมูลตัวอย่าง</button>
@@ -199,6 +218,7 @@ table.thr th,table.thr td{padding:4px 8px}
       <label class="full check"><input type="checkbox" name="full"> ดึงข้อมูลทั้งหมดในเซนเซอร์ใหม่ (ไม่ใช่เฉพาะค่าใหม่)</label>
       <label class="full check"><input type="checkbox" name="all"> แสดงอุปกรณ์ Bluetooth ทั้งหมด (ใช้เมื่อรายการ i-ALERT ว่าง)</label>
       <p class="full muted" style="margin:0;font-size:12px">ใช้ได้ใน Google Chrome หรือ Microsoft Edge บนคอม มือถือ Android หรือแท็บเล็ต (เช่น MatePad) ที่เปิด Bluetooth ไว้ ปิดแอป i-ALERT บนมือถือก่อน เพราะเซนเซอร์รับการเชื่อมต่อได้ทีละเครื่อง ครั้งแรกจะดึงข้อมูลทั้งหมดที่เซนเซอร์เก็บไว้ ครั้งต่อไปดึงเฉพาะค่าใหม่</p>
+      <div class="full conn" id="bleState"><i></i><span>ยังไม่ได้เชื่อมต่อเซนเซอร์</span></div>
       <div class="full ble-log mono" id="bleLog"></div>
     </div>
     <div class="foot">
@@ -624,7 +644,7 @@ const REC=28,HDR=8;
 // The sensor can pause for several seconds mid-transfer (seen at ~87% of a 3142-record download),
 // so only give up after a long silence; a real disconnect aborts immediately via ble.abort
 const IDLE_MS=45000;
-let ble={device:null,cfg:null,timer:null,busy:false,last:null};
+let ble={device:null,cfg:null,timer:null,busy:false,last:null,state:{phase:'idle'}};
 
 function bleLog(m){const el=$('#bleLog');if(!el)return;const d=document.createElement('div');d.textContent=new Date().toLocaleTimeString('th-TH',{hour12:false})+'  '+m;el.prepend(d)}
 function bleSupportMsg(){
@@ -674,11 +694,13 @@ function bulkRequest(ch,from,opcode=1){
         }
         chunks.push(bytes);got=HDR;
         if(expected===HDR)return finish();
+        setBle('transfer','0%');
         return arm(IDLE_MS);
       }
       if(!bytes.length)return finish();
       chunks.push(bytes);got+=bytes.length;
       const pct=Math.min(100,Math.round((got-HDR)/(expected-HDR)*100));
+      if(ble.state.phase!=='transfer'||ble.state.detail!==pct+'%')setBle('transfer',pct+'%');
       if(pct>=lastPct+20||(got>=expected&&pct!==lastPct)){lastPct=pct-pct%20;bleLog(`รับข้อมูล ${got>=expected?100:lastPct}%`);if(ble.onProgress)ble.onProgress(pct)}
       if(got>=expected)return finish();
       arm(IDLE_MS);
@@ -702,11 +724,13 @@ async function bleConnect(dev,tries=4){
   if(dev.gatt.connected&&ble.ch&&ble.chDev===dev)return ble.ch; // live mode keeps the link open
   for(let i=1;;i++){
     bleLog(`กำลังเชื่อมต่อเซนเซอร์ (ครั้งที่ ${i}/${tries}) …`);
+    setBle('connecting',`(ครั้งที่ ${i}/${tries})`);
     try{
       const server=dev.gatt.connected?dev.gatt:await dev.gatt.connect();
       const svc=await server.getPrimaryService(IA3.svc);
       const ch=await svc.getCharacteristic(IA3.bulk);
       bleLog('เชื่อมต่อแล้ว พบช่องรับข้อมูลของ i-ALERT3');
+      setBle('connected');
       ch.sys=await svc.getCharacteristic(IA3.sys).catch(()=>null);
       ble.ch=ch;ble.chDev=dev;
       return ch;
@@ -722,7 +746,7 @@ async function bleConnect(dev,tries=4){
 async function bleFetch(){
   if(ble.busy||!ble.device)return;
   ble.busy=true;updateBleButton();
-  const dev=ble.device,{asset}=ble.cfg;
+  const dev=ble.device,{asset}=ble.cfg;let err=null;
   try{
     // Decide the range before applySys() below adds the sensor's newest trend; otherwise a device with
     // no history would look up to date and skip the full download
@@ -761,11 +785,11 @@ async function bleFetch(){
     bleLog(added?`เพิ่ม ${added} ค่าใหม่ให้ ${asset}`:'ไม่มีค่าใหม่');
     toast(added?`ดึงข้อมูลจากเซนเซอร์ได้ ${added} ค่า`:'เซนเซอร์ยังไม่มีค่าใหม่');
   }catch(e){
-    bleLog('ผิดพลาด: '+e.message);toast('ดึงข้อมูลจากเซนเซอร์ไม่สำเร็จ: '+e.message);
+    err=e;bleLog('ผิดพลาด: '+e.message);toast('ดึงข้อมูลจากเซนเซอร์ไม่สำเร็จ: '+e.message);
   }finally{
     ble.busy=false; // before disconnecting, so our own disconnect is not logged as the sensor dropping
     if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
-    updateBleButton();fillLive();
+    bleFinish(dev,err);fillLive();
   }
 }
 
@@ -791,7 +815,7 @@ const FFTDB={
 async function bleFetchFFT(latestOnly){
   if(ble.busy||!ble.device)return;
   ble.busy=true;updateBleButton();fillLive();
-  const dev=ble.device,asset=ble.cfg.asset;
+  const dev=ble.device,asset=ble.cfg.asset;let err=null;
   try{
     const ch=await bleConnect(dev);
     if(ch.sys&&!ble.live)applySys(parseSys(await ch.sys.readValue(),ble.cfg.scale));
@@ -810,11 +834,11 @@ async function bleFetchFFT(latestOnly){
     }
     toast(added?`ได้ข้อมูล FFT ตอน alarm ${added} ชุด`:'ไม่มีข้อมูล FFT ตอน alarm ใหม่');
     await renderFFT();
-  }catch(e){bleLog('ดึง FFT ไม่สำเร็จ: '+e.message);toast('ดึง FFT ไม่สำเร็จ: '+e.message)}
+  }catch(e){err=e;bleLog('ดึง FFT ไม่สำเร็จ: '+e.message);toast('ดึง FFT ไม่สำเร็จ: '+e.message)}
   finally{
     ble.busy=false;
     if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
-    updateBleButton();fillLive();
+    bleFinish(dev,err);fillLive();
   }
 }
 
@@ -983,7 +1007,7 @@ function applySys(s){
 async function bleLiveRead(){
   if(ble.busy||!ble.device)return;
   ble.busy=true;updateBleButton();
-  const dev=ble.device;
+  const dev=ble.device;let err=null;
   try{
     const ch=await bleConnect(dev,ble.liveTimer?2:4);
     if(!ch.sys)throw new Error('ไม่พบช่องสถานะของเซนเซอร์');
@@ -991,12 +1015,12 @@ async function bleLiveRead(){
     applySys(parseSys(await ch.sys.readValue(),ble.cfg.scale));
     if(ble.live&&ble.live.sys.lastTrend!==before&&before)bleLog('เซนเซอร์วัดค่าใหม่แล้ว');
   }catch(e){
-    bleLog('อ่านค่าสดไม่ได้: '+e.message);
+    err=e;bleLog('อ่านค่าสดไม่ได้: '+e.message);
     if(!ble.liveTimer)toast('อ่านค่าสดไม่ได้: '+e.message);
   }finally{
     ble.busy=false;
     if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
-    updateBleButton();
+    bleFinish(dev,err);
     if(S.sel===ble.cfg.asset&&!$('#livePanel'))render();else fillLive();
   }
 }
@@ -1004,7 +1028,7 @@ function toggleLive(){
   if(ble.liveTimer){
     clearInterval(ble.liveTimer);ble.liveTimer=null;
     try{if(ble.device&&ble.device.gatt.connected&&!ble.busy)ble.device.gatt.disconnect()}catch(e){}
-    bleLog('หยุดอ่านค่าสดต่อเนื่อง');fillLive();return;
+    bleLog('หยุดอ่านค่าสดต่อเนื่อง');if(!ble.busy)setBle('ready');fillLive();return;
   }
   ble.liveTimer=setInterval(bleLiveRead,LIVE_MS);
   bleLog(`อ่านค่าสดต่อเนื่องทุก ${LIVE_MS/1000} วินาที (ค้างการเชื่อมต่อไว้)`);
@@ -1070,11 +1094,45 @@ function fillLive(){
   $('#bFftLast').onclick=()=>bleFetchFFT(true);
   $('#bFftAll').onclick=()=>bleFetchFFT(false);
 }
+// ---- connection status: one phase, shown as a chip in the header and a line in the connect dialog ----
+// [css class, label]; 'ready' = sensor paired and data fetched, link closed to save the sensor's battery
+const BS={idle:['','ยังไม่ได้เชื่อมต่อเซนเซอร์'],picking:['wait','กำลังเลือกอุปกรณ์…'],connecting:['wait','กำลังเชื่อมต่อ'],
+  connected:['ok','เชื่อมต่ออยู่'],transfer:['busy','กำลังรับข้อมูล'],ready:['ok-soft','พร้อม (ปิดการเชื่อมต่อเพื่อประหยัดแบตเซนเซอร์)'],
+  lost:['wait','สัญญาณหลุด จะเชื่อมใหม่รอบถัดไป'],error:['bad','เชื่อมต่อไม่สำเร็จ']};
+const hm=t=>new Date(t).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+function setBle(phase,detail){ble.state={phase,detail:detail||'',at:Date.now()};renderBleStatus()}
+function bleStatusText(full){
+  const st=ble.state||{phase:'idle'},label=(BS[st.phase]||BS.idle)[1];
+  // error details can be long: the header chip keeps the label, the dialog shows everything
+  const parts=[label+(st.detail&&(full||st.phase!=='error')?' '+st.detail:'')];
+  if(ble.cfg&&st.phase!=='idle')parts.push(ble.cfg.asset);
+  if(ble.last)parts.push('ดึงล่าสุด '+hm(ble.last));
+  if(ble.timer&&ble.autoMs){
+    const next=ble.autoStart+Math.ceil((Date.now()-ble.autoStart+1)/ble.autoMs)*ble.autoMs;
+    parts.push('ดึงอัตโนมัติถัดไป '+hm(next));
+  }
+  if(ble.liveTimer)parts.push('อ่านค่าสดต่อเนื่อง');
+  return parts.join(' · ');
+}
+function renderBleStatus(){
+  const st=ble.state||{phase:'idle'},cls=(BS[st.phase]||BS.idle)[0];
+  [['bleChip',false],['bleState',true]].forEach(([id,full])=>{
+    const el=$('#'+id);if(!el)return;
+    el.className='conn '+cls;el.querySelector('span').textContent=bleStatusText(full);
+    el.title=bleStatusText(true);
+  });
+}
+setInterval(renderBleStatus,30000); // keeps "next auto fetch" current
+// End of any sensor operation: error, still connected (live mode), or done and link closed
+function bleFinish(dev,err){
+  if(err)setBle('error',err.message);
+  else setBle(ble.liveTimer&&dev.gatt.connected?'connected':'ready');
+  updateBleButton();
+}
 function updateBleButton(){
-  const b=$('#bBle');
-  b.classList.toggle('live',!!ble.timer);
-  b.textContent=ble.busy?'กำลังดึงข้อมูล…':ble.timer?`เซนเซอร์: ${ble.cfg.asset}`+(ble.last?' · '+new Date(ble.last).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):''):'เชื่อมต่อเซนเซอร์';
+  $('#bBle').classList.toggle('live',!!ble.timer);
   const s=$('#bleStop');if(s)s.hidden=!ble.timer;
+  renderBleStatus();
 }
 function openBle(){
   const msg=bleSupportMsg();if(msg)return toast(msg);
@@ -1087,6 +1145,8 @@ function openBle(){
 $('#bleGo').onclick=async()=>{
   const f=$('#bleForm');
   let dev;
+  const before=ble.state;
+  setBle('picking');
   bleLog('กำลังเปิดหน้าต่างเลือกอุปกรณ์ Bluetooth …');
   const slow=setTimeout(()=>bleLog('ถ้าหน้าต่างเลือกอุปกรณ์ขึ้นแต่ไม่เจอเซนเซอร์: รอสแกน 30–60 วินาที ถ้ายังไม่เจอ ให้ปิด/เปิด Bluetooth ของคอมแล้วลองใหม่ (ถ้าไม่มีหน้าต่างขึ้นเลย ให้ใช้ Chrome/Edge)'),8000);
   // i-ALERT sensors advertise 16-bit service 0xFEA3 (the official app scans for it)
@@ -1102,13 +1162,18 @@ $('#bleGo').onclick=async()=>{
     bleLog(e.name==='NotFoundError'?'ไม่ได้เลือกเซนเซอร์ (กดยกเลิก หรือเบราว์เซอร์นี้ไม่มีหน้าต่างเลือกอุปกรณ์) ถ้ารายการว่าง ลองติ๊ก "แสดงอุปกรณ์ Bluetooth ทั้งหมด"'
       :e.name==='NotAllowedError'||e.name==='SecurityError'?'เบราว์เซอร์ไม่อนุญาตให้ใช้ Bluetooth: '+e.message+' ให้ลองเปิดใน Chrome/Edge และเปิด Bluetooth ของเครื่อง'
       :'ผิดพลาด: '+e.name+' '+e.message);
+    if(e.name==='NotFoundError')ble.state=before,renderBleStatus(); // cancelled: back to where we were
+    else setBle('error',e.message);
     return;
   }finally{clearTimeout(slow)}
   bleLog('เลือกแล้ว: '+(dev.name||dev.id));
   if(!dev._ia3Watch){
     dev._ia3Watch=true;
     dev.addEventListener('gattserverdisconnected',()=>{
-      if(!ble.busy)return; // our own disconnect after a finished fetch
+      if(!ble.busy){ // our own disconnect after a fetch, or the link dropped while live mode holds it open
+        if(ble.liveTimer&&ble.device===dev){bleLog('สัญญาณหลุด จะเชื่อมใหม่ในรอบถัดไป');setBle('lost')}
+        return;
+      }
       bleLog('เซนเซอร์ตัดการเชื่อมต่อ');
       if(ble.abort)ble.abort('เซนเซอร์ตัดการเชื่อมต่อระหว่างส่งข้อมูล ลองดึงใหม่อีกครั้ง (ครั้งต่อไปจะดึงต่อจากค่าล่าสุดที่ได้)');
     });
@@ -1119,13 +1184,17 @@ $('#bleGo').onclick=async()=>{
   S.sensors[dev.id]={asset,scale};save();
   ble.device=dev;ble.cfg={asset,scale};
   clearInterval(ble.timer);ble.timer=null;
-  if(f.auto.checked){ble.timer=setInterval(bleFetch,+f.every.value*60000);bleLog(`ตั้งดึงอัตโนมัติทุก ${f.every.value} นาที`)}
+  if(f.auto.checked){
+    ble.autoMs=+f.every.value*60000;ble.autoStart=Date.now();
+    ble.timer=setInterval(bleFetch,ble.autoMs);bleLog(`ตั้งดึงอัตโนมัติทุก ${f.every.value} นาที`);
+  }
   await bleFetch();
 };
-$('#bleStop').onclick=()=>{clearInterval(ble.timer);ble.timer=null;updateBleButton();bleLog('หยุดดึงอัตโนมัติแล้ว')};
+$('#bleStop').onclick=()=>{clearInterval(ble.timer);ble.timer=null;ble.autoMs=null;updateBleButton();bleLog('หยุดดึงอัตโนมัติแล้ว')};
 
 // ---- wiring ----
 $('#bBle').onclick=openBle;
+$('#bleChip').onclick=openBle;
 $('#bImport').onclick=()=>$('#file').click();
 $('#file').onchange=e=>{if(e.target.files.length)importFiles([...e.target.files]);e.target.value=''};
 $('#bDemo').onclick=demo;
