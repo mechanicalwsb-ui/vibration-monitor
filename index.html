@@ -665,6 +665,11 @@ async function bleFetch(){
   ble.busy=true;updateBleButton();
   const dev=ble.device,{asset}=ble.cfg;
   try{
+    // Decide the range before applySys() below adds the sensor's newest trend; otherwise a device with
+    // no history would look up to date and skip the full download
+    // Live reads (r.live) are skipped: they can sit after a gap that was never downloaded
+    const last=series(asset).filter(r=>!r.live).at(-1),full=$('#bleForm').full.checked;
+    $('#bleForm').full.checked=false; // one-off; auto-repeat should stay incremental
     const ch=await bleConnect(dev);
     if(ch.sys){
       try{
@@ -677,8 +682,6 @@ async function bleFetch(){
       }catch(e){bleLog('อ่านสถานะเซนเซอร์ไม่ได้: '+e.message)}
     }
     const scale=ble.cfg.scale; // may have been corrected from the sensor's device type
-    const last=series(asset).at(-1),full=$('#bleForm').full.checked;
-    $('#bleForm').full.checked=false; // one-off; auto-repeat should stay incremental
     // Same as the app: send the newest stored timestamp itself (not +1); a value that matches no record
     // makes the sensor return just one record. The repeated record is dropped by the de-duplication below.
     const from=last&&!full?Math.floor(last.t/1000):0;
@@ -691,7 +694,9 @@ async function bleFetch(){
     }
     const idx=new Map(S.readings.map((r,i)=>[r.asset+'|'+r.t,i]));
     let added=0;
-    for(const r of recs){r.asset=asset;const k=asset+'|'+r.t;if(idx.has(k))continue;idx.set(k,S.readings.length);S.readings.push(r);added++}
+    for(const r of recs){r.asset=asset;const k=asset+'|'+r.t;
+      if(idx.has(k)){delete S.readings[idx.get(k)].live;continue} // now confirmed by a download
+      idx.set(k,S.readings.length);S.readings.push(r);added++}
     cfg(asset);ble.last=Date.now();
     if(added){S.sel=asset;save();render()}
     bleLog(added?`เพิ่ม ${added} ค่าใหม่ให้ ${asset}`:'ไม่มีค่าใหม่');
@@ -719,7 +724,7 @@ function applySys(s){
   if(s.rec){ // the newest trend is a normal reading too
     const hit=S.readings.find(r=>r.asset===ble.cfg.asset&&r.t===s.rec.t);
     if(hit){if(s.rpm!=null)hit.rpm=s.rpm}
-    else{S.readings.push({...s.rec,asset:ble.cfg.asset,...(s.rpm!=null?{rpm:s.rpm}:{})});cfg(ble.cfg.asset)}
+    else{S.readings.push({...s.rec,asset:ble.cfg.asset,live:true,...(s.rpm!=null?{rpm:s.rpm}:{})});cfg(ble.cfg.asset)}
   }
   save();
 }
