@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Vibration Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
+  --accent:#1f6feb;--accent-ink:#ffffff;
+  --za:#1a8f4c;--zb:#6f9e2f;--zc:#c98205;--zd:#d1342f;
+  --x:#2f6fdb;--y:#e07b1f;--z:#14928a;--t:#c2410c;--r:#7c3aed;
+  --shadow:0 1px 2px rgba(16,24,40,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1115;--panel:#161a20;--ink:#e6e9ed;--muted:#97a0aa;--line:#29303a;--soft:#1d232b;
+    --accent:#5b9bff;--accent-ink:#0b1220;
+    --za:#3fbf76;--zb:#9cc75a;--zc:#f0a92b;--zd:#ff5f57;
+    --x:#6a9bff;--y:#ffa057;--z:#3cc8bd;--t:#ff8a5c;--r:#b190ff;
+    --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1115;--panel:#161a20;--ink:#e6e9ed;--muted:#97a0aa;--line:#29303a;--soft:#1d232b;
+  --accent:#5b9bff;--accent-ink:#0b1220;
+  --za:#3fbf76;--zb:#9cc75a;--zc:#f0a92b;--zd:#ff5f57;
+  --x:#6a9bff;--y:#ffa057;--z:#3cc8bd;--t:#ff8a5c;--r:#b190ff;
+  --shadow:none;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 "IBM Plex Sans Thai",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.mono,.num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+button,select,input{font:inherit;color:inherit}
+.top{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+.top-in{max-width:1400px;margin:auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.brand{display:flex;flex-direction:column;margin-right:auto;min-width:0}
+.brand b{font-size:16px;font-weight:600}
+.brand span{font-size:12px;color:var(--muted)}
+.actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--soft)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.danger{color:var(--zd)}
+select,input[type=number],input[type=text],input[type=datetime-local]{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 8px;min-width:0}
+.layout{max-width:1400px;margin:auto;padding:16px;display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.panel h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+.ph{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 0}
+aside.panel{padding:8px;position:sticky;top:74px}
+@media (max-width:860px){aside.panel{position:static}}
+.alist{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+@media (max-width:860px){.alist{flex-direction:row;overflow-x:auto;padding-bottom:4px}.asset{min-width:200px}}
+.asset{display:grid;grid-template-columns:10px 1fr auto;gap:2px 10px;align-items:center;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;text-align:left;background:none}
+.asset:hover{background:var(--soft)}
+.asset.on{background:var(--soft);border-color:var(--line)}
+.asset .nm{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.asset .sub{grid-column:2/4;font-size:12px;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.zA{--zc-col:var(--za)}.zB{--zc-col:var(--zb)}.zC{--zc-col:var(--zc)}.zD{--zc-col:var(--zd)}
+.dot.zA,.dot.zB,.dot.zC,.dot.zD{background:var(--zc-col)}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:2px 8px;border-radius:999px;border:1px solid var(--line);white-space:nowrap}
+.tag.zA,.tag.zB,.tag.zC,.tag.zD{color:var(--zc-col);border-color:color-mix(in srgb,var(--zc-col) 40%,transparent);background:color-mix(in srgb,var(--zc-col) 10%,transparent)}
+.tag.stale{color:var(--muted)}
+.mainhead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+.mainhead h2{margin:0;font-size:20px;font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:none;padding:6px 10px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--soft);font-weight:600}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.kpi{padding:12px 14px}
+.kpi .l{font-size:12px;color:var(--muted)}
+.kpi .v{font-size:26px;font-weight:500;line-height:1.2;margin-top:4px}
+.kpi .v small{font-size:13px;color:var(--muted);font-weight:400;margin-left:4px}
+.kpi .s{font-size:12px;color:var(--muted);margin-top:4px;min-height:18px}
+.kpi.hero{border-left:4px solid var(--zc-col,var(--line))}
+.up{color:var(--zd)}.down{color:var(--za)}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.charts .wide{grid-column:1/-1}
+@media (max-width:1000px){.charts{grid-template-columns:minmax(0,1fr)}}
+.cbox{position:relative;height:260px;padding:8px 12px 12px}
+.wide .cbox{height:320px}
+.grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px}
+@media (max-width:1000px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.tablewrap{overflow:auto;max-height:420px;margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:7px 12px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{position:sticky;top:0;background:var(--panel);color:var(--muted);font-weight:500;font-size:12px}
+.alarms{list-style:none;margin:8px 0 0;padding:0 14px 12px;max-height:200px;overflow:auto}
+.alarms li{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
+.alarms li:last-child{border-bottom:0}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:12px 14px 14px}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.form .full{grid-column:1/-1}
+.zbar{display:flex;height:8px;border-radius:4px;overflow:hidden;margin-top:2px}
+.zbar i{flex:1}
+.empty{padding:40px 24px;text-align:center}
+.empty h2{margin:0 0 6px;font-weight:600}
+.empty p{color:var(--muted);max-width:560px;margin:0 auto 16px}
+.empty pre{text-align:left;display:inline-block;background:var(--soft);padding:12px 14px;border-radius:8px;font-size:12px;max-width:100%;overflow:auto}
+.muted{color:var(--muted)}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);padding:0;width:min(560px,calc(100vw - 32px))}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+dialog h3{margin:0;padding:14px 16px;border-bottom:1px solid var(--line);font-size:15px}
+dialog .foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100vw - 32px);z-index:20}
+#toast.show{opacity:1}
+.drop{outline:2px dashed var(--accent);outline-offset:-8px}
+.ble-log{background:var(--soft);border-radius:8px;padding:8px 10px;font-size:12px;max-height:160px;overflow:auto;min-height:44px;color:var(--muted)}
+.ble-log div+div{margin-top:2px}
+.btn.live{border-color:var(--za);color:var(--za)}
+.check{flex-direction:row!important;align-items:center;gap:8px;flex-wrap:wrap}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#livePanel{margin-bottom:12px}
+#livePanel .ph{flex-wrap:wrap}
+#livePanel h3{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.live-grid{padding:10px 14px 4px;margin:0}
+.live-tile{background:var(--soft);border-radius:10px}
+.live-tile .v{font-size:22px}
+.live-note{font-size:12px;margin:0;padding:4px 14px 12px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><b>Vibration Monitor</b><span>แดชบอร์ดสำหรับข้อมูลเซนเซอร์ i-ALERT3</span></div>
+    <div class="actions">
+      <button class="btn primary" id="bImport">นำเข้า CSV</button>
+      <button class="btn" id="bBle">เชื่อมต่อเซนเซอร์</button>
+      <button class="btn" id="bAdd">+ เพิ่มค่า</button>
+      <button class="btn" id="bDemo">ข้อมูลตัวอย่าง</button>
+      <button class="btn" id="bExport">ส่งออก</button>
+      <select id="sUnit" title="หน่วยความเร็ว"><option value="mm">mm/s</option><option value="in">in/s</option></select>
+      <select id="sTUnit" title="หน่วยอุณหภูมิ"><option value="C">°C</option><option value="F">°F</option></select>
+    </div>
+    <input type="file" id="file" accept=".csv,.txt,text/csv" multiple hidden>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="panel" id="side"></aside>
+  <main id="main"></main>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="addForm">
+    <h3>เพิ่มค่าที่อ่านได้ (เช่น ดูจากแอป i-ALERT)</h3>
+    <div class="form">
+      <label class="full">เครื่องจักร<input type="text" name="asset" list="assetList" required placeholder="เช่น P-101"></label>
+      <datalist id="assetList"></datalist>
+      <label class="full">วันที่/เวลา<input type="datetime-local" name="t" required></label>
+      <label>Velocity X <span class="uv"></span><input type="number" step="any" name="vx"></label>
+      <label>Acceleration X (g)<input type="number" step="any" name="ax"></label>
+      <label>Velocity Y <span class="uv"></span><input type="number" step="any" name="vy"></label>
+      <label>Acceleration Y (g)<input type="number" step="any" name="ay"></label>
+      <label>Velocity Z <span class="uv"></span><input type="number" step="any" name="vz"></label>
+      <label>Acceleration Z (g)<input type="number" step="any" name="az"></label>
+      <label>อุณหภูมิ <span class="ut"></span><input type="number" step="any" name="temp"></label>
+      <label>RPM<input type="number" step="any" name="rpm"></label>
+    </div>
+    <div class="foot"><button class="btn" value="cancel" formnovalidate>ยกเลิก</button><button class="btn primary" value="ok">บันทึก</button></div>
+  </form>
+</dialog>
+<dialog id="bleDlg">
+  <form method="dialog" id="bleForm">
+    <h3>ดึงข้อมูล trend จากเซนเซอร์ i-ALERT3</h3>
+    <div class="form">
+      <label class="full">ชื่อเครื่องจักรที่ติดเซนเซอร์ตัวนี้ (เว้นว่าง = ใช้ชื่อเซนเซอร์)<input type="text" name="asset" list="assetList" placeholder="เช่น P-101"></label>
+      <label class="full">รุ่นเซนเซอร์ (มีผลกับการแปลงค่า velocity/acceleration)
+        <select name="scale"><option value="816">i-ALERT3 มาตรฐาน</option><option value="1289">i-ALERT3 Digital Accelerometer</option></select></label>
+      <label class="full check"><input type="checkbox" name="auto"> ดึงซ้ำอัตโนมัติทุก
+        <select name="every"><option value="15">15</option><option value="30" selected>30</option><option value="60">60</option></select> นาที ขณะเปิดหน้านี้ไว้</label>
+      <label class="full check"><input type="checkbox" name="full"> ดึงข้อมูลทั้งหมดในเซนเซอร์ใหม่ (ไม่ใช่เฉพาะค่าใหม่)</label>
+      <label class="full check"><input type="checkbox" name="all"> แสดงอุปกรณ์ Bluetooth ทั้งหมด (ใช้เมื่อรายการ i-ALERT ว่าง)</label>
+      <p class="full muted" style="margin:0;font-size:12px">ใช้ได้ใน Google Chrome หรือ Microsoft Edge บนคอม มือถือ Android หรือแท็บเล็ต (เช่น MatePad) ที่เปิด Bluetooth ไว้ ปิดแอป i-ALERT บนมือถือก่อน เพราะเซนเซอร์รับการเชื่อมต่อได้ทีละเครื่อง ครั้งแรกจะดึงข้อมูลทั้งหมดที่เซนเซอร์เก็บไว้ ครั้งต่อไปดึงเฉพาะค่าใหม่</p>
+      <div class="full ble-log mono" id="bleLog"></div>
+    </div>
+    <div class="foot">
+      <button class="btn" type="button" id="bleStop" hidden>หยุดดึงอัตโนมัติ</button>
+      <button class="btn" value="close" formnovalidate>ปิด</button>
+      <button class="btn primary" type="button" id="bleGo">เลือกเซนเซอร์และดึงข้อมูล</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const KEY='vibmon-v1';
+const DAY=864e5;
+// ISO 10816-3 velocity zone limits (mm/s RMS): A|B, B|C, C|D
+const CLASSES={
+  g2r:{n:'กลุ่ม 2 (15–300 kW) ฐานแข็ง',z:[1.4,2.8,4.5]},
+  g2f:{n:'กลุ่ม 2 (15–300 kW) ฐานยืดหยุ่น',z:[2.3,4.5,7.1]},
+  g1r:{n:'กลุ่ม 1 (>300 kW) ฐานแข็ง',z:[2.3,4.5,7.1]},
+  g1f:{n:'กลุ่ม 1 (>300 kW) ฐานยืดหยุ่น',z:[3.5,7.1,11]},
+  custom:{n:'กำหนดเอง',z:null}
+};
+const ZL={A:'ดีมาก',B:'ปกติ',C:'เฝ้าระวัง',D:'อันตราย'};
+let S={readings:[],assets:{},unit:'mm',tunit:'C',sel:null,range:30,sensors:{}};
+let charts=[];
+
+function load(){try{const j=JSON.parse(localStorage.getItem(KEY)||'null');if(j)Object.assign(S,j)}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast('บันทึกในเบราว์เซอร์ไม่ได้ ข้อมูลจะหายเมื่อปิดหน้า')}}
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),3500)}
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ---- units ----
+const cv=mm=>mm==null?null:(S.unit==='in'?mm/25.4:mm);
+const uv=()=>S.unit==='in'?'in/s':'mm/s';
+const fv=mm=>mm==null?'–':(S.unit==='in'?(mm/25.4).toFixed(3):mm.toFixed(2));
+const ct=c=>c==null?null:(S.tunit==='F'?c*9/5+32:c);
+const ut=()=>'°'+S.tunit;
+const ft=c=>c==null?'–':ct(c).toFixed(1);
+const fn=(v,d=2)=>v==null||isNaN(v)?'–':(+v).toFixed(d);
+const dShort=t=>new Date(t).toLocaleDateString('th-TH',{day:'numeric',month:'short'});
+const dFull=t=>new Date(t).toLocaleString('th-TH',{day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+function ago(t){const m=(Date.now()-t)/6e4;if(m<60)return Math.max(1,Math.round(m))+' นาทีที่แล้ว';if(m<1440)return Math.round(m/60)+' ชม.ที่แล้ว';return Math.round(m/1440)+' วันที่แล้ว'}
+
+// ---- model ----
+function cfg(a){if(!S.assets[a])S.assets[a]={cls:'g2f',z:[...CLASSES.g2f.z],tw:70,ta:85};return S.assets[a]}
+const names=()=>[...new Set(S.readings.map(r=>r.asset))].sort((a,b)=>a.localeCompare(b,'th'));
+const series=a=>S.readings.filter(r=>r.asset===a).sort((x,y)=>x.t-y.t);
+function overall(r){const v=[r.vx,r.vy,r.vz].filter(x=>x!=null);return v.length?Math.max(...v):(r.vo??null)}
+function accMax(r){const v=[r.ax,r.ay,r.az].filter(x=>x!=null);return v.length?Math.max(...v):(r.ao??null)}
+function zone(v,z){if(v==null)return null;return v<z[0]?'A':v<z[1]?'B':v<z[2]?'C':'D'}
+function status(r,c){
+  let z=zone(overall(r),c.z);
+  if(r.temp!=null){if(r.temp>=c.ta)z='D';else if(r.temp>=c.tw&&(z==null||z<'C'))z='C'}
+  return z;
+}
+
+// ---- CSV import ----
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,'');
+  const first=text.split(/\r?\n/,1)[0];
+  const d=[',',';','\t'].sort((a,b)=>first.split(b).length-first.split(a).length)[0];
+  const rows=[];let row=[],f='',q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){if(c==='"'){if(text[i+1]==='"'){f+='"';i++}else q=false}else f+=c}
+    else if(c==='"')q=true;
+    else if(c===d){row.push(f);f=''}
+    else if(c==='\n'||c==='\r'){if(c==='\r'&&text[i+1]==='\n')i++;row.push(f);f='';if(row.some(x=>x.trim()))rows.push(row);row=[]}
+    else f+=c;
+  }
+  row.push(f);if(row.some(x=>x.trim()))rows.push(row);
+  return rows;
+}
+function mapHeader(h){
+  const raw=h.toLowerCase().trim();
+  const sp=' '+raw.replace(/[^a-z0-9\u0E00-\u0E7F]+/g,' ').trim()+' ';
+  const cp=raw.replace(/[^a-z0-9]/g,'');
+  const m=sp.match(/ ([xyz]) /)||cp.match(/(?:vel|velocity|acc|accel|acceleration)([xyz])(?![a-z])/)||cp.match(/^([xyz])(?:vel|acc)/);
+  // i-ALERT app export names axes: Vertical = X, Axial = Y, Horizontal = Z
+  const named=/vertical/.test(raw)?'x':/axial/.test(raw)?'y':/horizontal/.test(raw)?'z':null;
+  const ax=m?m[1]:named;
+  if(/run ?time|hours|battery|แบต|band|flux/.test(raw))return null;
+  if(/timestamp|date|time|วันที่|เวลา/.test(raw))return{f:'t'};
+  if(/asset|machine|pump|equipment|sensor|^name|เครื่อง|ปั๊ม/.test(raw))return{f:'asset'};
+  if(/temp|อุณหภูมิ/.test(raw))return{f:'temp',k:/°f|\(f\)|degf|fahrenheit|_f$| f$/.test(raw)?'F':'C'};
+  if(/rpm|speed|รอบ/.test(raw))return{f:'rpm'};
+  if(/vel|ความเร็ว/.test(raw))return{f:ax?'v'+ax:'vo',k:/in\/s|ips|inch/.test(raw)?'in':'mm'};
+  if(/acc|ความเร่ง/.test(raw))return{f:ax?'a'+ax:'ao'};
+  return null;
+}
+// Decide day/month order for a whole column: any first part > 12 means D/M, any second part > 12 means M/D
+function dateOrder(values){
+  for(const v of values){
+    const m=String(v).trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.]\d{2,4}/);
+    if(!m)continue;
+    if(+m[1]>12)return 'dmy';
+    if(+m[2]>12)return 'mdy';
+  }
+  return 'dmy';
+}
+function parseDate(s,order='dmy'){
+  s=String(s).trim();if(!s)return NaN;
+  if(/^\d{9,13}$/.test(s)){const n=+s;return n<1e11?n*1000:n}
+  const m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:[ T,]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?)?/i);
+  if(m){
+    let D=+m[order==='mdy'?2:1],M=+m[order==='mdy'?1:2],y=+m[3],h=+(m[4]||0);const ap=(m[7]||'').toLowerCase();
+    if(y<100)y+=2000;if(y>2400)y-=543;
+    if(ap==='pm'&&h<12)h+=12;if(ap==='am'&&h===12)h=0;
+    if(M>12&&D<=12)[D,M]=[M,D];
+    return new Date(y,M-1,D,h,+(m[5]||0),+(m[6]||0)).getTime();
+  }
+  let t=Date.parse(s.replace(/^(\d{4}-\d\d-\d\d) /,'$1T'));
+  if(isNaN(t))t=Date.parse(s);
+  if(!isNaN(t)){const d=new Date(t);if(d.getFullYear()>2400){d.setFullYear(d.getFullYear()-543);t=d.getTime()}}
+  return t;
+}
+const num=v=>{if(v==null)return null;const n=parseFloat(String(v).replace(/[^\d.\-eE]/g,''));return isNaN(n)?null:n};
+
+function importText(text,fname){
+  const rows=parseCSV(text);
+  if(rows.length<2)return{err:'ไฟล์ว่างหรือไม่มีข้อมูล'};
+  const hdr=rows[0],map=hdr.map(mapHeader);
+  const has=f=>map.some(x=>x&&x.f===f);
+  if(!has('t'))return{err:'ไม่พบคอลัมน์วันที่/เวลา (หัวคอลัมน์: '+hdr.join(', ')+')'};
+  if(!['vx','vy','vz','vo','ax','ay','az','ao','temp'].some(has))return{err:'ไม่พบคอลัมน์ค่าวัด (หัวคอลัมน์: '+hdr.join(', ')+')'};
+  const defA=fname.replace(/\.[^.]+$/,'').replace(/\s*-?\s*TrendData$/i,'').trim()||'i-ALERT3';
+  const tCol=map.findIndex(x=>x&&x.f==='t');
+  const order=dateOrder(rows.slice(1).map(r=>r[tCol]));
+  const seen=new Set();const idx=new Map(S.readings.map((r,i)=>[r.asset+'|'+r.t,i]));
+  let n=0,bad=0;
+  for(const row of rows.slice(1)){
+    const r={asset:defA};
+    map.forEach((m,i)=>{
+      if(!m||seen.has(m.f+i)&&false)return;
+      const v=row[i];
+      if(m.f==='t'){if(r.t==null)r.t=parseDate(v,order)}
+      else if(m.f==='asset'){if(v&&v.trim())r.asset=v.trim()}
+      else{let n=num(v);if(n==null)return;
+        if(m.k==='in')n*=25.4;
+        if(m.k==='F')n=(n-32)*5/9;
+        if(r[m.f]==null)r[m.f]=n}
+    });
+    if(r.t==null||isNaN(r.t)){bad++;continue}
+    const key=r.asset+'|'+r.t;
+    if(idx.has(key))S.readings[idx.get(key)]=r;else{idx.set(key,S.readings.length);S.readings.push(r)}
+    cfg(r.asset);n++;
+  }
+  const cols=map.filter(Boolean).map(m=>m.f).join(', ');
+  return{n,bad,cols};
+}
+async function importFiles(files){
+  const msgs=[];
+  for(const f of files){
+    const res=importText(await f.text(),f.name);
+    msgs.push(res.err?`${f.name}: ${res.err}`:`${f.name}: นำเข้า ${res.n} แถว${res.bad?` (ข้าม ${res.bad} แถวที่อ่านวันที่ไม่ได้)`:''}`);
+  }
+  save();render();toast(msgs.join(' · '));
+}
+
+// ---- demo ----
+function demo(){
+  const now=Date.now(),list=[['P-101 ปั๊มน้ำดิบ',1.1,2960,44],['P-102 ปั๊มน้ำดี',1.5,2955,48],['P-201 ปั๊มเคมี',0.9,1475,40]];
+  const N=240,rnd=()=>Math.random()-.5;
+  list.forEach(([a,b,rpm,t0],i)=>{
+    const c=cfg(a);c.cls='g2r';c.z=[...CLASSES.g2r.z];
+    for(let k=0;k<=N;k++){
+      const t=Math.round((now-(N-k)*6*36e5)/6e4)*6e4;
+      const tr=i===1?Math.pow(k/N,3)*3.6:0;
+      const day=Math.sin((t/DAY)*2*Math.PI);
+      S.readings.push({asset:a,t,
+        vx:+(b+tr+rnd()*.3).toFixed(3),vy:+(b*.8+tr*.7+rnd()*.25).toFixed(3),vz:+(b*.6+tr*.4+rnd()*.2).toFixed(3),
+        ax:+(.12+tr*.09+rnd()*.03).toFixed(3),ay:+(.1+tr*.07+rnd()*.03).toFixed(3),az:+(.08+tr*.05+rnd()*.02).toFixed(3),
+        temp:+(t0+tr*7+day*2.5+rnd()).toFixed(1),rpm:Math.round(rpm+rnd()*8)});
+    }
+  });
+  S.sel='P-102 ปั๊มน้ำดี';save();render();toast('ใส่ข้อมูลตัวอย่าง 3 เครื่องแล้ว (P-102 มีแนวโน้มสั่นเพิ่มขึ้น)');
+}
+
+// ---- export ----
+function exportCSV(){
+  if(!S.readings.length)return toast('ยังไม่มีข้อมูล');
+  const cols=['asset','vel_x_mm_s','vel_y_mm_s','vel_z_mm_s','vel_overall_mm_s','acc_x_g','acc_y_g','acc_z_g','acc_overall_g','temp_c','rpm'];
+  const keys=['asset','vx','vy','vz','vo','ax','ay','az','ao','temp','rpm'];
+  const q=v=>v==null?'':/[",\n]/.test(v)?'"'+String(v).replace(/"/g,'""')+'"':v;
+  const lines=['timestamp,'+cols.join(',')].concat([...S.readings].sort((a,b)=>a.t-b.t).map(r=>[new Date(r.t).toISOString(),...keys.map(k=>q(r[k]))].join(',')));
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\uFEFF'+lines.join('\n')],{type:'text/csv'}));
+  a.download='vibration-data-'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+// ---- render ----
+function render(){
+  $('#sUnit').value=S.unit;$('#sTUnit').value=S.tunit;
+  const ns=names();
+  if(ns.length&&!ns.includes(S.sel))S.sel=ns[0];
+  renderSide(ns);renderMain(ns);
+}
+function renderSide(ns){
+  const side=$('#side');
+  if(!ns.length){side.innerHTML='<div class="ph"><h3>เครื่องจักร</h3></div><p class="muted" style="padding:6px 14px 10px;margin:0">ยังไม่มีข้อมูล</p>';return}
+  side.innerHTML='<div class="ph" style="padding:6px 8px 0"><h3>เครื่องจักร ('+ns.length+')</h3></div><div class="alist">'+ns.map(a=>{
+    const s=series(a),r=s[s.length-1],z=status(r,cfg(a));
+    return `<button class="asset ${a===S.sel?'on':''}" data-a="${esc(a)}"><span class="dot z${z||''}"></span><span class="nm">${esc(a)}</span><span class="num">${fv(overall(r))}</span><span class="sub">${z?ZL[z]+' · ':''}${ago(r.t)}</span></button>`;
+  }).join('')+'</div>';
+  side.querySelectorAll('.asset').forEach(b=>b.onclick=()=>{S.sel=b.dataset.a;save();render()});
+}
+function kpi(l,v,u,s,cls=''){return `<div class="panel kpi ${cls}"><div class="l">${l}</div><div class="v num">${v}${u?`<small>${u}</small>`:''}</div><div class="s">${s||''}</div></div>`}
+
+function renderMain(ns){
+  charts.forEach(c=>c.destroy());charts=[];
+  const m=$('#main');
+  if(!ns.length){
+    m.innerHTML=`<div class="panel empty"><h2>เริ่มต้นด้วยการนำเข้าข้อมูล</h2>
+      <p>ส่งออกข้อมูลเป็น CSV จากแอป i-ALERT แล้วลากไฟล์มาวางที่หน้านี้ หรือกด "นำเข้า CSV" ระบบจะจับคู่หัวคอลัมน์ให้อัตโนมัติ (รองรับ mm/s, in/s, °C, °F และปี พ.ศ.)</p>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:18px"><button class="btn primary" onclick="$('#file').click()">นำเข้า CSV</button><button class="btn" onclick="demo()">ลองด้วยข้อมูลตัวอย่าง</button></div>
+      <pre>timestamp,asset,velocity x (mm/s),velocity y (mm/s),velocity z (mm/s),acc x (g),acc y (g),acc z (g),temperature (c),rpm
+2026-10-15 08:00,P-101,1.21,0.98,0.65,0.12,0.10,0.08,45.2,2960</pre>
+      <p style="margin-top:12px;font-size:12px">ถ้าไฟล์ไม่มีคอลัมน์ asset จะใช้ชื่อไฟล์เป็นชื่อเครื่อง</p></div>`;
+    return;
+  }
+  const a=S.sel,c=cfg(a),all=series(a),last=all[all.length-1];
+  const from=S.range?last.t-S.range*DAY:-Infinity;
+  const rs=all.filter(r=>r.t>=from);
+  const ov=overall(last),z=status(last,c),vz=zone(ov,c.z);
+  // compare with ~7 days earlier
+  let prev=null;for(let i=all.length-1;i>=0;i--)if(all[i].t<=last.t-7*DAY){prev=all[i];break}
+  let delta='';
+  if(prev&&overall(prev)){const p=(ov-overall(prev))/overall(prev)*100;delta=`<span class="${p>10?'up':p<-10?'down':''}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(0)}%</span> เทียบ 7 วันก่อน`}
+  const stale=Date.now()-last.t>2*DAY;
+  const alarms=rs.filter(r=>{const s=status(r,c);return s==='C'||s==='D'}).reverse();
+  const maxOv=Math.max(...rs.map(overall).filter(v=>v!=null));
+  const zs=c.z.map(cv);
+
+  m.innerHTML=`
+  <div class="mainhead">
+    <h2>${esc(a)} ${z?`<span class="tag z${z}"><span class="dot z${z}"></span>${ZL[z]} (โซน ${z})</span>`:''} ${stale?`<span class="tag stale">ค่าล่าสุด ${ago(last.t)}</span>`:''}</h2>
+    <div class="seg" id="range">${[[7,'7 วัน'],[30,'30 วัน'],[90,'90 วัน'],[0,'ทั้งหมด']].map(([d,l])=>`<button data-d="${d}" class="${S.range===d?'on':''}">${l}</button>`).join('')}</div>
+  </div>
+  ${ble.cfg&&ble.cfg.asset===a?'<div class="panel" id="livePanel" hidden></div>':''}
+  <div class="kpis">
+    ${kpi('Velocity รวม (สูงสุดของ 3 แกน)',fv(ov),uv(),delta,'hero z'+(vz||''))}
+    ${kpi('Velocity X / Y / Z',`${fv(last.vx)}<small>/</small>${fv(last.vy)}<small>/</small>${fv(last.vz)}`,'','หน่วย '+uv()).replace('class="v num"','class="v num" style="font-size:18px;margin-top:10px"')}
+    ${kpi('Acceleration สูงสุด',fn(accMax(last),3),'g',`X ${fn(last.ax,3)} · Y ${fn(last.ay,3)} · Z ${fn(last.az,3)}`)}
+    ${kpi('อุณหภูมิผิว',ft(last.temp),ut(),last.temp==null?'':last.temp>=c.ta?'<span class="up">เกินขีดอันตราย</span>':last.temp>=c.tw?'<span class="up">เกินขีดเตือน</span>':'ปกติ')}
+    ${kpi('ความเร็วรอบ',last.rpm!=null?Math.round(last.rpm):'–','RPM',dFull(last.t))}
+    ${kpi('สูงสุดในช่วงที่เลือก',fv(maxOv),uv(),`${rs.length} ค่า · เตือน ${alarms.length} ครั้ง`)}
+  </div>
+  <div class="charts">
+    <div class="panel wide"><div class="ph"><h3>Velocity RMS (${uv()}) พร้อมเส้นแบ่งโซน ISO 10816-3</h3></div><div class="cbox"><canvas id="cV"></canvas></div></div>
+    <div class="panel"><div class="ph"><h3>Acceleration (g)</h3></div><div class="cbox"><canvas id="cA"></canvas></div></div>
+    <div class="panel"><div class="ph"><h3>อุณหภูมิ (${ut()}) และ RPM</h3></div><div class="cbox"><canvas id="cT"></canvas></div></div>
+  </div>
+  <div class="grid2">
+    <div class="panel"><div class="ph"><h3>ค่าที่อ่านได้ (ล่าสุด 200 ค่า)</h3></div>
+      <div class="tablewrap"><table><thead><tr><th>เวลา</th><th>X</th><th>Y</th><th>Z</th><th>รวม</th><th>โซน</th><th>Acc (g)</th><th>${ut()}</th><th>RPM</th></tr></thead><tbody>
+      ${rs.slice(-200).reverse().map(r=>{const s=status(r,c);return `<tr><td>${dFull(r.t)}</td><td class="num">${fv(r.vx)}</td><td class="num">${fv(r.vy)}</td><td class="num">${fv(r.vz)}</td><td class="num"><b>${fv(overall(r))}</b></td><td>${s?`<span class="tag z${s}">${s}</span>`:''}</td><td class="num">${fn(accMax(r),3)}</td><td class="num">${ft(r.temp)}</td><td class="num">${r.rpm!=null?Math.round(r.rpm):'–'}</td></tr>`}).join('')}
+      </tbody></table></div></div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="panel"><div class="ph"><h3>การแจ้งเตือนในช่วงที่เลือก</h3></div>
+        ${alarms.length?`<ul class="alarms">${alarms.slice(0,50).map(r=>{const s=status(r,c);return `<li><span>${dFull(r.t)}</span><span class="num">${fv(overall(r))} ${uv()} · ${ft(r.temp)}${ut()}</span><span class="tag z${s}">${ZL[s]}</span></li>`}).join('')}</ul>`:'<p class="muted" style="padding:6px 14px 4px;margin:0 0 10px">ไม่มีค่าที่เกินเกณฑ์</p>'}
+      </div>
+      <div class="panel"><div class="ph"><h3>ตั้งค่าเกณฑ์ของเครื่องนี้</h3></div>
+        <div class="form">
+          <label class="full">ประเภทเครื่อง (ISO 10816-3)<select id="cCls">${Object.entries(CLASSES).map(([k,v])=>`<option value="${k}" ${c.cls===k?'selected':''}>${v.n}</option>`).join('')}</select>
+            <div class="zbar"><i style="background:var(--za)"></i><i style="background:var(--zb)"></i><i style="background:var(--zc)"></i><i style="background:var(--zd)"></i></div></label>
+          <label>A→B ปกติ (${uv()})<input type="number" step="any" id="z0" value="${+zs[0].toFixed(3)}"></label>
+          <label>B→C เฝ้าระวัง (${uv()})<input type="number" step="any" id="z1" value="${+zs[1].toFixed(3)}"></label>
+          <label>C→D อันตราย (${uv()})<input type="number" step="any" id="z2" value="${+zs[2].toFixed(3)}"></label>
+          <span></span>
+          <label>อุณหภูมิเตือน (${ut()})<input type="number" step="any" id="tw" value="${+ct(c.tw).toFixed(1)}"></label>
+          <label>อุณหภูมิอันตราย (${ut()})<input type="number" step="any" id="ta" value="${+ct(c.ta).toFixed(1)}"></label>
+          <div class="full" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+            <button class="btn danger" id="bDel">ลบข้อมูลเครื่องนี้</button>
+            <button class="btn primary" id="bSave">บันทึกเกณฑ์</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  m.querySelectorAll('#range button').forEach(b=>b.onclick=()=>{S.range=+b.dataset.d;save();render()});
+  $('#cCls').onchange=e=>{const p=CLASSES[e.target.value].z;if(p)['z0','z1','z2'].forEach((id,i)=>$('#'+id).value=+cv(p[i]).toFixed(3))};
+  ['z0','z1','z2'].forEach(id=>$('#'+id).oninput=()=>$('#cCls').value='custom');
+  $('#bSave').onclick=()=>{
+    const k=S.unit==='in'?25.4:1,toC=v=>S.tunit==='F'?(v-32)*5/9:v;
+    const zz=['z0','z1','z2'].map(id=>parseFloat($('#'+id).value)*k);
+    if(zz.some(isNaN)||!(zz[0]<zz[1]&&zz[1]<zz[2]))return toast('ค่าเกณฑ์ต้องเป็นตัวเลขและเรียงจากน้อยไปมาก');
+    Object.assign(c,{cls:$('#cCls').value,z:zz,tw:toC(parseFloat($('#tw').value)),ta:toC(parseFloat($('#ta').value))});
+    save();render();toast('บันทึกเกณฑ์แล้ว');
+  };
+  $('#bDel').onclick=()=>{if(!confirm(`ลบข้อมูลทั้งหมดของ "${a}" (${all.length} ค่า)? กู้คืนไม่ได้`))return;
+    S.readings=S.readings.filter(r=>r.asset!==a);delete S.assets[a];S.sel=null;save();render()};
+
+  drawCharts(rs,c);
+  fillLive();
+}
+
+function css(){const g=getComputedStyle(document.documentElement),v=n=>g.getPropertyValue(n).trim();
+  return{ink:v('--ink'),muted:v('--muted'),line:v('--line'),x:v('--x'),y:v('--y'),z:v('--z'),t:v('--t'),r:v('--r'),zb:v('--zb'),zc:v('--zc'),zd:v('--zd')}}
+function line(label,color,pts,extra){return Object.assign({label,data:pts,borderColor:color,backgroundColor:color,borderWidth:1.6,pointRadius:pts.length>120?0:2,pointHoverRadius:4,tension:.25,spanGaps:false},extra)}
+function ref(label,color,y,x0,x1){return{label,data:[{x:x0,y},{x:x1,y}],borderColor:color,backgroundColor:color,borderDash:[6,4],borderWidth:1.2,pointRadius:0,pointHoverRadius:0,isRef:true}}
+function opts(yTitle,extraScales){const c=css();
+  return{responsive:true,maintainAspectRatio:false,animation:false,parsing:true,interaction:{mode:'nearest',axis:'x',intersect:false},
+    scales:Object.assign({x:{type:'linear',ticks:{color:c.muted,maxTicksLimit:7,callback:v=>dShort(v)},grid:{color:c.line}},
+      y:{beginAtZero:true,title:{display:true,text:yTitle,color:c.muted},ticks:{color:c.muted},grid:{color:c.line}}},extraScales||{}),
+    plugins:{legend:{labels:{color:c.ink,boxWidth:10,boxHeight:10,usePointStyle:true}},
+      tooltip:{filter:i=>!i.dataset.isRef,callbacks:{title:it=>it.length?dFull(it[0].parsed.x):''}}}}}
+function drawCharts(rs,cf){
+  // Insert a null point inside long gaps (pump stopped / sensor not logging) so the line breaks
+  // instead of drawing a misleading slope across months without data
+  const GAP=12*36e5;
+  const pts=(k,f=v=>v)=>{const out=[];let prev=null;
+    for(const r of rs){if(r[k]==null)continue;
+      if(prev!=null&&r.t-prev>GAP)out.push({x:prev+1,y:null});
+      out.push({x:r.t,y:f(r[k])});prev=r.t}
+    return out};
+  const c=css();
+  const x0=rs[0].t,x1=rs[rs.length-1].t,cvf=v=>+cv(v).toFixed(4);
+  const vds=[line('X',c.x,pts('vx',cvf)),line('Y',c.y,pts('vy',cvf)),line('Z',c.z,pts('vz',cvf))].filter(d=>d.data.length);
+  if(!vds.length)vds.push(line('Overall',c.x,pts('vo',cvf)));
+  vds.push(ref('ปกติ '+fv(cf.z[0]),c.zb,cv(cf.z[0]),x0,x1),ref('เฝ้าระวัง '+fv(cf.z[1]),c.zc,cv(cf.z[1]),x0,x1),ref('อันตราย '+fv(cf.z[2]),c.zd,cv(cf.z[2]),x0,x1));
+  charts.push(new Chart($('#cV'),{type:'line',data:{datasets:vds},options:opts(uv())}));
+  const ads=[line('X',c.x,pts('ax')),line('Y',c.y,pts('ay')),line('Z',c.z,pts('az'))].filter(d=>d.data.length);
+  if(!ads.length)ads.push(line('Overall',c.x,pts('ao')));
+  charts.push(new Chart($('#cA'),{type:'line',data:{datasets:ads},options:opts('g')}));
+  const tds=[line('อุณหภูมิ',c.t,pts('temp',v=>+ct(v).toFixed(2)),{yAxisID:'y'}),
+    ref('เตือน',c.zc,ct(cf.tw),x0,x1),ref('อันตราย',c.zd,ct(cf.ta),x0,x1)];
+  const rp=pts('rpm');if(rp.length)tds.push(line('RPM',c.r,rp,{yAxisID:'y2',borderWidth:1,hidden:true}));
+  const o=opts(ut(),rp.length?{y2:{position:'right',title:{display:true,text:'RPM',color:c.muted},ticks:{color:c.muted},grid:{display:false}}}:null);
+  o.scales.y.beginAtZero=false;
+  charts.push(new Chart($('#cT'),{type:'line',data:{datasets:tds},options:o}));
+}
+
+// ---- manual entry ----
+function openAdd(){
+  const f=$('#addForm');f.reset();
+  $('#assetList').innerHTML=names().map(n=>`<option value="${esc(n)}">`).join('');
+  f.asset.value=S.sel||'';
+  const d=new Date();f.t.value=new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16);
+  document.querySelectorAll('.uv').forEach(e=>e.textContent='('+uv()+')');
+  document.querySelectorAll('.ut').forEach(e=>e.textContent='('+ut()+')');
+  $('#dlg').showModal();
+}
+$('#dlg').addEventListener('close',()=>{
+  if($('#dlg').returnValue!=='ok')return;
+  const f=$('#addForm'),g=k=>{const v=f[k].value;return v===''?null:parseFloat(v)};
+  const k=S.unit==='in'?25.4:1,r={asset:f.asset.value.trim(),t:new Date(f.t.value).getTime()};
+  ['vx','vy','vz'].forEach(x=>{const v=g(x);if(v!=null)r[x]=v*k});
+  ['ax','ay','az','rpm'].forEach(x=>{const v=g(x);if(v!=null)r[x]=v});
+  const tp=g('temp');if(tp!=null)r.temp=S.tunit==='F'?(tp-32)*5/9:tp;
+  if(!r.asset||isNaN(r.t))return;
+  S.readings=S.readings.filter(x=>!(x.asset===r.asset&&x.t===r.t));
+  S.readings.push(r);cfg(r.asset);S.sel=r.asset;save();render();toast('บันทึกค่าแล้ว');
+});
+
+// ---- i-ALERT3 over Web Bluetooth (see ialert3-protocol.md) ----
+// i-ALERT3 uses 0xFEA3 for both advertising and its GATT primary service (8c3bff00-… is the i-ALERT2 service)
+const IA3={svc:'0000fea3-0000-1000-8000-00805f9b34fb',bulk:'8c3bff38-b853-40b5-85d2-86dda1e2cb28',
+  sys:'8c3bff37-e796-40b5-85d2-86dda1e2cb28',adv:0xfea3};
+// System structure (220 bytes, read-only use). Offsets from the app's ITTiAlert3SystemStructure:
+// wake-up rate @10, trend interval @12 (s), run time @76 (s), device type @118 (8 std / 9 digital accel),
+// hw/sw rev @119, newest trend record @144 (28 bytes, trend layout), run speed @172 (RPM),
+// kurtosis @180-184 (/100), last alarm-check VRMS @194-198 and GRMS @200-204, battery @206 (mV), clock @68
+function parseSys(dv,fallbackScale){
+  if(dv.byteLength<212)return null;
+  const u32=o=>dv.getUint32(o,true),u16=o=>dv.getUint16(o,true),u8=o=>dv.getUint8(o);
+  const devType=u8(118),scale=devType===9?1289:devType===8?816:fallbackScale;
+  const buf=new Uint8Array(HDR+REC);buf.set(new Uint8Array(dv.buffer,dv.byteOffset+144,REC),HDR);
+  const rpm=u16(172),r4=v=>Math.round(v*1e4)/1e4;
+  return{clock:u32(68),lastTrend:u32(144),devType,rev:u8(119),scale,
+    rec:parseTrend(buf,scale)[0]||null,
+    rpm:rpm===65534||rpm===65535||rpm<30?null:rpm,
+    kurt:[180,182,184].map(o=>u16(o)/100),
+    checkV:[194,196,198].map(o=>r4(u16(o)/scale*25.4)),
+    checkG:[200,202,204].map(o=>r4(u16(o)/scale)),
+    battV:u16(206)/1000,runH:u32(76)/3600,trendSec:u16(12),wakeSec:u16(10)};
+}
+function fmtDrift(sec){
+  const a=Math.abs(sec),s=sec>0?'เร็วกว่าคอม':'ช้ากว่าคอม';
+  if(a<60)return 'ตรงกับคอม';
+  if(a<3600)return `${s} ${Math.round(a/60)} นาที`;
+  if(a<172800)return `${s} ${(a/3600).toFixed(1)} ชั่วโมง`;
+  return `${s} ${Math.round(a/86400)} วัน`;
+}
+const REC=28,HDR=8;
+// The sensor can pause for several seconds mid-transfer (seen at ~87% of a 3142-record download),
+// so only give up after a long silence; a real disconnect aborts immediately via ble.abort
+const IDLE_MS=45000;
+let ble={device:null,cfg:null,timer:null,busy:false,last:null};
+
+function bleLog(m){const el=$('#bleLog');if(!el)return;const d=document.createElement('div');d.textContent=new Date().toLocaleTimeString('th-TH',{hour12:false})+'  '+m;el.prepend(d)}
+function bleSupportMsg(){
+  if(navigator.bluetooth)return null;
+  return !isSecureContext?'ต้องเปิดหน้านี้ผ่าน https:// หรือ http://localhost (ดับเบิลคลิก start.cmd) จึงจะใช้ Bluetooth ได้'
+    :'เบราว์เซอร์นี้ไม่รองรับ Web Bluetooth ให้เปิดด้วย Chrome หรือ Edge (iPhone/iPad ใช้ไม่ได้)';
+}
+// Trend payload: 8-byte header + 28-byte records (all little-endian)
+function parseTrend(buf,scale){
+  const dv=new DataView(buf.buffer,buf.byteOffset,buf.byteLength),out=[];
+  const maxTs=Date.now()/1000+86400,minTs=1420070400; // 2015-01-01
+  for(let o=HDR;o+REC<=buf.length;o+=REC){
+    let ts=dv.getUint32(o,true);
+    if(ts===0||ts===0xFFFFFFFF)continue;
+    if(ts>maxTs)ts&=0x7FFFFFFF; // old firmware keeps a bandwidth flag in bit 31
+    if(ts>maxTs||ts<minTs)continue;
+    const u=k=>dv.getUint16(o+k,true),r4=v=>Math.round(v*1e4)/1e4;
+    out.push({t:ts*1000,temp:dv.getInt16(o+4,true)/100,
+      vx:r4(u(6)/scale*25.4),vy:r4(u(8)/scale*25.4),vz:r4(u(10)/scale*25.4),
+      ax:r4(u(12)/scale),ay:r4(u(14)/scale),az:r4(u(16)/scale)});
+  }
+  return out;
+}
+function bulkRequest(ch,from){
+  return new Promise((resolve,reject)=>{
+    const chunks=[];let got=0,expected=null,idle,lastPct=0;
+    const finish=err=>{clearTimeout(idle);ble.abort=null;ch.removeEventListener('characteristicvaluechanged',on);ch.stopNotifications().catch(()=>{});
+      if(err)return reject(new Error(err));
+      const b=new Uint8Array(got);let o=0;for(const c of chunks){b.set(c,o);o+=c.length}resolve(b)};
+    const arm=ms=>{clearTimeout(idle);idle=setTimeout(()=>{
+      if(expected==null)return finish('เซนเซอร์ไม่ตอบ (อาจกำลังวัดค่าอยู่) รอสักครู่แล้วลองใหม่');
+      bleLog(`เซนเซอร์หยุดส่งข้อมูลนานเกิน ${IDLE_MS/1000} วินาที เก็บส่วนที่ได้ไว้ก่อน`);finish()},ms)};
+    const on=e=>{
+      const v=e.target.value,bytes=new Uint8Array(v.buffer,v.byteOffset,v.byteLength).slice();
+      if(expected==null){
+        if(bytes.length!==HDR)return; // 10-byte busy-status packets can arrive first
+        const dv=new DataView(bytes.buffer),n=dv.getUint16(2,true),nb=dv.getUint32(4,true);
+        expected=HDR+n*REC;
+        if(nb>0&&nb%REC===0&&nb!==n*REC)expected=HDR+nb;
+        chunks.push(bytes);got=HDR;
+        bleLog(`เซนเซอร์ส่งข้อมูล ${n} ค่า`);
+        if(expected===HDR)return finish();
+        return arm(IDLE_MS);
+      }
+      if(!bytes.length)return finish();
+      chunks.push(bytes);got+=bytes.length;
+      const pct=Math.min(100,Math.round((got-HDR)/(expected-HDR)*100));
+      if(pct>=lastPct+20||(got>=expected&&pct!==lastPct)){lastPct=pct-pct%20;bleLog(`รับข้อมูล ${got>=expected?100:lastPct}%`)}
+      if(got>=expected)return finish();
+      arm(IDLE_MS);
+    };
+    ble.abort=msg=>{ // keep whole records already received; next fetch resumes after the newest one
+      if(expected!=null&&got>=HDR+REC){bleLog('เซนเซอร์ตัดกลางทาง เก็บข้อมูลที่ได้มาแล้วไว้ก่อน');finish()}else finish(msg)};
+    (async()=>{
+      try{
+        ch.addEventListener('characteristicvaluechanged',on);
+        await ch.startNotifications();
+        const cmd=new Uint8Array([1,0,from&255,(from>>>8)&255,(from>>>16)&255,(from>>>24)&255]); // opcode 1 = trends
+        arm(15000);
+        if(ch.properties.write)await ch.writeValueWithResponse(cmd);else await ch.writeValueWithoutResponse(cmd);
+      }catch(e){finish(e.message)}
+    })();
+  });
+}
+// The sensor often refuses the first attempt or drops the link while Windows is still discovering
+// its services (first discovery is slow; later ones hit the OS cache), so retry connect + lookup together
+async function bleConnect(dev,tries=4){
+  if(dev.gatt.connected&&ble.ch&&ble.chDev===dev)return ble.ch; // live mode keeps the link open
+  for(let i=1;;i++){
+    bleLog(`กำลังเชื่อมต่อเซนเซอร์ (ครั้งที่ ${i}/${tries}) …`);
+    try{
+      const server=dev.gatt.connected?dev.gatt:await dev.gatt.connect();
+      const svc=await server.getPrimaryService(IA3.svc);
+      const ch=await svc.getCharacteristic(IA3.bulk);
+      bleLog('เชื่อมต่อแล้ว พบช่องรับข้อมูลของ i-ALERT3');
+      ch.sys=await svc.getCharacteristic(IA3.sys).catch(()=>null);
+      ble.ch=ch;ble.chDev=dev;
+      return ch;
+    }catch(e){
+      if(e.name==='NotFoundError'&&dev.gatt.connected)throw new Error('เซนเซอร์ตัวนี้ไม่มี service ของ i-ALERT3 ('+e.message+')');
+      try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(_){}
+      if(i>=tries)throw new Error(e.message+' — ปิด Bluetooth บนมือถือ (หรือปิดแอป i-ALERT ให้หมด) แล้ววางคอมให้ใกล้เซนเซอร์ จากนั้นลองใหม่');
+      bleLog('เชื่อมต่อไม่สำเร็จ ('+e.message+') จะลองใหม่ใน 3 วินาที');
+      await new Promise(r=>setTimeout(r,3000));
+    }
+  }
+}
+async function bleFetch(){
+  if(ble.busy||!ble.device)return;
+  ble.busy=true;updateBleButton();
+  const dev=ble.device,{asset}=ble.cfg;
+  try{
+    const ch=await bleConnect(dev);
+    if(ch.sys){
+      try{
+        const s=parseSys(await ch.sys.readValue(),ble.cfg.scale);
+        if(s){
+          bleLog(`นาฬิกาเซนเซอร์: ${dFull(s.clock*1000)} (${fmtDrift(s.clock-Math.floor(Date.now()/1000))})`);
+          bleLog(`trend ล่าสุดในเซนเซอร์: ${s.lastTrend?dFull(s.lastTrend*1000):'-'}`);
+          applySys(s);
+        }else bleLog('อ่านสถานะเซนเซอร์ได้ไม่ครบ ข้ามการเช็กนาฬิกา');
+      }catch(e){bleLog('อ่านสถานะเซนเซอร์ไม่ได้: '+e.message)}
+    }
+    const scale=ble.cfg.scale; // may have been corrected from the sensor's device type
+    const last=series(asset).at(-1),full=$('#bleForm').full.checked;
+    $('#bleForm').full.checked=false; // one-off; auto-repeat should stay incremental
+    // Same as the app: send the newest stored timestamp itself (not +1); a value that matches no record
+    // makes the sensor return just one record. The repeated record is dropped by the de-duplication below.
+    const from=last&&!full?Math.floor(last.t/1000):0;
+    bleLog(from?'ขอเฉพาะค่าหลัง '+dFull(last.t):'ขอข้อมูลทั้งหมดในเซนเซอร์');
+    const recs=parseTrend(await bulkRequest(ch,from),scale);
+    if(recs.length){
+      const ts=recs.map(r=>r.t),lo=Math.min(...ts),hi=Math.max(...ts);
+      let unordered=0;for(let i=1;i<ts.length;i++)if(ts[i]<ts[i-1])unordered++;
+      bleLog(`ข้อมูลที่ได้: ${recs.length} ค่า ตั้งแต่ ${dFull(lo)} ถึง ${dFull(hi)}`+(unordered?` · เรียงไม่ตามเวลา ${unordered} จุด`:''));
+    }
+    const idx=new Map(S.readings.map((r,i)=>[r.asset+'|'+r.t,i]));
+    let added=0;
+    for(const r of recs){r.asset=asset;const k=asset+'|'+r.t;if(idx.has(k))continue;idx.set(k,S.readings.length);S.readings.push(r);added++}
+    cfg(asset);ble.last=Date.now();
+    if(added){S.sel=asset;save();render()}
+    bleLog(added?`เพิ่ม ${added} ค่าใหม่ให้ ${asset}`:'ไม่มีค่าใหม่');
+    toast(added?`ดึงข้อมูลจากเซนเซอร์ได้ ${added} ค่า`:'เซนเซอร์ยังไม่มีค่าใหม่');
+  }catch(e){
+    bleLog('ผิดพลาด: '+e.message);toast('ดึงข้อมูลจากเซนเซอร์ไม่สำเร็จ: '+e.message);
+  }finally{
+    ble.busy=false; // before disconnecting, so our own disconnect is not logged as the sensor dropping
+    if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
+    updateBleButton();fillLive();
+  }
+}
+
+// ---- live readings: re-read the system structure (read-only, nothing is written to the sensor) ----
+const LIVE_MS=15000;
+function applySys(s){
+  if(!s||!ble.cfg)return;
+  ble.live={sys:s,at:Date.now()};
+  if((s.devType===8||s.devType===9)&&ble.cfg.scale!==s.scale){
+    bleLog(`เซนเซอร์แจ้งว่าเป็นรุ่น ${s.devType===9?'Digital Accelerometer':'มาตรฐาน'} ปรับการแปลงค่าให้แล้ว`);
+    ble.cfg.scale=s.scale;
+    const f=$('#bleForm');if(f)f.scale.value=String(s.scale);
+  }
+  if(ble.device)S.sensors[ble.device.id]={asset:ble.cfg.asset,scale:ble.cfg.scale};
+  if(s.rec){ // the newest trend is a normal reading too
+    const hit=S.readings.find(r=>r.asset===ble.cfg.asset&&r.t===s.rec.t);
+    if(hit){if(s.rpm!=null)hit.rpm=s.rpm}
+    else{S.readings.push({...s.rec,asset:ble.cfg.asset,...(s.rpm!=null?{rpm:s.rpm}:{})});cfg(ble.cfg.asset)}
+  }
+  save();
+}
+async function bleLiveRead(){
+  if(ble.busy||!ble.device)return;
+  ble.busy=true;updateBleButton();
+  const dev=ble.device;
+  try{
+    const ch=await bleConnect(dev,ble.liveTimer?2:4);
+    if(!ch.sys)throw new Error('ไม่พบช่องสถานะของเซนเซอร์');
+    const before=ble.live&&ble.live.sys.lastTrend;
+    applySys(parseSys(await ch.sys.readValue(),ble.cfg.scale));
+    if(ble.live&&ble.live.sys.lastTrend!==before&&before)bleLog('เซนเซอร์วัดค่าใหม่แล้ว');
+  }catch(e){
+    bleLog('อ่านค่าสดไม่ได้: '+e.message);
+    if(!ble.liveTimer)toast('อ่านค่าสดไม่ได้: '+e.message);
+  }finally{
+    ble.busy=false;
+    if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
+    updateBleButton();
+    if(S.sel===ble.cfg.asset&&!$('#livePanel'))render();else fillLive();
+  }
+}
+function toggleLive(){
+  if(ble.liveTimer){
+    clearInterval(ble.liveTimer);ble.liveTimer=null;
+    try{if(ble.device&&ble.device.gatt.connected&&!ble.busy)ble.device.gatt.disconnect()}catch(e){}
+    bleLog('หยุดอ่านค่าสดต่อเนื่อง');fillLive();return;
+  }
+  ble.liveTimer=setInterval(bleLiveRead,LIVE_MS);
+  bleLog(`อ่านค่าสดต่อเนื่องทุก ${LIVE_MS/1000} วินาที (ค้างการเชื่อมต่อไว้)`);
+  bleLiveRead();
+}
+function liveTile(label,value,unit,sub,cls=''){
+  return `<div class="kpi live-tile ${cls}"><div class="l">${label}</div><div class="v num">${value}${unit?`<small>${unit}</small>`:''}</div><div class="s">${sub||''}</div></div>`;
+}
+function fillLive(){
+  const el=$('#livePanel');if(!el)return;
+  if(!ble.live){el.hidden=true;return}
+  el.hidden=false;
+  const s=ble.live.sys,r=s.rec,c=cfg(ble.cfg.asset);
+  const ov=r?Math.max(r.vx,r.vy,r.vz):null,z=zone(ov,c.z);
+  const chk=Math.max(...s.checkV),zc=zone(chk,c.z);
+  const time=t=>new Date(t).toLocaleTimeString('th-TH',{hour12:false});
+  const xyz=(a,f)=>a.map(f).join(' / ');
+  const fmtSec=v=>v>=3600?`${+(v/3600).toFixed(1)} ชม.`:v>=60?`${Math.round(v/60)} นาที`:`${v} วินาที`;
+  el.innerHTML=`
+    <div class="ph"><h3>ค่าสดจากเซนเซอร์
+      <span class="tag ${ble.liveTimer?'zA':''}">${ble.liveTimer?(ble.busy?'กำลังอ่าน…':'อ่านต่อเนื่อง · ล่าสุด '+time(ble.live.at)):'อ่านเมื่อ '+time(ble.live.at)}</span></h3>
+      <div class="row"><button class="btn" id="bLiveOnce" ${ble.busy?'disabled':''}>อ่านอีกครั้ง</button>
+      <button class="btn ${ble.liveTimer?'live':''}" id="bLiveLoop">${ble.liveTimer?'หยุดอ่านต่อเนื่อง':`อ่านต่อเนื่องทุก ${LIVE_MS/1000} วินาที`}</button></div></div>
+    <div class="kpis live-grid">
+      ${liveTile('ค่าวัดล่าสุด (velocity รวม)',fv(ov),uv(),r?`${z?ZL[z]+' · ':''}วัดเมื่อ ${dFull(r.t)}`:'ยังไม่มีค่า','hero z'+(z||''))}
+      ${liveTile('Velocity X / Y / Z',r?xyz([r.vx,r.vy,r.vz],fv):'–','',uv())}
+      ${liveTile('ตรวจ alarm ครั้งล่าสุด',fv(chk),uv(),`${zc?ZL[zc]+' · ':''}X/Y/Z ${xyz(s.checkV,fv)} · ตรวจทุก ${fmtSec(s.wakeSec)}`,'z'+(zc||''))}
+      ${liveTile('Acceleration X / Y / Z',r?xyz([r.ax,r.ay,r.az],v=>fn(v,3)):'–','g','ตรวจ alarm: '+xyz(s.checkG,v=>fn(v,3)))}
+      ${liveTile('อุณหภูมิ',r?ft(r.temp):'–',ut(),r&&r.temp>=c.ta?'<span class="up">เกินขีดอันตราย</span>':r&&r.temp>=c.tw?'<span class="up">เกินขีดเตือน</span>':'')}
+      ${liveTile('ความเร็วรอบ',s.rpm!=null?s.rpm:'–','RPM',s.rpm==null?'สัญญาณไม่พอวัดรอบ':'')}
+      ${liveTile('Kurtosis X / Y / Z',xyz(s.kurt,v=>v.toFixed(2)),'','มากกว่า 3 มาก = มีแรงกระแทก (เช่น bearing เสีย)')}
+      ${liveTile('แบตเตอรี่',s.battV?s.battV.toFixed(2):'–','V',`ชั่วโมงทำงาน ${Math.round(s.runH).toLocaleString('th-TH')} ชม.`)}
+    </div>
+    <p class="muted live-note">รุ่น ${s.devType===9?'Digital Accelerometer':s.devType===8?'มาตรฐาน':'ไม่ทราบ ('+s.devType+')'} · firmware rev ${s.rev} · บันทึก trend ทุก ${fmtSec(s.trendSec)} · ค่า "วัดล่าสุด" จะเปลี่ยนเมื่อเซนเซอร์บันทึก trend ใหม่ ส่วน "ตรวจ alarm" อัปเดตบ่อยกว่า</p>`;
+  $('#bLiveOnce').onclick=bleLiveRead;
+  $('#bLiveLoop').onclick=toggleLive;
+}
+function updateBleButton(){
+  const b=$('#bBle');
+  b.classList.toggle('live',!!ble.timer);
+  b.textContent=ble.busy?'กำลังดึงข้อมูล…':ble.timer?`เซนเซอร์: ${ble.cfg.asset}`+(ble.last?' · '+new Date(ble.last).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):''):'เชื่อมต่อเซนเซอร์';
+  const s=$('#bleStop');if(s)s.hidden=!ble.timer;
+}
+function openBle(){
+  const msg=bleSupportMsg();if(msg)return toast(msg);
+  $('#assetList').innerHTML=names().map(n=>`<option value="${esc(n)}">`).join('');
+  const f=$('#bleForm');
+  if(ble.cfg){f.asset.value=ble.cfg.asset;f.scale.value=String(ble.cfg.scale)}
+  f.auto.checked=!!ble.timer;
+  $('#bleDlg').showModal();
+}
+$('#bleGo').onclick=async()=>{
+  const f=$('#bleForm');
+  let dev;
+  bleLog('กำลังเปิดหน้าต่างเลือกอุปกรณ์ Bluetooth …');
+  const slow=setTimeout(()=>bleLog('ถ้าหน้าต่างเลือกอุปกรณ์ขึ้นแต่ไม่เจอเซนเซอร์: รอสแกน 30–60 วินาที ถ้ายังไม่เจอ ให้ปิด/เปิด Bluetooth ของคอมแล้วลองใหม่ (ถ้าไม่มีหน้าต่างขึ้นเลย ให้ใช้ Chrome/Edge)'),8000);
+  // i-ALERT sensors advertise 16-bit service 0xFEA3 (the official app scans for it)
+  const opts=f.all.checked?{acceptAllDevices:true,optionalServices:[IA3.svc]}
+    :{filters:[{services:[IA3.adv]},{serviceData:[{service:IA3.adv}]}],optionalServices:[IA3.svc]};
+  try{
+    try{dev=await navigator.bluetooth.requestDevice(opts)}
+    catch(e){ // older Chrome rejects the serviceData filter
+      if(e.name!=='TypeError'||f.all.checked)throw e;
+      dev=await navigator.bluetooth.requestDevice({filters:[{services:[IA3.adv]}],optionalServices:[IA3.svc]});
+    }
+  }catch(e){
+    bleLog(e.name==='NotFoundError'?'ไม่ได้เลือกเซนเซอร์ (กดยกเลิก หรือเบราว์เซอร์นี้ไม่มีหน้าต่างเลือกอุปกรณ์) ถ้ารายการว่าง ลองติ๊ก "แสดงอุปกรณ์ Bluetooth ทั้งหมด"'
+      :e.name==='NotAllowedError'||e.name==='SecurityError'?'เบราว์เซอร์ไม่อนุญาตให้ใช้ Bluetooth: '+e.message+' ให้ลองเปิดใน Chrome/Edge และเปิด Bluetooth ของเครื่อง'
+      :'ผิดพลาด: '+e.name+' '+e.message);
+    return;
+  }finally{clearTimeout(slow)}
+  bleLog('เลือกแล้ว: '+(dev.name||dev.id));
+  if(!dev._ia3Watch){
+    dev._ia3Watch=true;
+    dev.addEventListener('gattserverdisconnected',()=>{
+      if(!ble.busy)return; // our own disconnect after a finished fetch
+      bleLog('เซนเซอร์ตัดการเชื่อมต่อ');
+      if(ble.abort)ble.abort('เซนเซอร์ตัดการเชื่อมต่อระหว่างส่งข้อมูล ลองดึงใหม่อีกครั้ง (ครั้งต่อไปจะดึงต่อจากค่าล่าสุดที่ได้)');
+    });
+  }
+  const saved=S.sensors[dev.id]||{};
+  const asset=f.asset.value.trim()||saved.asset||dev.name||'i-ALERT3';
+  const scale=+f.scale.value||saved.scale||816;
+  S.sensors[dev.id]={asset,scale};save();
+  ble.device=dev;ble.cfg={asset,scale};
+  clearInterval(ble.timer);ble.timer=null;
+  if(f.auto.checked){ble.timer=setInterval(bleFetch,+f.every.value*60000);bleLog(`ตั้งดึงอัตโนมัติทุก ${f.every.value} นาที`)}
+  await bleFetch();
+};
+$('#bleStop').onclick=()=>{clearInterval(ble.timer);ble.timer=null;updateBleButton();bleLog('หยุดดึงอัตโนมัติแล้ว')};
+
+// ---- wiring ----
+$('#bBle').onclick=openBle;
+$('#bImport').onclick=()=>$('#file').click();
+$('#file').onchange=e=>{if(e.target.files.length)importFiles([...e.target.files]);e.target.value=''};
+$('#bDemo').onclick=demo;
+$('#bExport').onclick=exportCSV;
+$('#bAdd').onclick=openAdd;
+$('#sUnit').onchange=e=>{S.unit=e.target.value;save();render()};
+$('#sTUnit').onchange=e=>{S.tunit=e.target.value;save();render()};
+['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();document.body.classList.add('drop')}));
+['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==='drop'||!e.relatedTarget)document.body.classList.remove('drop')}));
+document.addEventListener('drop',e=>{const fs=[...e.dataTransfer.files];if(fs.length)importFiles(fs)});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',render);
+if(window.Chart)Chart.defaults.font.family='"IBM Plex Sans Thai",system-ui,sans-serif';
+load();render();
+</script>
+</body>
+</html>
