@@ -182,7 +182,7 @@ function mdToHtml(src){
 
 // ---------- AI page ----------
 const AI={busy:false,ctrl:null,chat:{},showCtx:false};
-function aiHist(asset){return(S.ai[asset]||(S.ai[asset]=[]))}
+function aiHist(asset){S.ai=S.ai||{};return(S.ai[asset]||(S.ai[asset]=[]))}
 function renderAIPage(){
   const p=$('#aiPage'),ns=names(),a=S.sel,cf=aiCfg();
   if(!cf.key){p.innerHTML=`<div class="mainhead"><h2>วิเคราะห์ด้วย AI (Gemini)</h2></div><div class="panel empty"><h2>ใส่ Gemini API key ก่อน</h2>
@@ -217,7 +217,7 @@ function renderAIPage(){
   if($('#aiClear'))$('#aiClear').onclick=()=>{AI.chat[a]=[];renderAIPage()};
   p.querySelectorAll('[data-hview]').forEach(b=>b.onclick=()=>{const h=hist.find(x=>x.id===b.dataset.hview);
     infoDialog(esc(h.title)+' · '+dFull(h.t),`<div class="ai-a">${mdToHtml(h.text)}</div><p class="muted" style="font-size:12px">${esc(h.model)}</p>`)});
-  p.querySelectorAll('[data-hdel]').forEach(b=>b.onclick=()=>{if(!confirm('ลบผลวิเคราะห์นี้?'))return;S.ai[a]=hist.filter(x=>x.id!==b.dataset.hdel);save();renderAIPage()});
+  p.querySelectorAll('[data-hdel]').forEach(b=>b.onclick=()=>{if(!confirm('ลบผลวิเคราะห์นี้?'))return;S.ai=S.ai||{};S.ai[a]=hist.filter(x=>x.id!==b.dataset.hdel);save();renderAIPage()});
   const box=$('#aiChat');box.scrollTop=box.scrollHeight;
 }
 async function aiRunTask(asset,task){
@@ -253,7 +253,7 @@ function aiSaveLast(asset){
   const chat=AI.chat[asset]||[],m=chat.slice().reverse().find(x=>x.role==='model'&&!x.err&&x.text);
   if(!m)return toast('ยังไม่มีคำตอบให้บันทึก');
   aiHist(asset).push({id:uid(),t:Date.now(),title:m.title||'ผลวิเคราะห์',text:m.text,model:aiCfg().model});
-  if(S.ai[asset].length>30)S.ai[asset].shift();save();renderAIPage();toast('บันทึกผลวิเคราะห์แล้ว');
+  if(aiHist(asset).length>30)S.ai[asset].shift();save();renderAIPage();toast('บันทึกผลวิเคราะห์แล้ว');
 }
 
 // ---------- settings panel ----------

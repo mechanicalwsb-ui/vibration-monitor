@@ -12,12 +12,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js"></script>
-<script src="fft-analysis.js"></script>
-<script src="store.js"></script>
-<script src="insights.js"></script>
-<script src="pages.js"></script>
-<script src="ai.js"></script>
+<script src="ia3-fft.js?v=2.1.1"></script>
+<script src="fft-analysis.js?v=2.1.1"></script>
+<script src="store.js?v=2.1.1"></script>
+<script src="insights.js?v=2.1.1"></script>
+<script src="pages.js?v=2.1.1"></script>
+<script src="ai.js?v=2.1.1"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -391,7 +391,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.1.0',APP_BUILD='2026-10-16T20:58:14+07:00';
+const APP_VERSION='2.1.1',APP_BUILD='2026-10-16T21:06:09+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -614,8 +614,10 @@ function render(){
   renderSide(ns);
   if(v!=='overview'){charts.forEach(c=>c.destroy());charts=[]}
   pDestroy();
-  ({overview:()=>renderMain(ns),fft:renderFFTPage,sensor:renderSensorPage,settings:()=>renderSettings(ns),
-    fleet:renderFleet,stats:renderStats,ai:renderAIPage,asset:renderAssetPage,route:renderRoute,report:renderReport})[v]();
+  try{({overview:()=>renderMain(ns),fft:renderFFTPage,sensor:renderSensorPage,settings:()=>renderSettings(ns),
+    fleet:renderFleet,stats:renderStats,ai:renderAIPage,asset:renderAssetPage,route:renderRoute,report:renderReport})[v]()}
+  catch(e){console.error(e);$('#'+VIEWS[v][0]).innerHTML=`<div class="panel empty"><h2>หน้านี้แสดงผลไม่ได้</h2><p>${esc(e.message)}</p>
+    <p>ลองกดรีเฟรชแบบล้างแคช (Ctrl+Shift+R) ถ้ายังไม่หาย กดคัดลอกข้อความนี้ส่งมาให้ผู้ดูแล</p><button class="btn" onclick="location.reload()">รีเฟรช</button></div>`}
   if(v!=='sensor')stopScan();
 }
 function setView(v){S.view=v;save();document.body.classList.remove('nav-open');render();scrollTo(0,0)}

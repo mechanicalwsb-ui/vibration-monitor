@@ -1,7 +1,7 @@
 // Offline support + notification clicks.
 // Own files: network first (updates arrive as soon as they are online), cached copy when offline.
 // Libraries and fonts from CDNs: cache first (versioned URLs never change).
-const CACHE='vibmon-v1';
+const CACHE='vibmon-v2';
 const CORE=['./','./index.html','./ia3-fft.js','./fft-analysis.js','./store.js','./insights.js','./pages.js','./ai.js','./manifest.json','./icon-192.png','./icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js','https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'];
 
@@ -15,7 +15,8 @@ self.addEventListener('fetch',e=>{
   const req=e.request;if(req.method!=='GET')return;
   const url=new URL(req.url);
   if(url.origin===location.origin){
-    e.respondWith(fetch(req).then(res=>{
+    // revalidate with the server every time (GitHub Pages lets browsers reuse files for 10 minutes)
+    e.respondWith(fetch(req.url,{cache:'no-cache',credentials:'same-origin'}).then(res=>{
       if(res.ok){const copy=res.clone();caches.open(CACHE).then(c=>c.put(req,copy))}
       return res;
     }).catch(()=>caches.match(req,{ignoreSearch:true}).then(r=>r||caches.match('./index.html'))));
