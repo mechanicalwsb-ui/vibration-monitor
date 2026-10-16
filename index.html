@@ -606,7 +606,7 @@ $('#dlg').addEventListener('close',()=>{
 // ---- i-ALERT3 over Web Bluetooth (see ialert3-protocol.md) ----
 // i-ALERT3 uses 0xFEA3 for both advertising and its GATT primary service (8c3bff00-… is the i-ALERT2 service)
 const IA3={svc:'0000fea3-0000-1000-8000-00805f9b34fb',bulk:'8c3bff38-b853-40b5-85d2-86dda1e2cb28',
-  sys:'8c3bff37-e796-40b5-85d2-86dda1e2cb28',adv:0xfea3};
+  sys:'8c3bff37-e796-40b5-85d2-86dda1e2cb28',cmd:'8c3bff34-caeb-40b5-85d2-86dda1e2cb28',adv:0xfea3};
 // System structure (220 bytes, read-only use). Offsets from the app's ITTiAlert3SystemStructure:
 // wake-up rate @10, trend interval @12 (s), run time @76 (s), device type @118 (8 std / 9 digital accel),
 // hw/sw rev @119, newest trend record @144 (28 bytes, trend layout), run speed @172 (RPM),
@@ -621,7 +621,7 @@ function parseSys(dv,fallbackScale){
   const vth=o=>{const v=u16(o);return v>=0xFFFF?null:r4(v/scale*25.4)};
   const tth=o=>{const v=dv.getInt16(o,true);return v>=0x7FFF?null:v/100};
   const st=u16(4),bit=n=>!!((st>>n)&1); // device status bits (ITTiAlert3DeviceStatus)
-  return{clock:u32(68),lastTrend:u32(144),devType,rev:u8(119),scale,
+  return{clock:u32(68),lastTrend:u32(144),devType,rev:u8(119),scale,m4:u16(6),
     thr:{alarm:[18,20,22].map(vth),warn:[24,26,28].map(vth),ta:tth(14),tw:tth(16)},
     flags:{alarmMonth:bit(1),alarmWeek:bit(2),alarm2d:bit(3),battery:bit(6),running:bit(9),
       tempAlarm:bit(10),tempWarn:bit(11),vibAlarm:bit(14),vibWarn:bit(15)},
@@ -669,6 +669,7 @@ function parseTrend(buf,scale){
   return out;
 }
 // opcode 1 = trends (header: count, bytes; payload = count x 28-byte records)
+// opcode 2 = last manual FFT/TWF (header: bytes; payload = one record, same layout as alarm FFT)
 // opcode 3 = alarm FFT/TWF (header: records remaining, bytes per record; payload = ONE record)
 function bulkRequest(ch,from,opcode=1){
   return new Promise((resolve,reject)=>{
@@ -688,6 +689,9 @@ function bulkRequest(ch,from,opcode=1){
           expected=HDR+n*REC;
           if(nb>0&&nb%REC===0&&nb!==n*REC)expected=HDR+nb;
           bleLog(`เซนเซอร์ส่งข้อมูล ${n} ค่า`);
+        }else if(opcode===2){ // manual FFT: one record, its size in the header
+          expected=nb>0?HDR+nb:HDR;
+          bleLog(nb>0?`กำลังรับ FFT manual ล่าสุด (${Math.round(nb/1024)} KB)`:'เซนเซอร์ไม่มี FFT manual เก็บไว้');
         }else{
           expected=n>0?HDR+nb:HDR;
           bleLog(n>0?`มีข้อมูล FFT ตอน alarm เหลือ ${n} ชุด กำลังรับ 1 ชุด (${Math.round(nb/1024)} KB)`:'ไม่มีข้อมูล FFT ตอน alarm เพิ่มเติม');
@@ -732,7 +736,11 @@ async function bleConnect(dev,tries=4){
       bleLog('เชื่อมต่อแล้ว พบช่องรับข้อมูลของ i-ALERT3');
       setBle('connected');
       ch.sys=await svc.getCharacteristic(IA3.sys).catch(()=>null);
+      ch.cmd=await svc.getCharacteristic(IA3.cmd).catch(()=>null);
       ble.ch=ch;ble.chDev=dev;
+      if(S.streamOpen&&ch.cmd){ // an earlier live stream was cut off before its stop command
+        try{await sendStreamCmd(ch,STREAM_STOP);S.streamOpen=false;save();bleLog('ส่งคำสั่งหยุด stream ที่ค้างจากรอบก่อนแล้ว')}catch(e){}
+      }
       return ch;
     }catch(e){
       if(e.name==='NotFoundError'&&dev.gatt.connected)throw new Error('เซนเซอร์ตัวนี้ไม่มี service ของ i-ALERT3 ('+e.message+')');
@@ -810,9 +818,10 @@ const FFTDB={
   async remove(asset){const all=await this.list(asset),db=await this.open();return new Promise((res,rej)=>{
     const t=db.transaction('rec','readwrite');all.forEach(r=>t.objectStore('rec').delete(r.key));t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}
 };
-// Same loop as the app: ask from the newest stored record's timestamp, one record per request,
-// until the sensor reports none left. FFT_LAST asks for only the most recent alarm capture.
-async function bleFetchFFT(latestOnly){
+// mode 'alarmLast' | 'alarmAll' | 'manual'. Alarm captures use the app's loop: ask from the newest
+// stored record's timestamp, one record per request, until the sensor reports none left.
+// FFT_LAST asks for only the most recent alarm capture; 'manual' (opcode 2) returns the last manual FFT.
+async function bleFetchFFT(mode){
   if(ble.busy||!ble.device)return;
   ble.busy=true;updateBleButton();fillLive();
   const dev=ble.device,asset=ble.cfg.asset;let err=null;
@@ -820,19 +829,36 @@ async function bleFetchFFT(latestOnly){
     const ch=await bleConnect(dev);
     if(ch.sys&&!ble.live)applySys(parseSys(await ch.sys.readValue(),ble.cfg.scale));
     const s=ble.live&&ble.live.sys,have=await FFTDB.list(asset);
-    let from=latestOnly?FFT_LAST:(have.length?have[0].ts:0),added=0;
-    bleLog(latestOnly?'ขอข้อมูล FFT ตอน alarm ครั้งล่าสุด':from?'ขอข้อมูล FFT ตอน alarm หลัง '+dFull(from*1000):'ขอข้อมูล FFT ตอน alarm ทั้งหมด');
-    for(let i=0;i<FFT_MAX;i++){
-      const buf=await bulkRequest(ch,from,3);
-      if(buf.length<=HDR+FFT_TS_OFF)break;
+    const keep=async(kind,bytes,ts)=>{
+      const key=asset+'|'+(kind==='alarm'?'':kind[0]+'|')+ts;
+      if(have.some(h=>h.key===key))return false;
+      await FFTDB.put({key,asset,ts,kind,rev:s?s.rev:null,devType:s?s.devType:null,bytes});FUI.key=key;return true;
+    };
+    let added=0;
+    if(mode==='manual'){
+      bleLog('ขอ FFT manual ล่าสุดที่เก็บไว้ในเซนเซอร์');
+      const buf=await bulkRequest(ch,0,2);
+      if(buf.length<=HDR+FFT_TS_OFF)throw new Error('เซนเซอร์ยังไม่มี FFT manual (ต้องกดวัด FFT ในแอป i-ALERT ก่อน)');
       const bytes=buf.slice(HDR),ts=new DataView(bytes.buffer).getUint32(FFT_TS_OFF,true);
-      if(!validTs(ts)){bleLog('ข้อมูล FFT มีเวลาไม่ถูกต้อง หยุดดึง');break}
-      if(!have.some(h=>h.ts===ts)){await FFTDB.put({key:asset+'|'+ts,asset,ts,rev:s?s.rev:null,devType:s?s.devType:null,bytes});added++}
-      bleLog(`ได้ FFT ตอน alarm: ${dFull(ts*1000)}`);
-      if(latestOnly||(from!==0&&ts<=from))break;
-      from=ts;
+      if(!validTs(ts))throw new Error('ข้อมูล FFT manual มีเวลาไม่ถูกต้อง');
+      if(await keep('manual',bytes,ts))added++;
+      bleLog(`ได้ FFT manual: วัดเมื่อ ${dFull(ts*1000)}`);
+    }else{
+      const latestOnly=mode==='alarmLast',alarms=have.filter(h=>(h.kind||'alarm')==='alarm');
+      let from=latestOnly?FFT_LAST:(alarms.length?alarms[0].ts:0);
+      bleLog(latestOnly?'ขอข้อมูล FFT ตอน alarm ครั้งล่าสุด':from?'ขอข้อมูล FFT ตอน alarm หลัง '+dFull(from*1000):'ขอข้อมูล FFT ตอน alarm ทั้งหมด');
+      for(let i=0;i<FFT_MAX;i++){
+        const buf=await bulkRequest(ch,from,3);
+        if(buf.length<=HDR+FFT_TS_OFF)break;
+        const bytes=buf.slice(HDR),ts=new DataView(bytes.buffer).getUint32(FFT_TS_OFF,true);
+        if(!validTs(ts)){bleLog('ข้อมูล FFT มีเวลาไม่ถูกต้อง หยุดดึง');break}
+        if(await keep('alarm',bytes,ts))added++;
+        bleLog(`ได้ FFT ตอน alarm: ${dFull(ts*1000)}`);
+        if(latestOnly||(from!==0&&ts<=from))break;
+        from=ts;
+      }
     }
-    toast(added?`ได้ข้อมูล FFT ตอน alarm ${added} ชุด`:'ไม่มีข้อมูล FFT ตอน alarm ใหม่');
+    toast(added?`ได้ข้อมูล FFT ${added} ชุด`:'ไม่มีข้อมูล FFT ใหม่');
     await renderFFT();
   }catch(e){err=e;bleLog('ดึง FFT ไม่สำเร็จ: '+e.message);toast('ดึง FFT ไม่สำเร็จ: '+e.message)}
   finally{
@@ -842,17 +868,133 @@ async function bleFetchFFT(latestOnly){
   }
 }
 
+// ---- live acceleration stream (ITTiAlert3GetAccelerationStreamCommand) ----
+// Start/stop are plain commands on the command characteristic; the sensor's settings are not touched.
+// The app also rewrites the system structure to enlarge notification packets; we skip that write and
+// accept the sensor's current packet size. Samples: 512/s, interleaved int16 X,Y,Z (6 bytes/sample).
+const STREAM_RATE=512,STREAM_START=0x04000000,STREAM_STOP=0x02000000;
+async function sendStreamCmd(ch,v){
+  const b=new Uint8Array([v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255]);
+  if(ch.cmd.properties.write)await ch.cmd.writeValueWithResponse(b);else await ch.cmd.writeValueWithoutResponse(b);
+}
+function streamRequest(ch,seconds){
+  return new Promise((resolve,reject)=>{
+    const need=seconds*STREAM_RATE*6,chunks=[];let got=0,stopping=false,idle;
+    const finish=err=>{clearTimeout(idle);ble.abort=null;ch.removeEventListener('characteristicvaluechanged',on);ch.stopNotifications().catch(()=>{});
+      if(err)return reject(new Error(err));
+      const b=new Uint8Array(got);let o=0;for(const c of chunks){b.set(c,o);o+=c.length}
+      resolve(b.subarray(0,Math.min(got,need)))};
+    const arm=ms=>{clearTimeout(idle);idle=setTimeout(()=>got>=need?finish():finish(got?'เซนเซอร์หยุดส่งข้อมูลการสั่นกลางทาง':'เซนเซอร์ไม่เริ่มส่งข้อมูลการสั่น'),ms)};
+    const stop=async()=>{
+      if(stopping)return;stopping=true;
+      try{await sendStreamCmd(ch,STREAM_STOP);S.streamOpen=false;save();bleLog('ส่งคำสั่งหยุด stream แล้ว')}catch(e){bleLog('ส่งคำสั่งหยุดไม่สำเร็จ จะส่งซ้ำตอนเชื่อมต่อครั้งหน้า')}
+      arm(3000); // wait briefly for the sensor's status packet, then finish either way
+    };
+    const on=e=>{
+      const v=e.target.value,b=new Uint8Array(v.buffer,v.byteOffset,v.byteLength).slice();
+      if(b.length===8){const type=b[0]|(b[1]<<8);if(type===6||type===10)return} // control headers
+      if(b.length===10){if(stopping)finish();return} // sensor status packets; after stop = done
+      if(stopping)return;
+      chunks.push(b);got+=b.length;
+      const pct=Math.min(100,Math.round(got/need*100));
+      if(ble.state.detail!==pct+'%')setBle('transfer',pct+'%');
+      if(got>=need)stop();else arm(8000);
+    };
+    ble.abort=msg=>finish(msg);
+    ble.stopStream=stop;
+    (async()=>{
+      try{
+        ch.addEventListener('characteristicvaluechanged',on);
+        await ch.startNotifications();
+        S.streamOpen=true;save(); // cleared once the stop command is sent
+        await sendStreamCmd(ch,STREAM_START);
+        bleLog(`เริ่มวัดการสั่นสด ${seconds} วินาที`);
+        setBle('transfer','0%');arm(10000);
+      }catch(e){finish(e.message)}
+    })();
+  });
+}
+// In-place radix-2 FFT (re, im: Float64Array of power-of-two length)
+function fftInPlace(re,im){
+  const n=re.length;
+  for(let i=1,j=0;i<n;i++){let bit=n>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;
+    if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]]}}
+  for(let len=2;len<=n;len<<=1){
+    const a=-2*Math.PI/len,wr=Math.cos(a),wi=Math.sin(a);
+    for(let i=0;i<n;i+=len){let cr=1,ci=0;
+      for(let k=0;k<len/2;k++){
+        const ur=re[i+k],ui=im[i+k],xr=re[i+k+len/2],xi=im[i+k+len/2];
+        const vr=xr*cr-xi*ci,vi=xr*ci+xi*cr;
+        re[i+k]=ur+vr;im[i+k]=ui+vi;re[i+k+len/2]=ur-vr;im[i+k+len/2]=ui-vi;
+        const t=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=t}}}
+}
+// Hann-windowed single-sided spectrum as RMS amplitude (a sine of peak A shows A/sqrt(2))
+function rmsSpectrum(sig){
+  const n=sig.length,re=new Float64Array(n),im=new Float64Array(n);let wsum=0;
+  for(let i=0;i<n;i++){const w=0.5-0.5*Math.cos(2*Math.PI*i/(n-1));re[i]=sig[i]*w;wsum+=w}
+  fftInPlace(re,im);
+  const out=new Float64Array(n/2);
+  for(let k=0;k<n/2;k++)out[k]=2*Math.hypot(re[k],im[k])/wsum/Math.SQRT2;
+  return out;
+}
+// Build the same band shape the FFT panel uses for alarm records
+function decodeStreamRec(r){
+  const n=Math.floor(r.bytes.length/6),dv=new DataView(r.bytes.buffer,r.bytes.byteOffset,r.bytes.byteLength);
+  const raw={x:new Float64Array(n),y:new Float64Array(n),z:new Float64Array(n)};
+  for(let i=0;i<n;i++){raw.x[i]=dv.getInt16(i*6,true);raw.y[i]=dv.getInt16(i*6+2,true);raw.z[i]=dv.getInt16(i*6+4,true)}
+  const twf={},gfft={},vfft={};
+  let N=1;while(N*2<=n)N*=2; // largest power of two that fits
+  const bin=STREAM_RATE/N,freq=new Float64Array(N/2);for(let k=0;k<N/2;k++)freq[k]=k*bin;
+  for(const a of['x','y','z']){
+    let mean=0;for(const v of raw[a])mean+=v;mean/=n||1;            // removeAverage
+    twf[a]=raw[a].map(v=>(v-mean)/r.twfScale);                      // getGTWFFromRawStreamingData
+    gfft[a]=rmsSpectrum(twf[a].subarray(n-N));                       // newest N samples
+    vfft[a]=gfft[a].map((g,k)=>k?g*9806.65/(2*Math.PI*freq[k]):0); // g RMS -> mm/s RMS
+  }
+  return{timestamp:r.ts,kind:'stream',single:{freq,gfft,vfft,twf,hzPerBin:bin,startBin:Math.ceil(2/bin),endBin:N/2-1,
+    twfSampleRate:STREAM_RATE,sampleDurationSec:n/STREAM_RATE,startFreq:2,endFreq:STREAM_RATE/2}};
+}
+async function bleStream(seconds){
+  if(ble.busy||!ble.device)return;
+  ble.busy=true;updateBleButton();fillLive();
+  const dev=ble.device,asset=ble.cfg.asset;let err=null,ch=null;
+  try{
+    ch=await bleConnect(dev);
+    if(!ch.cmd)throw new Error('ไม่พบช่องคำสั่งของเซนเซอร์');
+    if(ch.sys)applySys(parseSys(await ch.sys.readValue(),ble.cfg.scale));
+    const s=ble.live&&ble.live.sys;
+    // digital accelerometers scale by their range (M4 status); analog i-ALERT3 uses 1370 counts/g
+    const range=s?IA3FFT.parseM4Status(s.m4,s.devType).digitalAccelerometerRange:null;
+    const bytes=await streamRequest(ch,seconds);
+    if(bytes.length<STREAM_RATE*6)throw new Error('ได้ข้อมูลน้อยเกินไป');
+    const ts=Math.floor(Date.now()/1000),key=asset+'|s|'+ts;
+    await FFTDB.put({key,asset,ts,kind:'stream',bytes:bytes.slice(),twfScale:range?range.twfScale:1370,devType:s?s.devType:null});
+    FUI.key=key;
+    bleLog(`วัดสดเสร็จ: ${(bytes.length/6/STREAM_RATE).toFixed(1)} วินาที`);toast('วัดการสั่นสดเสร็จแล้ว');
+    await renderFFT();
+  }catch(e){err=e;bleLog('วัดสดไม่สำเร็จ: '+e.message);toast('วัดสดไม่สำเร็จ: '+e.message)}
+  finally{
+    if(S.streamOpen&&ch&&ch.cmd&&dev.gatt.connected)try{await sendStreamCmd(ch,STREAM_STOP);S.streamOpen=false;save()}catch(e){}
+    ble.busy=false;ble.stopStream=null;
+    if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
+    bleFinish(dev,err);fillLive();
+  }
+}
+
 // ---- FFT / waveform panel (decoding in ia3-fft.js, ported from the app) ----
 const FUI={key:null,band:'low',qty:'vel'}; // low band first: 1X/2X peaks are unreadable on the 0-5 kHz axis
 let fftCharts=[];
+const KIND_LABEL={alarm:'ตอน alarm',manual:'manual',stream:'วัดสด'};
 function decodeRec(r){
+  if(r.kind==='stream')return decodeStreamRec(r);
   // rev/devType are saved with the record; fall back on the record length for older entries
   return IA3FFT.decodeAlarmRecord(r.bytes,{rev:r.rev!=null?r.rev:(r.bytes.length>=49380?16:9),devType:r.devType!=null?r.devType:8});
 }
 // Spectrum points for one axis: velocity (mm/s, or in/s when chosen) or acceleration (g)
 function specPoints(dec,band,qty,axis){
   const key=qty==='acc'?'gfft':'vfft',conv=v=>qty==='acc'?v:cv(v),out=[];
-  if(dec.single){const B=dec.single;for(let i=1;i<B.freq.length;i++)out.push({x:B.freq[i],y:conv(B[key][axis][i])});return out}
+  if(dec.single){const B=dec.single,e=B.endBin!=null?B.endBin:B.freq.length-1;
+    for(let i=Math.max(1,B.startBin||1);i<=e;i++)out.push({x:B.freq[i],y:conv(B[key][axis][i])});return out}
   if(band==='combined'&&dec.high&&dec.high.startBin!=null){
     const c=IA3FFT.combine(dec.low,dec.high,key,axis);
     return c.freq.map((f,i)=>({x:f,y:conv(c.val[i])}));
@@ -876,27 +1018,28 @@ async function renderFFT(){
   const el=$('#fftPanel');if(!el)return; // query after the await: the page may have re-rendered
   fftCharts.forEach(c=>c.destroy());fftCharts=[];
   if(!list.length){
-    el.innerHTML=`<div class="ph"><h3>FFT และ waveform ตอนเกิด alarm</h3></div>
-      <p class="muted" style="padding:6px 14px 14px;margin:0">ยังไม่มีข้อมูล เชื่อมต่อเซนเซอร์ แล้วกด "ดึง FFT ตอน alarm" ในแผงค่าสด (ประมาณ 10 วินาทีต่อชุด)</p>`;
+    el.innerHTML=`<div class="ph"><h3>FFT และ waveform</h3></div>
+      <p class="muted" style="padding:6px 14px 14px;margin:0">ยังไม่มีข้อมูล เชื่อมต่อเซนเซอร์ แล้วในแผงค่าสดกด "วัดสด" (FFT ตอนนี้ 0–256 Hz), "ดึง FFT manual ล่าสุด" หรือ "ดึง FFT ตอน alarm" (0–5,000 Hz)</p>`;
     return;
   }
   const rec=list.find(r=>r.key===FUI.key)||list[0];FUI.key=rec.key;
   let dec;
-  try{dec=decodeRec(rec)}catch(e){el.innerHTML=`<div class="ph"><h3>FFT และ waveform ตอนเกิด alarm</h3></div><p class="muted" style="padding:6px 14px 14px">ถอดข้อมูลไม่ได้: ${esc(e.message)}</p>`;return}
+  try{dec=decodeRec(rec)}catch(e){el.innerHTML=`<div class="ph"><h3>FFT และ waveform</h3></div><p class="muted" style="padding:6px 14px 14px">ถอดข้อมูลไม่ได้: ${esc(e.message)}</p>`;return}
+  const kind=rec.kind||'alarm',isStream=kind==='stream';
   const hasHigh=!!(dec.high&&dec.high.startBin!=null),band=hasHigh?FUI.band:'low';
   const bandInfo=B=>B&&B.startFreq!=null?`${B.startFreq}–${B.endFreq} Hz, ${B.hzPerBin} Hz/bin`:'';
   const s=ble.live&&ble.cfg&&ble.cfg.asset===S.sel?ble.live.sys:null;
   const diag=diagnose(dec,s?s.rpm:null,s?s.kurt:null,cfg(S.sel));
   el.innerHTML=`
-    <div class="ph"><h3>FFT และ waveform ตอนเกิด alarm (${list.length} ครั้ง)</h3>
+    <div class="ph"><h3>FFT และ waveform (${list.length} ชุด)</h3>
       <div class="row">
-        <select id="fftRec">${list.map((r,i)=>`<option value="${esc(r.key)}" ${r.key===rec.key?'selected':''}>${dFull(r.ts*1000)}${i===0?' (ล่าสุด)':''}</option>`).join('')}</select>
+        <select id="fftRec">${list.map((r,i)=>`<option value="${esc(r.key)}" ${r.key===rec.key?'selected':''}>${KIND_LABEL[r.kind||'alarm']} · ${dFull(r.ts*1000)}${i===0?' (ล่าสุด)':''}</option>`).join('')}</select>
         ${dec.single?'':`<select id="fftBand"><option value="combined" ${band==='combined'?'selected':''}>ช่วงความถี่: รวม</option><option value="low" ${band==='low'?'selected':''}>ความถี่ต่ำ (ละเอียด)</option>${hasHigh?`<option value="high" ${band==='high'?'selected':''}>ความถี่สูง</option>`:''}</select>`}
         <div class="seg" id="fftQty"><button data-q="vel" class="${FUI.qty==='vel'?'on':''}">Velocity</button><button data-q="acc" class="${FUI.qty==='acc'?'on':''}">Acceleration</button></div>
       </div></div>
     <div class="fft-grid">
-      <div><div class="sub-h">สเปกตรัม (${FUI.qty==='acc'?'g':uv()}) ${dec.single?'':'· ต่ำ '+bandInfo(dec.low)+(hasHigh?' · สูง '+bandInfo(dec.high):'')}</div><div class="cbox fft-box"><canvas id="cFft"></canvas></div></div>
-      <div><div class="sub-h">Waveform (g) · ${band==='high'?'ความถี่สูง':'ความถี่ต่ำ'}</div><div class="cbox fft-box"><canvas id="cTwf"></canvas></div></div>
+      <div><div class="sub-h">สเปกตรัม (${FUI.qty==='acc'?'g':uv()}${isStream?' RMS':''}) ${isStream?`· วัดสด ${dec.single.sampleDurationSec.toFixed(1)} วินาที, 2–256 Hz, ${+dec.single.hzPerBin.toFixed(3)} Hz/bin`:dec.single?'':'· ต่ำ '+bandInfo(dec.low)+(hasHigh?' · สูง '+bandInfo(dec.high):'')}</div><div class="cbox fft-box"><canvas id="cFft"></canvas></div></div>
+      <div><div class="sub-h">Waveform (g) · ${isStream?'วัดสด 512 ค่า/วินาที':band==='high'?'ความถี่สูง':'ความถี่ต่ำ'}</div><div class="cbox fft-box"><canvas id="cTwf"></canvas></div></div>
     </div>
     ${diagHtml(diag)}`;
   $('#fftRec').onchange=e=>{FUI.key=e.target.value;renderFFT()};
@@ -1076,7 +1219,10 @@ function fillLive(){
       <div class="row"><button class="btn" id="bLiveOnce" ${ble.busy?'disabled':''}>อ่านอีกครั้ง</button>
       <button class="btn ${ble.liveTimer?'live':''}" id="bLiveLoop">${ble.liveTimer?'หยุดอ่านต่อเนื่อง':`อ่านต่อเนื่องทุก ${LIVE_MS/1000} วินาที`}</button>
       <button class="btn" id="bFftLast" ${ble.busy?'disabled':''}>ดึง FFT ตอน alarm ล่าสุด</button>
-      <button class="btn" id="bFftAll" ${ble.busy?'disabled':''} title="ประมาณ 10 วินาทีต่อชุด">ดึง FFT ตอน alarm ทั้งหมด</button></div></div>
+      <button class="btn" id="bFftAll" ${ble.busy?'disabled':''} title="ประมาณ 10 วินาทีต่อชุด">ดึง FFT ตอน alarm ทั้งหมด</button>
+      <button class="btn" id="bFftManual" ${ble.busy?'disabled':''} title="FFT ที่วัดไว้ล่าสุดจากปุ่มวัดในแอป i-ALERT (0–5,000 Hz)">ดึง FFT manual ล่าสุด</button>
+      <span class="row stream-ctl"><select id="streamSec" title="ระยะเวลาวัด">${[4,8,16].map(v=>`<option value="${v}" ${v===8?'selected':''}>${v} วินาที</option>`).join('')}</select>
+      <button class="btn primary" id="bStream" ${ble.busy?'disabled':''} title="วัดการสั่นตอนนี้แล้วคำนวณ FFT (0–256 Hz)">วัดสด + FFT</button></span></div></div>
     <div class="kpis live-grid">
       ${liveTile('ค่าวัดล่าสุด (velocity รวม)',fv(ov),uv(),r?`${z?ZL[z]+' · ':''}วัดเมื่อ ${dFull(r.t)}`:'ยังไม่มีค่า','hero z'+(z||''))}
       ${liveTile('Velocity X / Y / Z',r?xyz([r.vx,r.vy,r.vz],fv):'–','',uv())}
@@ -1091,8 +1237,10 @@ function fillLive(){
     <p class="muted live-note">รุ่น ${s.devType===9?'Digital Accelerometer':s.devType===8?'มาตรฐาน':'ไม่ทราบ ('+s.devType+')'} · firmware rev ${s.rev} · บันทึก trend ทุก ${fmtSec(s.trendSec)} · ค่า "วัดล่าสุด" จะเปลี่ยนเมื่อเซนเซอร์บันทึก trend ใหม่ ส่วน "ตรวจ alarm" อัปเดตบ่อยกว่า</p>`;
   $('#bLiveOnce').onclick=bleLiveRead;
   $('#bLiveLoop').onclick=toggleLive;
-  $('#bFftLast').onclick=()=>bleFetchFFT(true);
-  $('#bFftAll').onclick=()=>bleFetchFFT(false);
+  $('#bFftLast').onclick=()=>bleFetchFFT('alarmLast');
+  $('#bFftAll').onclick=()=>bleFetchFFT('alarmAll');
+  $('#bFftManual').onclick=()=>bleFetchFFT('manual');
+  $('#bStream').onclick=()=>bleStream(+$('#streamSec').value);
 }
 // ---- connection status: one phase, shown as a chip in the header and a line in the connect dialog ----
 // [css class, label]; 'ready' = sensor paired and data fetched, link closed to save the sensor's battery
