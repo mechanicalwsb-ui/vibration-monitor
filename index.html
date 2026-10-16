@@ -17,6 +17,7 @@
 <script src="store.js"></script>
 <script src="insights.js"></script>
 <script src="pages.js"></script>
+<script src="ai.js"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -83,7 +84,7 @@ button,select,input{font:inherit;color:inherit}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .btn.primary:hover{filter:brightness(1.07)}
 .btn.danger{color:var(--zd)}
-select,input:not([type]),input[type=number],input[type=text],input[type=date],input[type=datetime-local]{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 8px;min-width:0}
+select,input:not([type]),input[type=number],input[type=text],input[type=password],input[type=date],input[type=datetime-local]{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 8px;min-width:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
 .panel h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02em}
 .ph{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 0}
@@ -277,6 +278,16 @@ table.rp th,table.rp td{border:1px solid #ccc;padding:4px 6px;text-align:left;wh
 .rp-foot{font-size:8.5pt;color:#666;margin-top:16px}
 .plabels{display:grid;grid-template-columns:repeat(3,1fr);gap:6mm}
 .plabel{border:1px dashed #999;padding:4mm;text-align:center;display:flex;flex-direction:column;align-items:center;gap:2px;break-inside:avoid}
+.ai-chat{padding:12px 14px;margin:12px 0;max-height:62vh;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.ai-msg.user{align-self:flex-end;max-width:85%}
+.ai-q{background:var(--accent);color:var(--accent-ink);padding:8px 12px;border-radius:12px 12px 2px 12px;white-space:pre-wrap}
+.ai-a{line-height:1.65}.ai-a h3,.ai-a h4,.ai-a h5,.ai-a h6{margin:12px 0 4px;font-size:15px}.ai-a p{margin:4px 0}.ai-a ul,.ai-a ol{margin:4px 0;padding-left:22px}
+.ai-a code{background:var(--soft);padding:0 4px;border-radius:4px}
+table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:top}
+.ai-ask{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.ai-ask textarea{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px 10px;font:inherit;color:inherit;resize:vertical}
+.ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
+.rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
 .plabel svg{width:38mm;height:38mm}.plabel b{font-size:12pt}.plabel small{font-size:8pt;color:#555}
 </style>
 </head>
@@ -291,6 +302,7 @@ table.rp th,table.rp td{border:1px solid #ccc;padding:4px 6px;text-align:left;wh
     <button class="nav-i" data-v="overview"><svg viewBox="0 0 24 24"><path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/></svg>ภาพรวมเครื่อง</button>
     <button class="nav-i" data-v="fft"><svg viewBox="0 0 24 24"><path d="M3 20h18M5 20V12M9 20V6M13 20v-9M17 20V9M21 20v-4"/></svg>วิเคราะห์ FFT</button>
     <button class="nav-i" data-v="stats"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>สถิติและเปรียบเทียบ</button>
+    <button class="nav-i" data-v="ai"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9zM5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6z"/></svg>วิเคราะห์ด้วย AI</button>
     <div class="nav-sec">งานซ่อมบำรุง</div>
     <button class="nav-i" data-v="asset"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>ข้อมูลเครื่อง / บันทึกซ่อม</button>
     <button class="nav-i" data-v="route"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z"/></svg>เดินตรวจ / QR</button>
@@ -313,6 +325,7 @@ table.rp th,table.rp td{border:1px solid #ccc;padding:4px 6px;text-align:left;wh
   <main id="fftPage" hidden></main>
   <main id="fleetPage" hidden></main>
   <main id="statsPage" hidden></main>
+  <main id="aiPage" hidden></main>
   <main id="assetPage" hidden></main>
   <main id="routePage" hidden></main>
   <main id="reportPage" hidden></main>
@@ -378,7 +391,7 @@ table.rp th,table.rp td{border:1px solid #ccc;padding:4px 6px;text-align:left;wh
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.0.0',APP_BUILD='2026-10-16T20:42:21+07:00';
+const APP_VERSION='2.1.0',APP_BUILD='2026-10-16T20:58:14+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -586,7 +599,7 @@ function exportCSV(){
 // ---- render ----
 // Pages in the left menu; each has its own <main>. The sensor page is static HTML (it holds the
 // connection log), the others are re-rendered
-const VIEWS={fleet:['fleetPage','ทุกเครื่อง'],overview:['main','ภาพรวมเครื่อง'],fft:['fftPage','วิเคราะห์ FFT'],stats:['statsPage','สถิติและเปรียบเทียบ'],
+const VIEWS={fleet:['fleetPage','ทุกเครื่อง'],overview:['main','ภาพรวมเครื่อง'],fft:['fftPage','วิเคราะห์ FFT'],stats:['statsPage','สถิติและเปรียบเทียบ'],ai:['aiPage','วิเคราะห์ด้วย AI'],
   asset:['assetPage','ข้อมูลเครื่อง / บันทึกซ่อม'],route:['routePage','เดินตรวจ / QR'],report:['reportPage','รายงาน'],
   sensor:['sensorPage','เซนเซอร์ / เชื่อมต่อ'],settings:['setPage','ตั้งค่าและข้อมูล']};
 function applyTheme(){if(S.theme==='light'||S.theme==='dark')document.documentElement.dataset.theme=S.theme;else delete document.documentElement.dataset.theme}
@@ -602,7 +615,7 @@ function render(){
   if(v!=='overview'){charts.forEach(c=>c.destroy());charts=[]}
   pDestroy();
   ({overview:()=>renderMain(ns),fft:renderFFTPage,sensor:renderSensorPage,settings:()=>renderSettings(ns),
-    fleet:renderFleet,stats:renderStats,asset:renderAssetPage,route:renderRoute,report:renderReport})[v]();
+    fleet:renderFleet,stats:renderStats,ai:renderAIPage,asset:renderAssetPage,route:renderRoute,report:renderReport})[v]();
   if(v!=='sensor')stopScan();
 }
 function setView(v){S.view=v;save();document.body.classList.remove('nav-open');render();scrollTo(0,0)}
@@ -652,7 +665,7 @@ function renderMain(ns){
   m.innerHTML=`${banners}
   <div class="mainhead">
     <h2>${esc(a)} ${z?`<span class="tag z${z}"><span class="dot z${z}"></span>${ZL[z]} (โซน ${z})</span>`:''} ${stale?`<span class="tag stale">ค่าล่าสุด ${ago(last.t)}</span>`:''}</h2>
-    <div class="seg" id="range">${[[7,'7 วัน'],[30,'30 วัน'],[90,'90 วัน'],[0,'ทั้งหมด']].map(([d,l])=>`<button data-d="${d}" class="${S.range===d?'on':''}">${l}</button>`).join('')}</div>
+    <div class="row"><button class="btn" onclick="setView('ai')">✨ วิเคราะห์ด้วย AI</button><div class="seg" id="range">${[[7,'7 วัน'],[30,'30 วัน'],[90,'90 วัน'],[0,'ทั้งหมด']].map(([d,l])=>`<button data-d="${d}" class="${S.range===d?'on':''}">${l}</button>`).join('')}</div></div>
   </div>
   ${ble.cfg&&ble.cfg.asset===a?'<div class="panel" id="livePanel" hidden></div>':''}
   <div class="kpis">
@@ -744,6 +757,7 @@ function renderSettings(ns){
         <div style="align-self:end"><button class="btn" id="nTest">ทดสอบแจ้งเตือน</button></div>
         <p class="full muted" style="margin:0;font-size:12px">${'Notification' in window?'สิทธิ์แจ้งเตือนของเบราว์เซอร์: '+({granted:'อนุญาตแล้ว',denied:'ถูกปฏิเสธ (เปิดได้ในการตั้งค่าเว็บไซต์ของ Chrome)',default:'ยังไม่ได้ขอ'}[Notification.permission]):'เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน จะแจ้งเป็นข้อความในหน้าเว็บ'} · แจ้งได้เฉพาะตอนหน้าเว็บเปิดอยู่ ถ้าต้องการ 24 ชม. ใช้ Gateway</p>
       </div></div>
+    ${aiSettingsHtml()}
     <div class="panel"><div class="ph"><h3>Gateway (Raspberry Pi)</h3></div>
       <div class="form">
         <label class="full">ที่อยู่ Gateway (เว้นว่าง = หน้าเว็บนี้เปิดจาก Gateway อยู่แล้ว)<input type="text" id="gwUrl" value="${esc((S.gw&&S.gw.url)||'')}" placeholder="เช่น http://192.168.1.50:8080/"></label>
@@ -810,6 +824,7 @@ function renderSettings(ns){
   $('#gwTest').onclick=async()=>{gwSet();const st=await gatewayStatus(gwBase());S._gw=st;
     $('#gwInfo').textContent=st?`พบ Gateway: ${st.sensors.map(s=>s.asset).join(', ')} · ${st.readings.toLocaleString('th-TH')} ค่า · ดึงทุก ${st.intervalMin} นาที`:'ติดต่อ Gateway ไม่ได้ (ตรวจที่อยู่ และต้องอยู่วง LAN เดียวกัน; หน้า https เรียก http ไม่ได้)'};
   $('#gwSync').onclick=()=>{gwSet();gatewaySync()};
+  aiBindSettings();
   storageInfo().then(i=>{const el=$('#storeInfo');if(i&&el)el.textContent+=` · ใช้ ${fmtBytes(i.used)} จาก ${fmtBytes(i.quota)}`});
 
   $('#sUnit').value=S.unit;$('#sTUnit').value=S.tunit;$('#sTheme').value=S.theme||'';

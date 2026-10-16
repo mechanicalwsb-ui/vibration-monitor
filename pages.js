@@ -417,7 +417,7 @@ function renderReport(){
     <label class="full">ชื่อหน่วยงาน (หัวรายงาน)<input name="org" value="${esc(R.org||'')}" placeholder="เช่น แผนกซ่อมบำรุง โรงงาน ..."></label>
     <label>เครื่องจักร<select name="scope"><option value="one" ${R.scope==='one'?'selected':''}>เฉพาะ ${esc(S.sel||'-')}</option><option value="all" ${R.scope==='all'?'selected':''}>ทุกเครื่อง (${ns.length})</option></select></label>
     <label>ช่วงเวลา<select name="days">${[[7,'7 วัน'],[30,'30 วัน (รายเดือน)'],[90,'90 วัน'],[365,'1 ปี']].map(([d,l])=>`<option value="${d}" ${+R.days===d?'selected':''}>${l}</option>`).join('')}</select></label>
-    <div class="full row">${[['sum','สรุปสถานะ'],['trend','กราฟแนวโน้ม'],['alarm','ตาราง alarm'],['fft','FFT ล่าสุด + วิเคราะห์'],['fc','พยากรณ์'],['maint','บันทึกซ่อม'],['sign','ช่องลายเซ็น']].map(([k,l])=>`<label class="check"><input type="checkbox" data-sec="${k}" ${R.sec[k]?'checked':''}> ${l}</label>`).join('')}</div>
+    <div class="full row">${[['sum','สรุปสถานะ'],['trend','กราฟแนวโน้ม'],['alarm','ตาราง alarm'],['fft','FFT ล่าสุด + วิเคราะห์'],['fc','พยากรณ์'],['maint','บันทึกซ่อม'],['ai','ความเห็นจาก AI (ที่บันทึกไว้)'],['sign','ช่องลายเซ็น']].map(([k,l])=>`<label class="check"><input type="checkbox" data-sec="${k}" ${R.sec[k]?'checked':''}> ${l}</label>`).join('')}</div>
     <div class="full row"><button class="btn primary" id="repGo">สร้างรายงานและพิมพ์ / บันทึก PDF</button></div>
     <p class="full muted" style="margin:0;font-size:12px">กดแล้วจะเปิดหน้าพิมพ์ของเบราว์เซอร์ เลือกเครื่องพิมพ์ "บันทึกเป็น PDF" (Save as PDF) เพื่อได้ไฟล์ PDF ขนาด A4</p>
   </div></div></div>`;
@@ -462,6 +462,8 @@ async function buildReport(R){
         html+=`<ul>${dg.items.map(it=>`<li><b>${it.name}</b> (${it.level}) — ${it.why}</li>`).join('')||'<li>ไม่พบรูปแบบความผิดปกติเด่น</li>'}</ul>`}}
     if(R.sec.maint){const ml=(S.maint||[]).filter(m=>m.asset===a&&m.t>=from).sort((x,y)=>x.t-y.t);
       if(ml.length)html+=`<h3>บันทึกการบำรุงรักษา</h3><table class="rp"><thead><tr><th>วันที่</th><th>งาน</th><th>รายละเอียด</th><th>ผู้ทำ</th></tr></thead><tbody>${ml.map(m=>`<tr><td>${dFull(m.t)}</td><td>${esc(m.type)}</td><td>${esc(m.text||'')}</td><td>${esc(m.by||'')}</td></tr>`).join('')}</tbody></table>`}
+    if(R.sec.ai){const h=((S.ai||{})[a]||[]).at(-1);
+      if(h)html+=`<h3>ความเห็นจาก AI · ${esc(h.title)} (${dFull(h.t)} · ${esc(h.model)})</h3><div class="rp-ai">${mdToHtml(h.text)}</div><p class="rp-sub">สร้างโดย Google Gemini จากข้อมูลสรุปของระบบ เป็นความเห็นประกอบ ไม่ใช่ผลตรวจของผู้เชี่ยวชาญ</p>`}
     html+='</section>';
   }
   if(R.sec.sign)html+=`<div class="rp-sign"><div>ผู้ตรวจสอบ<br><br>.............................................<br>(.............................................)<br>วันที่ ........./........./.........</div><div>ผู้อนุมัติ<br><br>.............................................<br>(.............................................)<br>วันที่ ........./........./.........</div></div>`;

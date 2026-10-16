@@ -3,7 +3,7 @@
 // globals at call time (S, KEY, FFTDB, toast, render, APP_VERSION, esc).
 
 // Collections that grow without limit live in IndexedDB (localStorage holds ~5 MB in total)
-const BIGKEYS=['readings','maint','health'];
+const BIGKEYS=['readings','maint','health','ai'];
 const VDB={
   db:null,
   open(){return this.db||(this.db=new Promise((res,rej)=>{
@@ -57,7 +57,7 @@ async function loadState(){
       for(const k of BIGKEYS){const v=await VDB.get(k);if(v!=null)S[k]=v}
     }
   }catch(e){store.idb=false;console.warn('IndexedDB unavailable, using localStorage',e)}
-  for(const k of BIGKEYS)if(S[k]==null)S[k]=k==='health'?{}:[];
+  for(const k of BIGKEYS)if(S[k]==null)S[k]=k==='health'||k==='ai'?{}:[];
   // Ask the browser not to evict our data when the device runs low on space
   try{if(navigator.storage&&navigator.storage.persist&&!(await navigator.storage.persisted()))store.persisted=await navigator.storage.persist();else store.persisted=true}catch(e){}
 }
@@ -93,7 +93,7 @@ async function importBackup(file,mode){
   if(mode==='replace'){
     if(!confirm(`แทนที่ข้อมูลทั้งหมดในเครื่องนี้ด้วยไฟล์สำรอง?\n\nไฟล์: ${(st.readings||[]).length} ค่า · FFT ${fft.length} ชุด (สำรองเมื่อ ${new Date(data.exportedAt).toLocaleString('th-TH')})\nข้อมูลปัจจุบัน: ${S.readings.length} ค่า จะถูกลบ`))return;
     for(const k of Object.keys(S))delete S[k];
-    Object.assign(S,{readings:[],assets:{},unit:'mm',tunit:'C',sel:null,range:30,sensors:{},maint:[],health:{}},st);
+    Object.assign(S,{readings:[],assets:{},unit:'mm',tunit:'C',sel:null,range:30,sensors:{},maint:[],health:{},ai:{}},st);
     await FFTDB.clear();for(const r of fft)await FFTDB.put(r);
     save();persistBig(true);render();
     return toast(`กู้คืนแล้ว ${S.readings.length.toLocaleString('th-TH')} ค่า · FFT ${fft.length} ชุด`);
@@ -108,6 +108,7 @@ async function importBackup(file,mode){
     const cur=S.health[k]||(S.health[k]=[]),ts=new Set(cur.map(h=>h.t));
     for(const h of list)if(!ts.has(h.t))cur.push(h);cur.sort((a,b)=>a.t-b.t);
   }
+  for(const[a,list]of Object.entries(st.ai||{})){const cur=S.ai[a]||(S.ai[a]=[]),ids=new Set(cur.map(h=>h.id));for(const h of list)if(!ids.has(h.id))cur.push(h)}
   for(const k of['routes'])if(st[k]&&!S[k])S[k]=st[k];
   const have=new Set((await FFTDB.all()).map(r=>r.key));let nF=0;
   for(const r of fft)if(!have.has(r.key)){await FFTDB.put(r);nF++}
