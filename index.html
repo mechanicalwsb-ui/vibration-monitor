@@ -223,6 +223,7 @@ table.thr th,table.thr td{padding:4px 8px}
       <div class="full ble-log mono" id="bleLog"></div>
     </div>
     <div class="foot">
+      <button class="btn" type="button" id="bleCopy" style="margin-right:auto">คัดลอก log</button>
       <button class="btn" type="button" id="bleStop" hidden>หยุดดึงอัตโนมัติ</button>
       <button class="btn" value="close" formnovalidate>ปิด</button>
       <button class="btn primary" type="button" id="bleGo">เลือกเซนเซอร์และดึงข้อมูล</button>
@@ -234,7 +235,7 @@ table.thr th,table.thr td{padding:4px 8px}
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='1.8.0',APP_BUILD='2026-10-16T14:56:10+07:00';
+const APP_VERSION='1.9.0',APP_BUILD='2026-10-16T15:02:00+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -642,6 +643,8 @@ function parseSys(dv,fallbackScale){
     checkG:[200,202,204].map(o=>r4(u16(o)/scale)),
     battV:u16(206)/1000,runH:u32(76)/3600,trendSec:u16(12),wakeSec:u16(10)};
 }
+// Clock usable = within a day of this computer (status bit 4 "time sync done" is checked before writes)
+const clockOk=s=>Math.abs(s.clock-Date.now()/1000)<=86400;
 function fmtDrift(sec){
   const a=Math.abs(sec),s=sec>0?'เร็วกว่าคอม':'ช้ากว่าคอม';
   if(a<60)return 'ตรงกับคอม';
@@ -776,6 +779,7 @@ async function bleFetch(){
         const s=parseSys(await ch.sys.readValue(),ble.cfg.scale);
         if(s){
           bleLog(`นาฬิกาเซนเซอร์: ${dFull(s.clock*1000)} (${fmtDrift(s.clock-Math.floor(Date.now()/1000))})`);
+          if(!clockOk(s))bleLog('⚠ นาฬิกาเซนเซอร์ยังไม่ได้ตั้งเวลา (มักเกิดหลังเซนเซอร์รีสตาร์ท) trend ใหม่จะมีเวลาผิดและถูกข้าม ให้เปิดแอป i-ALERT เชื่อมต่อเซนเซอร์ 1 ครั้งเพื่อตั้งเวลา');
           bleLog(`trend ล่าสุดในเซนเซอร์: ${s.lastTrend?dFull(s.lastTrend*1000):'-'}`);
           applySys(s);
         }else bleLog('อ่านสถานะเซนเซอร์ได้ไม่ครบ ข้ามการเช็กนาฬิกา');
@@ -911,6 +915,11 @@ function measurePreflight(read){
   if(rev<10)why.push('firmware rev '+rev+' ยังไม่รองรับ');
   if(q!==0)why.push('เซนเซอร์มีคำสั่งค้างหรือกำลังทำงาน (queue 0x'+q.toString(16).padStart(8,'0')+') รอสักครู่แล้วลองใหม่');
   if(!(st&0x20))why.push('เซนเซอร์ยังตั้ง baseline ไม่เสร็จ');
+  // A sensor that lost its clock (e.g. after a restart) did not start a requested FFT in testing;
+  // the i-ALERT app sets the clock on connect, so ask for that first
+  const clock=dv.getUint32(68,true);
+  if(!(st&0x10)||Math.abs(clock-Date.now()/1000)>86400)
+    why.push('นาฬิกาเซนเซอร์ยังไม่ได้ตั้งเวลา (อาจเพิ่งรีสตาร์ท) ให้เปิดแอป i-ALERT เชื่อมต่อเซนเซอร์ 1 ครั้งเพื่อตั้งเวลาก่อน');
   return why;
 }
 function buildMeasureWrite(read,nowSec){
@@ -942,21 +951,28 @@ async function bleMeasureFFT(){
     if(ch.sys.properties.write)await ch.sys.writeValueWithResponse(out);else await ch.sys.writeValueWithoutResponse(out);
     bleLog('ส่งคำสั่งวัด FFT แล้ว กำลังรอเซนเซอร์วัด…');
     // Only reads from here on: poll the system structure until no measurement bits are pending
-    const t0=Date.now();let after=null;
+    // Done = the sensor showed it was busy (or flagged "manual FFT complete") and is idle again.
+    // If it never shows either within START_GRACE_MS, it did not take the command.
+    const START_GRACE_MS=12000,t0=Date.now();let after=null,sawBusy=false,last=read;
     while(Date.now()-t0<MEASURE_WAIT_MS){
-      await sleep(2000);
+      await sleep(1500);
       if(!dev.gatt.connected)throw new Error('การเชื่อมต่อหลุดระหว่างวัด เซนเซอร์จะวัดต่อเองจนเสร็จ รอสักครู่แล้วกด "ดึง FFT manual ล่าสุด"');
-      const b=sysBytes(await ch.sys.readValue());
+      const b=sysBytes(await ch.sys.readValue()),bdv=new DataView(b.buffer);last=b;
       setBle('transfer',`เซนเซอร์กำลังวัด FFT (${Math.round((Date.now()-t0)/1000)} วินาที)`);
-      if(new DataView(b.buffer).getUint32(0,true)&BUSY_BITS)continue;
-      after=b;break;
+      if(bdv.getUint32(0,true)&BUSY_BITS){if(!sawBusy)bleLog('เซนเซอร์เริ่มวัดแล้ว (busy)');sawBusy=true;continue}
+      if(sawBusy||(bdv.getUint16(8,true)&Q_MANUAL_FFT)){after=b;break}
+      if(Date.now()-t0>START_GRACE_MS)break;
     }
-    if(!after)throw new Error('เซนเซอร์ยังวัดไม่เสร็จใน 90 วินาที หยุดรอแล้วโดยไม่ส่งคำสั่งอื่น ลองกด "ดึง FFT manual ล่าสุด" ภายหลัง');
-    const cfgDiff=diffBytes(read,after,CONFIG_RANGES);
-    if(cfgDiff.length){
-      const msg='⚠ ค่าตั้งค่าในเซนเซอร์ต่างจากก่อนสั่งวัด ที่ไบต์ '+cfgDiff.map(i=>`${i} (${hex2(read[i])}→${hex2(after[i])})`).join(', ');
-      bleLog(msg);alert(msg+'\n\nกรุณาตรวจค่าเกณฑ์และการตั้งค่าในแอป i-ALERT และแจ้งผู้ดูแลหน้าเว็บนี้');
-    }else bleLog('ตรวจซ้ำแล้ว: ค่าตั้งค่า (เกณฑ์ alarm, ช่วงเวลาวัด, settings, FFT options, tag, MAC) ไม่เปลี่ยน ✓');
+    const cfgCheck=b=>{const d=diffBytes(read,b,CONFIG_RANGES);
+      if(d.length){const msg='⚠ ค่าตั้งค่าในเซนเซอร์ต่างจากก่อนสั่งวัด ที่ไบต์ '+d.map(i=>`${i} (${hex2(read[i])}→${hex2(b[i])})`).join(', ');
+        bleLog(msg);alert(msg+'\n\nกรุณาตรวจค่าเกณฑ์และการตั้งค่าในแอป i-ALERT');}
+      else bleLog('ตรวจซ้ำแล้ว: ค่าตั้งค่า (เกณฑ์ alarm, ช่วงเวลาวัด, settings, FFT options, tag, MAC) ไม่เปลี่ยน ✓')};
+    if(!after){
+      cfgCheck(last);
+      throw new Error(sawBusy?'เซนเซอร์ยังวัดไม่เสร็จใน 90 วินาที หยุดรอแล้วโดยไม่ส่งคำสั่งอื่น ลองกด "ดึง FFT manual ล่าสุด" ภายหลัง'
+        :'เซนเซอร์ไม่ได้เริ่มวัด (ไม่มีสถานะ busy หลังสั่ง) ไม่ได้ส่งคำสั่งอื่นเพิ่ม ลองเปิดแอป i-ALERT เชื่อมต่อเซนเซอร์ 1 ครั้งแล้วค่อยลองใหม่');
+    }
+    cfgCheck(after);
     if(new DataView(after.buffer).getUint16(8,true)&Q_MANUAL_FFT)bleLog('เซนเซอร์แจ้งว่าวัด FFT manual เสร็จ');
     applySys(parseSys(new DataView(after.buffer),ble.cfg.scale));
     // Download the new capture (read-only opcode 2)
@@ -1196,7 +1212,8 @@ function sensorStatusHtml(s){
   const cell=v=>`<td class="num">${v==null?'–':fv(v)}</td>`,tcell=v=>`<td class="num">${v==null?'–':ft(v)}</td>`;
   return `<div class="sens-grid">
     <div><h4>สถานะจากเซนเซอร์</h4>
-      <div class="row">${chips||'<span class="tag zB">ไม่มี alarm</span>'}<span class="tag">${F.running?'เครื่องเดินอยู่':'เครื่องหยุด'}</span></div>
+      <div class="row">${chips||'<span class="tag zB">ไม่มี alarm</span>'}<span class="tag">${F.running?'เครื่องเดินอยู่':'เครื่องหยุด'}</span>${clockOk(s)?'':'<span class="tag zD">นาฬิกาเซนเซอร์ไม่ได้ตั้งเวลา</span>'}</div>
+      ${clockOk(s)?'':'<p class="sens-note" style="color:var(--zd)">นาฬิกาเซนเซอร์ไม่ตรง (มักเกิดหลังรีสตาร์ท) ให้เปิดแอป i-ALERT เชื่อมต่อเซนเซอร์ 1 ครั้งเพื่อตั้งเวลา ระหว่างนี้ปุ่มสั่งวัด FFT จะไม่ทำงาน</p>'}
       <p class="muted sens-note">alarm ครั้งล่าสุด: ${validTs(s.lastAlarm)?dFull(s.lastAlarm*1000):'ไม่มีบันทึก'} · เวลาที่อยู่ใน alarm รวม ${fmtDur(s.alarmSec)}</p></div>
     <div><h4>เกณฑ์ที่ตั้งไว้ในเซนเซอร์ (${uv()} / ${ut()})</h4>
       <table class="thr"><thead><tr><th></th><th>X</th><th>Y</th><th>Z</th><th>อุณหภูมิ</th></tr></thead><tbody>
@@ -1343,6 +1360,18 @@ $('#bleStop').onclick=()=>{clearInterval(ble.timer);ble.timer=null;ble.autoMs=nu
 
 // ---- wiring ----
 $('#bBle').onclick=openBle;
+// Copy the connection log (newest first, as shown) with version/status context for troubleshooting
+$('#bleCopy').onclick=async()=>{
+  const lines=[...$('#bleLog').children].map(d=>d.textContent);
+  if(!lines.length)return toast('ยังไม่มี log');
+  const head=[`Vibration Monitor ${$('#appVer').textContent}`,`สถานะ: ${bleStatusText(true)}`,`คัดลอกเมื่อ: ${new Date().toLocaleString('th-TH')}`,''];
+  const text=head.concat(lines).join('\n');
+  try{await navigator.clipboard.writeText(text);toast(`คัดลอก log แล้ว (${lines.length} บรรทัด)`)}
+  catch(e){ // clipboard blocked: select the log so the user can copy by hand
+    const r=document.createRange();r.selectNodeContents($('#bleLog'));const sel=getSelection();sel.removeAllRanges();sel.addRange(r);
+    toast('คัดลอกอัตโนมัติไม่ได้ เลือกข้อความไว้แล้ว กด Ctrl+C');
+  }
+};
 $('#bleChip').onclick=openBle;
 $('#bImport').onclick=()=>$('#file').click();
 $('#file').onchange=e=>{if(e.target.files.length)importFiles([...e.target.files]);e.target.value=''};
