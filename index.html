@@ -39,15 +39,37 @@ html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:14px/1.5 "IBM Plex Sans Thai",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .mono,.num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
 button,select,input{font:inherit;color:inherit}
-.top{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
-.top-in{max-width:1400px;margin:auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.brand{display:flex;flex-direction:column;min-width:0}
+/* app shell: left navigation + page content; below 900px the navigation becomes a slide-in drawer */
+.app{display:grid;grid-template-columns:252px minmax(0,1fr);min-height:100vh}
+.nav{position:sticky;top:0;height:100vh;overflow:auto;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:10px;padding:14px 10px 16px}
+.brand{display:flex;flex-direction:column;min-width:0;padding:0 6px}
 .brand b{font-size:16px;font-weight:600}
 .brand span{font-size:12px;color:var(--muted)}
-.views{margin-right:auto}
-.views button{padding:6px 14px}
-@media (max-width:600px){.views{order:3;margin-right:0;width:100%;display:flex}.views button{flex:1}}
-.brand .ver{display:inline-block;margin-left:8px;padding:1px 8px;border:1px solid var(--line);border-radius:999px;font-size:11.5px;font-weight:500;color:var(--muted);vertical-align:2px}
+.brand .ver{display:block;margin-top:4px;font-size:11.5px;font-weight:500;color:var(--muted)}
+.navlist{display:flex;flex-direction:column;gap:2px}
+.nav-i{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:0;border-radius:8px;background:none;cursor:pointer;text-align:left;font-weight:500}
+.nav-i svg{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;color:var(--muted)}
+.nav-i:hover{background:var(--soft)}
+.nav-i.on{background:color-mix(in srgb,var(--accent) 13%,transparent);color:var(--accent)}
+.nav-i.on svg{color:var(--accent)}
+.nav-sec{font-size:11.5px;font-weight:600;color:var(--muted);padding:6px 10px 0;letter-spacing:.03em}
+.nav #bleChip{width:100%;max-width:none;justify-content:flex-start}
+.content{min-width:0;width:100%;max-width:1400px;padding:16px}
+.mbar{display:none}
+.scrim{display:none}
+.icon-btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;width:38px;height:38px;display:inline-grid;place-items:center;cursor:pointer;flex:none}
+.icon-btn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+@media (max-width:900px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .nav{position:fixed;left:0;top:0;bottom:0;width:min(290px,86vw);height:auto;z-index:30;transform:translateX(-105%);transition:transform .2s;box-shadow:0 0 24px rgba(0,0,0,.25)}
+  body.nav-open .nav{transform:none}
+  body.nav-open .scrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:25}
+  .mbar{display:flex;position:sticky;top:0;z-index:20;align-items:center;gap:10px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .mbar b{font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mbar .conn{max-width:46%}
+  .content{padding:12px}
+}
+@media (prefers-reduced-motion:reduce){.nav{transition:none}}
 .actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer;white-space:nowrap}
 .btn:hover{background:var(--soft)}
@@ -55,16 +77,11 @@ button,select,input{font:inherit;color:inherit}
 .btn.primary:hover{filter:brightness(1.07)}
 .btn.danger{color:var(--zd)}
 select,input[type=number],input[type=text],input[type=datetime-local]{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 8px;min-width:0}
-.layout{max-width:1400px;margin:auto;padding:16px;display:grid;grid-template-columns:260px minmax(0,1fr);gap:16px;align-items:start}
-@media (max-width:860px){.layout{grid-template-columns:minmax(0,1fr)}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
 .panel h3{margin:0;font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.02em}
 .ph{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px 0}
-aside.panel{padding:8px;position:sticky;top:74px}
-@media (max-width:860px){aside.panel{position:static}}
-.alist{display:flex;flex-direction:column;gap:4px;margin-top:6px}
-@media (max-width:860px){.alist{flex-direction:row;overflow-x:auto;padding-bottom:4px}.asset{min-width:200px}}
-.asset{display:grid;grid-template-columns:10px 1fr auto;gap:2px 10px;align-items:center;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;text-align:left;background:none}
+.alist{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.asset{width:100%;display:grid;grid-template-columns:10px 1fr auto;gap:2px 10px;align-items:center;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;text-align:left;background:none}
 .asset:hover{background:var(--soft)}
 .asset.on{background:var(--soft);border-color:var(--line)}
 .asset .nm{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -141,7 +158,6 @@ dialog .foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;bor
 .conn.bad i{background:var(--zd)}
 @keyframes connpulse{50%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){.conn i{animation:none!important}}
-@media (max-width:600px){#bleChip{max-width:100%;order:-1;flex:1 1 100%}}
 .check{flex-direction:row!important;align-items:center;gap:8px;flex-wrap:wrap}
 .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 #livePanel{margin-bottom:12px}
@@ -179,32 +195,95 @@ table.thr th,table.thr td{padding:4px 8px}
 .fa-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px;margin-top:12px}
 .fa-diag .diag{border-top:0;margin-top:0}
 @media (max-width:600px){.fa-main{height:300px}}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:12px;align-items:start}
+.pgrid .span{grid-column:1/-1}
+.pbody{padding:10px 14px 14px}
+.slist{display:flex;flex-direction:column;gap:6px;padding:10px 14px 4px}
+.srow{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:4px 12px;align-items:center;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);cursor:pointer;text-align:left}
+.srow:hover{background:var(--soft)}
+.srow.top1{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.srow.stale{opacity:.55}
+.srow .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .sub{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .go{font-size:12.5px;font-weight:600;color:var(--accent);white-space:nowrap}
+.sig{display:flex;flex-direction:column;align-items:center;gap:2px}
+.bars{display:flex;align-items:flex-end;gap:2px;height:16px}
+.bars i{width:4px;border-radius:1px;background:var(--line)}
+.bars i:nth-child(1){height:25%}.bars i:nth-child(2){height:50%}.bars i:nth-child(3){height:75%}.bars i:nth-child(4){height:100%}
+.bars.b1 i:nth-child(-n+1),.bars.b2 i:nth-child(-n+2),.bars.b3 i:nth-child(-n+3),.bars.b4 i:nth-child(-n+4){background:var(--za)}
+.bars.b1 i:nth-child(-n+1){background:var(--zd)}
+.bars.b2 i:nth-child(-n+2){background:var(--zc)}
+.sig small{font-size:10.5px;color:var(--muted);font-family:"IBM Plex Mono",ui-monospace,monospace}
+.scan-note{font-size:12px;margin:0;padding:6px 14px 12px}
+.scan-help{margin:8px 14px 12px;padding:10px 12px;border-radius:8px;background:var(--soft);font-size:12.5px}
+.scan-help ol{margin:6px 0 0;padding-left:20px}
+.scan-help code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;word-break:break-all}
+#bleState{margin:10px 14px 0}
+.klist{list-style:none;margin:0;padding:0}
+.klist li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.klist li:last-child{border-bottom:0}
+.klist input{width:100%}
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="top-in">
-    <div class="brand"><b>Vibration Monitor <span class="ver" id="appVer"></span></b><span>แดชบอร์ดสำหรับข้อมูลเซนเซอร์ i-ALERT3</span></div>
-    <nav class="seg views" id="views" aria-label="เมนู"><button data-v="overview">ภาพรวม</button><button data-v="fft">วิเคราะห์ FFT</button></nav>
-    <div class="actions">
-      <button class="btn primary" id="bImport">นำเข้า CSV</button>
-      <button type="button" class="conn" id="bleChip" title="สถานะการเชื่อมต่อเซนเซอร์"><i></i><span>ยังไม่ได้เชื่อมต่อเซนเซอร์</span></button>
-      <button class="btn" id="bBle">เชื่อมต่อเซนเซอร์</button>
-      <button class="btn" id="bAdd">+ เพิ่มค่า</button>
-      <button class="btn" id="bDemo">ข้อมูลตัวอย่าง</button>
-      <button class="btn" id="bExport">ส่งออก</button>
-      <select id="sUnit" title="หน่วยความเร็ว"><option value="mm">mm/s</option><option value="in">in/s</option></select>
-      <select id="sTUnit" title="หน่วยอุณหภูมิ"><option value="C">°C</option><option value="F">°F</option></select>
-    </div>
-    <input type="file" id="file" accept=".csv,.txt,text/csv" multiple hidden>
+<div class="app">
+<nav class="nav" id="nav" aria-label="เมนูหลัก">
+  <div class="brand"><b>Vibration Monitor</b><span>แดชบอร์ดเซนเซอร์ i-ALERT3</span><span class="ver" id="appVer"></span></div>
+  <button type="button" class="conn" id="bleChip" title="สถานะการเชื่อมต่อเซนเซอร์"><i></i><span>ยังไม่ได้เชื่อมต่อเซนเซอร์</span></button>
+  <div class="navlist" id="views">
+    <button class="nav-i" data-v="overview"><svg viewBox="0 0 24 24"><path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/></svg>ภาพรวม</button>
+    <button class="nav-i" data-v="fft"><svg viewBox="0 0 24 24"><path d="M3 20h18M5 20V12M9 20V6M13 20v-9M17 20V9M21 20v-4"/></svg>วิเคราะห์ FFT</button>
+    <button class="nav-i" data-v="sensor"><svg viewBox="0 0 24 24"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg>เซนเซอร์ / เชื่อมต่อ</button>
+    <button class="nav-i" data-v="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>ตั้งค่าและข้อมูล</button>
   </div>
-</header>
-
-<div class="layout">
-  <aside class="panel" id="side"></aside>
+  <div id="side"></div>
+</nav>
+<div class="scrim" id="scrim"></div>
+<div style="min-width:0">
+  <div class="mbar">
+    <button type="button" class="icon-btn" id="bMenu" aria-label="เปิดเมนู"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+    <b id="mTitle">ภาพรวม</b>
+    <button type="button" class="conn" id="mChip" title="สถานะการเชื่อมต่อเซนเซอร์"><i></i><span></span></button>
+  </div>
+  <div class="content">
   <main id="main"></main>
   <main id="fftPage" hidden></main>
+  <main id="sensorPage" hidden>
+    <div class="mainhead"><h2>เซนเซอร์ / เชื่อมต่อ</h2></div>
+    <form id="bleForm" class="pgrid" onsubmit="return false">
+      <div class="panel span">
+        <div class="ph"><h3>เซนเซอร์ i-ALERT ที่อยู่ใกล้ (สัญญาณแรงสุดอยู่บน)</h3>
+          <div class="row"><button class="btn primary" type="button" id="bScan">สแกนหาเซนเซอร์</button><button class="btn" type="button" id="bleGo">เลือกจากหน้าต่างของ Chrome</button></div></div>
+        <div class="conn" id="bleState"><i></i><span>ยังไม่ได้เชื่อมต่อเซนเซอร์</span></div>
+        <div class="slist" id="scanList"></div>
+        <p class="scan-note muted" id="scanNote"></p>
+        <div id="scanHelp"></div>
+      </div>
+      <div class="panel">
+        <div class="ph"><h3>ตัวเลือกการดึงข้อมูล</h3></div>
+        <div class="form">
+          <label class="full">ชื่อเครื่องจักรของเซนเซอร์ที่จะเชื่อมต่อ (เว้นว่าง = ใช้ชื่อที่จำไว้ หรือชื่อเซนเซอร์)<input type="text" name="asset" list="assetList" placeholder="เช่น P-101"></label>
+          <label class="full">รุ่นเซนเซอร์ (มีผลกับการแปลงค่า velocity/acceleration)
+            <select name="scale"><option value="816">i-ALERT3 มาตรฐาน</option><option value="1289">i-ALERT3 Digital Accelerometer</option></select></label>
+          <label class="full check"><input type="checkbox" name="auto"> ดึงซ้ำอัตโนมัติทุก
+            <select name="every"><option value="15">15</option><option value="30" selected>30</option><option value="60">60</option></select> นาที ขณะเปิดหน้านี้ไว้</label>
+          <label class="full check"><input type="checkbox" name="full"> ดึงข้อมูลทั้งหมดในเซนเซอร์ใหม่ (ไม่ใช่เฉพาะค่าใหม่)</label>
+          <label class="full check"><input type="checkbox" name="all"> แสดงอุปกรณ์ Bluetooth ทั้งหมด (ใช้เมื่อหาเซนเซอร์ไม่เจอ)</label>
+          <p class="full muted" style="margin:0;font-size:12px">ใช้ได้ใน Google Chrome หรือ Microsoft Edge บนคอม มือถือ Android หรือแท็บเล็ต (เช่น MatePad) ที่เปิด Bluetooth ไว้ ปิดแอป i-ALERT ก่อน เพราะเซนเซอร์รับการเชื่อมต่อได้ทีละเครื่อง ครั้งแรกจะดึงข้อมูลทั้งหมด ครั้งต่อไปดึงเฉพาะค่าใหม่</p>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="ph"><h3>บันทึกการเชื่อมต่อ (log)</h3>
+          <div class="row"><button class="btn sm" type="button" id="bleStop" hidden>หยุดดึงอัตโนมัติ</button><button class="btn sm" type="button" id="bleCopy">คัดลอก log</button></div></div>
+        <div class="pbody"><div class="ble-log mono" id="bleLog" style="max-height:320px"></div></div>
+      </div>
+    </form>
+  </main>
+  <main id="setPage" hidden></main>
+  </div>
 </div>
+</div>
+<input type="file" id="file" accept=".csv,.txt,text/csv" multiple hidden>
 
 <dialog id="dlg">
   <form method="dialog" id="addForm">
@@ -225,35 +304,12 @@ table.thr th,table.thr td{padding:4px 8px}
     <div class="foot"><button class="btn" value="cancel" formnovalidate>ยกเลิก</button><button class="btn primary" value="ok">บันทึก</button></div>
   </form>
 </dialog>
-<dialog id="bleDlg">
-  <form method="dialog" id="bleForm">
-    <h3>ดึงข้อมูล trend จากเซนเซอร์ i-ALERT3</h3>
-    <div class="form">
-      <label class="full">ชื่อเครื่องจักรที่ติดเซนเซอร์ตัวนี้ (เว้นว่าง = ใช้ชื่อเซนเซอร์)<input type="text" name="asset" list="assetList" placeholder="เช่น P-101"></label>
-      <label class="full">รุ่นเซนเซอร์ (มีผลกับการแปลงค่า velocity/acceleration)
-        <select name="scale"><option value="816">i-ALERT3 มาตรฐาน</option><option value="1289">i-ALERT3 Digital Accelerometer</option></select></label>
-      <label class="full check"><input type="checkbox" name="auto"> ดึงซ้ำอัตโนมัติทุก
-        <select name="every"><option value="15">15</option><option value="30" selected>30</option><option value="60">60</option></select> นาที ขณะเปิดหน้านี้ไว้</label>
-      <label class="full check"><input type="checkbox" name="full"> ดึงข้อมูลทั้งหมดในเซนเซอร์ใหม่ (ไม่ใช่เฉพาะค่าใหม่)</label>
-      <label class="full check"><input type="checkbox" name="all"> แสดงอุปกรณ์ Bluetooth ทั้งหมด (ใช้เมื่อรายการ i-ALERT ว่าง)</label>
-      <p class="full muted" style="margin:0;font-size:12px">ใช้ได้ใน Google Chrome หรือ Microsoft Edge บนคอม มือถือ Android หรือแท็บเล็ต (เช่น MatePad) ที่เปิด Bluetooth ไว้ ปิดแอป i-ALERT บนมือถือก่อน เพราะเซนเซอร์รับการเชื่อมต่อได้ทีละเครื่อง ครั้งแรกจะดึงข้อมูลทั้งหมดที่เซนเซอร์เก็บไว้ ครั้งต่อไปดึงเฉพาะค่าใหม่</p>
-      <div class="full conn" id="bleState"><i></i><span>ยังไม่ได้เชื่อมต่อเซนเซอร์</span></div>
-      <div class="full ble-log mono" id="bleLog"></div>
-    </div>
-    <div class="foot">
-      <button class="btn" type="button" id="bleCopy" style="margin-right:auto">คัดลอก log</button>
-      <button class="btn" type="button" id="bleStop" hidden>หยุดดึงอัตโนมัติ</button>
-      <button class="btn" value="close" formnovalidate>ปิด</button>
-      <button class="btn primary" type="button" id="bleGo">เลือกเซนเซอร์และดึงข้อมูล</button>
-    </div>
-  </form>
-</dialog>
 <div id="toast"></div>
 
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='1.10.0',APP_BUILD='2026-10-16T15:08:16+07:00';
+const APP_VERSION='1.11.0',APP_BUILD='2026-10-16T15:22:17+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -456,25 +512,38 @@ function exportCSV(){
 }
 
 // ---- render ----
+// Pages in the left menu; each has its own <main>. The sensor page is static HTML (it holds the
+// connection log), the others are re-rendered
+const VIEWS={overview:['main','ภาพรวม'],fft:['fftPage','วิเคราะห์ FFT'],sensor:['sensorPage','เซนเซอร์ / เชื่อมต่อ'],settings:['setPage','ตั้งค่าและข้อมูล']};
+function applyTheme(){if(S.theme==='light'||S.theme==='dark')document.documentElement.dataset.theme=S.theme;else delete document.documentElement.dataset.theme}
 function render(){
-  $('#sUnit').value=S.unit;$('#sTUnit').value=S.tunit;
+  applyTheme();
   const ns=names();
   if(ns.length&&!ns.includes(S.sel))S.sel=ns[0];
-  const fft=S.view==='fft';
-  document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===(fft?'fft':'overview')));
-  $('#main').hidden=fft;$('#fftPage').hidden=!fft;
+  const v=VIEWS[S.view]?S.view:'overview';
+  document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  Object.entries(VIEWS).forEach(([k,[id]])=>$('#'+id).hidden=k!==v);
+  $('#mTitle').textContent=VIEWS[v][1];
   renderSide(ns);
-  if(fft){charts.forEach(c=>c.destroy());charts=[];renderFFTPage()}else renderMain(ns);
+  if(v!=='overview'){charts.forEach(c=>c.destroy());charts=[]}
+  if(v==='overview')renderMain(ns);
+  else if(v==='fft')renderFFTPage();
+  else if(v==='sensor')renderSensorPage();
+  else renderSettings(ns);
+  if(v!=='sensor')stopScan();
 }
-function setView(v){S.view=v;save();render();scrollTo(0,0)}
+function setView(v){S.view=v;save();document.body.classList.remove('nav-open');render();scrollTo(0,0)}
 function renderSide(ns){
   const side=$('#side');
-  if(!ns.length){side.innerHTML='<div class="ph"><h3>เครื่องจักร</h3></div><p class="muted" style="padding:6px 14px 10px;margin:0">ยังไม่มีข้อมูล</p>';return}
-  side.innerHTML='<div class="ph" style="padding:6px 8px 0"><h3>เครื่องจักร ('+ns.length+')</h3></div><div class="alist">'+ns.map(a=>{
+  if(!ns.length){side.innerHTML='<div class="nav-sec">เครื่องจักร</div><p class="muted" style="padding:4px 10px;margin:0;font-size:12.5px">ยังไม่มีข้อมูล</p>';return}
+  side.innerHTML='<div class="nav-sec">เครื่องจักร ('+ns.length+')</div><div class="alist">'+ns.map(a=>{
     const s=series(a),r=s[s.length-1],z=status(r,cfg(a));
     return `<button class="asset ${a===S.sel?'on':''}" data-a="${esc(a)}"><span class="dot z${z||''}"></span><span class="nm">${esc(a)}</span><span class="num">${fv(overall(r))}</span><span class="sub">${z?ZL[z]+' · ':''}${ago(r.t)}</span></button>`;
   }).join('')+'</div>';
-  side.querySelectorAll('.asset').forEach(b=>b.onclick=()=>{S.sel=b.dataset.a;save();render()});
+  side.querySelectorAll('.asset').forEach(b=>b.onclick=()=>{S.sel=b.dataset.a;
+    // picking a machine from the sensor page means "show me its data"
+    if(S.view==='sensor')S.view='overview';
+    save();document.body.classList.remove('nav-open');render()});
 }
 function kpi(l,v,u,s,cls=''){return `<div class="panel kpi ${cls}"><div class="l">${l}</div><div class="v num">${v}${u?`<small>${u}</small>`:''}</div><div class="s">${s||''}</div></div>`}
 
@@ -484,7 +553,7 @@ function renderMain(ns){
   if(!ns.length){
     m.innerHTML=`<div class="panel empty"><h2>เริ่มต้นด้วยการนำเข้าข้อมูล</h2>
       <p>ส่งออกข้อมูลเป็น CSV จากแอป i-ALERT แล้วลากไฟล์มาวางที่หน้านี้ หรือกด "นำเข้า CSV" ระบบจะจับคู่หัวคอลัมน์ให้อัตโนมัติ (รองรับ mm/s, in/s, °C, °F และปี พ.ศ.)</p>
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:18px"><button class="btn primary" onclick="$('#file').click()">นำเข้า CSV</button><button class="btn" onclick="demo()">ลองด้วยข้อมูลตัวอย่าง</button></div>
+      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:18px"><button class="btn primary" onclick="setView('sensor')">เชื่อมต่อเซนเซอร์</button><button class="btn" onclick="$('#file').click()">นำเข้า CSV</button><button class="btn" onclick="demo()">ลองด้วยข้อมูลตัวอย่าง</button></div>
       <pre>timestamp,asset,velocity x (mm/s),velocity y (mm/s),velocity z (mm/s),acc x (g),acc y (g),acc z (g),temperature (c),rpm
 2026-10-15 08:00,P-101,1.21,0.98,0.65,0.12,0.10,0.08,45.2,2960</pre>
       <p style="margin-top:12px;font-size:12px">ถ้าไฟล์ไม่มีคอลัมน์ asset จะใช้ชื่อไฟล์เป็นชื่อเครื่อง</p></div>`;
@@ -532,29 +601,87 @@ function renderMain(ns){
       <div class="panel"><div class="ph"><h3>การแจ้งเตือนในช่วงที่เลือก</h3></div>
         ${alarms.length?`<ul class="alarms">${alarms.slice(0,50).map(r=>{const s=status(r,c);return `<li><span>${dFull(r.t)}</span><span class="num">${fv(overall(r))} ${uv()} · ${ft(r.temp)}${ut()}</span><span class="tag z${s}">${ZL[s]}</span></li>`}).join('')}</ul>`:'<p class="muted" style="padding:6px 14px 4px;margin:0 0 10px">ไม่มีค่าที่เกินเกณฑ์</p>'}
       </div>
-      <div class="panel"><div class="ph"><h3>ตั้งค่าเกณฑ์ของเครื่องนี้</h3></div>
-        <div class="form">
-          <label class="full">ตัดสินสถานะด้วยเกณฑ์<select id="thrSrc">
-            <option value="sensor" ${c.thrSrc==='sensor'&&c.sensorThr?'selected':''} ${c.sensorThr?'':'disabled'}>ตามที่ตั้งไว้ในเซนเซอร์ (เหมือนแอป i-ALERT)${c.sensorThr?'':' - เชื่อมต่อเซนเซอร์ก่อน'}</option>
-            <option value="iso" ${useSensorThr(c)?'':'selected'}>ISO 10816-3 (ตั้งค่าด้านล่าง)</option></select></label>
-          <label class="full">ประเภทเครื่อง (ISO 10816-3)<select id="cCls">${Object.entries(CLASSES).map(([k,v])=>`<option value="${k}" ${c.cls===k?'selected':''}>${v.n}</option>`).join('')}</select>
-            <div class="zbar"><i style="background:var(--za)"></i><i style="background:var(--zb)"></i><i style="background:var(--zc)"></i><i style="background:var(--zd)"></i></div></label>
-          <label>A→B ปกติ (${uv()})<input type="number" step="any" id="z0" value="${+zs[0].toFixed(3)}"></label>
-          <label>B→C เฝ้าระวัง (${uv()})<input type="number" step="any" id="z1" value="${+zs[1].toFixed(3)}"></label>
-          <label>C→D อันตราย (${uv()})<input type="number" step="any" id="z2" value="${+zs[2].toFixed(3)}"></label>
-          <span></span>
-          <label>อุณหภูมิเตือน (${ut()})<input type="number" step="any" id="tw" value="${+ct(c.tw).toFixed(1)}"></label>
-          <label>อุณหภูมิอันตราย (${ut()})<input type="number" step="any" id="ta" value="${+ct(c.ta).toFixed(1)}"></label>
-          <div class="full" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
-            <button class="btn danger" id="bDel">ลบข้อมูลเครื่องนี้</button>
-            <button class="btn primary" id="bSave">บันทึกเกณฑ์</button>
-          </div>
-        </div>
-      </div>
+      <div class="panel"><div class="ph" style="padding-bottom:12px"><h3>เกณฑ์ที่ใช้: ${useSensorThr(c)?'ตามที่ตั้งไว้ในเซนเซอร์':'ISO 10816-3 · '+esc((CLASSES[c.cls]||CLASSES.custom).n)}</h3>
+        <button class="btn sm" onclick="setView('settings')">แก้ไขเกณฑ์ →</button></div></div>
     </div>
   </div>`;
 
   m.querySelectorAll('#range button').forEach(b=>b.onclick=()=>{S.range=+b.dataset.d;save();render()});
+  drawCharts(rs,c);
+  fillLive();
+  renderFFT();
+}
+
+// ---- settings page: display units/theme, per-machine thresholds, data, remembered sensors ----
+function renderSettings(ns){
+  const p=$('#setPage'),a=S.sel,has=!!(a&&ns.includes(a)),c=has?cfg(a):null;
+  const zs=c?c.z.map(cv):[];
+  const sens=Object.entries(S.sensors||{});
+  p.innerHTML=`<div class="mainhead"><h2>ตั้งค่าและข้อมูล</h2></div>
+  <div class="pgrid">
+    <div class="panel"><div class="ph"><h3>หน่วยและการแสดงผล</h3></div>
+      <div class="form">
+        <label>หน่วยความเร็ว (velocity)<select id="sUnit"><option value="mm">mm/s</option><option value="in">in/s</option></select></label>
+        <label>หน่วยอุณหภูมิ<select id="sTUnit"><option value="C">°C</option><option value="F">°F</option></select></label>
+        <label class="full">ธีม<select id="sTheme"><option value="">ตามเครื่อง</option><option value="light">สว่าง</option><option value="dark">มืด</option></select></label>
+      </div></div>
+    <div class="panel"><div class="ph"><h3>ข้อมูล</h3></div>
+      <div class="pbody">
+        <p class="muted" style="margin:0 0 10px;font-size:12.5px">เก็บในเบราว์เซอร์นี้ ${ns.length} เครื่อง · ${S.readings.length.toLocaleString('th-TH')} ค่า</p>
+        <div class="row">
+          <button class="btn primary" onclick="$('#file').click()">นำเข้า CSV</button>
+          <button class="btn" onclick="exportCSV()">ส่งออก CSV</button>
+          <button class="btn" onclick="openAdd()">+ เพิ่มค่าเอง</button>
+          <button class="btn" onclick="demo()">ข้อมูลตัวอย่าง</button>
+        </div>
+        <p class="muted" style="margin:10px 0 0;font-size:12px">ลากไฟล์ CSV จากแอป i-ALERT มาวางที่หน้าไหนก็ได้เพื่อนำเข้า</p>
+      </div></div>
+    ${has?`<div class="panel span"><div class="ph"><h3>เกณฑ์แจ้งเตือนของเครื่อง</h3>
+        <select id="setAsset">${ns.map(n=>`<option ${n===a?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
+      <div class="form">
+        <label class="full">ตัดสินสถานะด้วยเกณฑ์<select id="thrSrc">
+          <option value="sensor" ${c.thrSrc==='sensor'&&c.sensorThr?'selected':''} ${c.sensorThr?'':'disabled'}>ตามที่ตั้งไว้ในเซนเซอร์ (เหมือนแอป i-ALERT)${c.sensorThr?'':' - เชื่อมต่อเซนเซอร์ก่อน'}</option>
+          <option value="iso" ${useSensorThr(c)?'':'selected'}>ISO 10816-3 (ตั้งค่าด้านล่าง)</option></select></label>
+        <label class="full">ประเภทเครื่อง (ISO 10816-3)<select id="cCls">${Object.entries(CLASSES).map(([k,v])=>`<option value="${k}" ${c.cls===k?'selected':''}>${v.n}</option>`).join('')}</select>
+          <div class="zbar"><i style="background:var(--za)"></i><i style="background:var(--zb)"></i><i style="background:var(--zc)"></i><i style="background:var(--zd)"></i></div></label>
+        <label>A→B ปกติ (${uv()})<input type="number" step="any" id="z0" value="${+zs[0].toFixed(3)}"></label>
+        <label>B→C เฝ้าระวัง (${uv()})<input type="number" step="any" id="z1" value="${+zs[1].toFixed(3)}"></label>
+        <label>C→D อันตราย (${uv()})<input type="number" step="any" id="z2" value="${+zs[2].toFixed(3)}"></label>
+        <span></span>
+        <label>อุณหภูมิเตือน (${ut()})<input type="number" step="any" id="tw" value="${+ct(c.tw).toFixed(1)}"></label>
+        <label>อุณหภูมิอันตราย (${ut()})<input type="number" step="any" id="ta" value="${+ct(c.ta).toFixed(1)}"></label>
+        <p class="full muted" style="margin:0;font-size:12px">เกณฑ์เหล่านี้ใช้ในหน้าเว็บนี้เท่านั้น ไม่ได้เขียนลงเซนเซอร์</p>
+        <div class="full" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <button class="btn danger" id="bDel">ลบข้อมูลเครื่องนี้</button>
+          <button class="btn primary" id="bSave">บันทึกเกณฑ์</button>
+        </div>
+      </div></div>`:''}
+    <div class="panel span"><div class="ph"><h3>เซนเซอร์ที่จำไว้ (${sens.length})</h3></div>
+      <div class="pbody">${sens.length?`<ul class="klist">${sens.map(([id,s])=>`<li data-id="${esc(id)}">
+          <div class="form" style="padding:0;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)">
+            <label>ชื่อเครื่องจักร<input type="text" class="kAsset" value="${esc(s.asset||'')}" list="assetList"></label>
+            <label>รุ่น<select class="kScale"><option value="816" ${+s.scale!==1289?'selected':''}>มาตรฐาน</option><option value="1289" ${+s.scale===1289?'selected':''}>Digital Accel.</option></select></label></div>
+          <div class="row"><button class="btn sm kSave">บันทึก</button><button class="btn sm danger kDel">ลืม</button></div></li>`).join('')}</ul>
+        <p class="muted" style="margin:8px 0 0;font-size:12px">เปลี่ยนชื่อแล้ว ค่าที่ดึงครั้งต่อไปจะเก็บในชื่อใหม่ (ค่าเดิมยังอยู่ในชื่อเก่า) · "ลืม" ลบเฉพาะชื่อที่จำไว้ ไม่ลบข้อมูลที่วัดแล้ว</p>`
+        :'<p class="muted" style="margin:0">ยังไม่มี เชื่อมต่อเซนเซอร์ครั้งแรกที่เมนู "เซนเซอร์ / เชื่อมต่อ"</p>'}</div></div>
+  </div>`;
+
+  $('#sUnit').value=S.unit;$('#sTUnit').value=S.tunit;$('#sTheme').value=S.theme||'';
+  $('#sUnit').onchange=e=>{S.unit=e.target.value;save();render()};
+  $('#sTUnit').onchange=e=>{S.tunit=e.target.value;save();render()};
+  $('#sTheme').onchange=e=>{S.theme=e.target.value;save();render()};
+  p.querySelectorAll('.klist li').forEach(li=>{
+    const id=li.dataset.id,s=S.sensors[id];
+    li.querySelector('.kSave').onclick=()=>{
+      const nm=li.querySelector('.kAsset').value.trim();if(!nm)return toast('ใส่ชื่อเครื่องจักรก่อน');
+      s.asset=nm;s.scale=+li.querySelector('.kScale').value;
+      if(ble.device&&ble.device.id===id&&ble.cfg)Object.assign(ble.cfg,{asset:nm,scale:s.scale});
+      save();render();toast('บันทึกแล้ว');
+    };
+    li.querySelector('.kDel').onclick=()=>{if(!confirm(`ลืมเซนเซอร์ "${s.asset}"? (ข้อมูลที่วัดแล้วยังอยู่)`))return;delete S.sensors[id];save();render()};
+  });
+  if(!has)return;
+  $('#setAsset').onchange=e=>{S.sel=e.target.value;save();render()};
   $('#thrSrc').onchange=e=>{c.thrSrc=e.target.value;save();render();toast(e.target.value==='sensor'?'ใช้เกณฑ์จากเซนเซอร์':'ใช้เกณฑ์ ISO 10816-3')};
   $('#cCls').onchange=e=>{const p=CLASSES[e.target.value].z;if(p)['z0','z1','z2'].forEach((id,i)=>$('#'+id).value=+cv(p[i]).toFixed(3))};
   ['z0','z1','z2'].forEach(id=>$('#'+id).oninput=()=>$('#cCls').value='custom');
@@ -565,12 +692,8 @@ function renderMain(ns){
     Object.assign(c,{cls:$('#cCls').value,z:zz,tw:toC(parseFloat($('#tw').value)),ta:toC(parseFloat($('#ta').value))});
     save();render();toast('บันทึกเกณฑ์แล้ว');
   };
-  $('#bDel').onclick=()=>{if(!confirm(`ลบข้อมูลทั้งหมดของ "${a}" (${all.length} ค่า)? กู้คืนไม่ได้`))return;
+  $('#bDel').onclick=()=>{const n=series(a).length;if(!confirm(`ลบข้อมูลทั้งหมดของ "${a}" (${n} ค่า)? กู้คืนไม่ได้`))return;
     S.readings=S.readings.filter(r=>r.asset!==a);delete S.assets[a];S.sel=null;save();render()};
-
-  drawCharts(rs,c);
-  fillLive();
-  renderFFT();
 }
 
 function css(){const g=getComputedStyle(document.documentElement),v=n=>g.getPropertyValue(n).trim();
@@ -1306,7 +1429,7 @@ function bleStatusText(full){
 }
 function renderBleStatus(){
   const st=ble.state||{phase:'idle'},cls=(BS[st.phase]||BS.idle)[0];
-  [['bleChip',false],['bleState',true]].forEach(([id,full])=>{
+  [['bleChip',false],['mChip',false],['bleState',true]].forEach(([id,full])=>{
     const el=$('#'+id);if(!el)return;
     el.className='conn '+cls;el.querySelector('span').textContent=bleStatusText(full);
     el.title=bleStatusText(true);
@@ -1320,32 +1443,151 @@ function bleFinish(dev,err){
   updateBleButton();
 }
 function updateBleButton(){
-  $('#bBle').classList.toggle('live',!!ble.timer);
   const s=$('#bleStop');if(s)s.hidden=!ble.timer;
   renderBleStatus();
+  if(S.view==='sensor')renderScan();
 }
-function openBle(){
-  const msg=bleSupportMsg();if(msg)return toast(msg);
+function openBle(){setView('sensor')}
+function renderSensorPage(){
   $('#assetList').innerHTML=names().map(n=>`<option value="${esc(n)}">`).join('');
   const f=$('#bleForm');
-  if(ble.cfg){f.asset.value=ble.cfg.asset;f.scale.value=String(ble.cfg.scale)}
+  if(ble.cfg)f.scale.value=String(ble.cfg.scale);
   f.auto.checked=!!ble.timer;
-  $('#bleDlg').showModal();
+  const msg=bleSupportMsg();
+  $('#bScan').disabled=$('#bleGo').disabled=!!msg;
+  if(msg){$('#scanNote').textContent=msg;$('#scanList').innerHTML='';$('#scanHelp').innerHTML='';return}
+  loadKnownSensors().then(()=>{renderScan();if(!scan.on)watchKnown()});
+  renderScan();
 }
-$('#bleGo').onclick=async()=>{
+
+// ---- sensor scan: nearby i-ALERT sensors sorted by signal strength (RSSI), click to connect ----
+// Chrome gives RSSI through two APIs that may still sit behind chrome://flags:
+//  * requestLEScan (experimental web platform features): sees every advertising sensor
+//  * getDevices + watchAdvertisements (new permissions backend): sensors this site was allowed before,
+//    which can then be connected with no chooser at all
+// Without them, sensors picked in this tab are still remembered until the page reloads.
+// Scanning only listens to advertisements; it never connects or writes to a sensor.
+const scan={rows:new Map(),known:new Map(),on:false,le:null,ac:null,stopT:null,seenEv:new WeakSet(),drawT:null};
+const scanCaps=()=>{const b=navigator.bluetooth;return{le:!!(b&&b.requestLEScan),gd:!!(b&&b.getDevices),
+  wa:!!(window.BluetoothDevice&&BluetoothDevice.prototype.watchAdvertisements)}};
+const FEA3=IA3.svc;
+const isIA3Adv=e=>(e.uuids||[]).some(u=>String(u).toLowerCase()===FEA3)||!!(e.serviceData&&e.serviceData.has(FEA3))
+  ||/i-?alert|^ia3/i.test(e.name||e.device.name||'');
+function scanRow(id){let r=scan.rows.get(id);if(!r){r={id,rssi:null,seen:0};scan.rows.set(id,r)}return r}
+function rememberDevice(dev){
+  scan.known.set(dev.id,dev);
+  const r=scanRow(dev.id);r.name=r.name||dev.name;r.known=true;
+}
+async function loadKnownSensors(){
+  if(!scanCaps().gd)return;
+  try{(await navigator.bluetooth.getDevices()).forEach(rememberDevice)}catch(e){}
+}
+function onAdv(e){
+  if(scan.seenEv.has(e))return;scan.seenEv.add(e); // the same event can reach both listeners
+  const all=$('#bleForm').all.checked;
+  if(!all&&!scan.known.has(e.device.id)&&!isIA3Adv(e))return;
+  const r=scanRow(e.device.id);
+  r.name=e.name||e.device.name||r.name;r.adv=e.device;
+  // light smoothing: single advertisements jump by ±10 dB
+  if(e.rssi!=null)r.rssi=r.rssi==null||Date.now()-r.seen>8000?e.rssi:Math.round(r.rssi*.6+e.rssi*.4);
+  r.seen=Date.now();
+  clearTimeout(scan.drawT);scan.drawT=setTimeout(renderScan,250);
+}
+navigator.bluetooth&&navigator.bluetooth.addEventListener('advertisementreceived',onAdv);
+// Remembered sensors: listen for their advertisements (no permission prompt, no connection)
+function watchKnown(){
+  const c=scanCaps();if(!c.wa||!scan.known.size)return false;
+  if(scan.ac)scan.ac.abort();scan.ac=new AbortController();
+  for(const dev of scan.known.values()){
+    if(!dev._advL){dev._advL=true;dev.addEventListener('advertisementreceived',onAdv)}
+    dev.watchAdvertisements({signal:scan.ac.signal}).catch(()=>{});
+  }
+  return true;
+}
+async function startScan(){
+  const c=scanCaps();
+  if(ble.busy)return toast('กำลังดึงข้อมูลอยู่ รอให้เสร็จก่อน');
+  stopScan();
+  if(!c.le&&!(c.gd&&c.wa)){ // nothing can report RSSI here: fall back to Chrome's own chooser
+    renderScan();return pickAndUse();
+  }
+  for(const r of scan.rows.values()){r.rssi=null;r.seen=0}
+  scan.on=true;renderScan();
+  if(c.le){
+    try{
+      scan.le=await navigator.bluetooth.requestLEScan({acceptAllAdvertisements:true,keepRepeatedDevices:true});
+      bleLog('เริ่มสแกนหาเซนเซอร์ใกล้เคียง (ฟังสัญญาณอย่างเดียว ไม่เชื่อมต่อ)');
+    }catch(e){bleLog('สแกนไม่ได้: '+e.name+' '+e.message);if(!watchKnown()){scan.on=false;renderScan();return}}
+  }
+  await loadKnownSensors();watchKnown();
+  scan.stopT=setTimeout(()=>{stopScan();bleLog('หยุดสแกนแล้ว (ครบ 30 วินาที)')},30000);
+}
+function stopScan(){
+  clearTimeout(scan.stopT);
+  if(scan.le){try{scan.le.stop()}catch(e){}scan.le=null}
+  if(scan.ac){scan.ac.abort();scan.ac=null}
+  if(scan.on){scan.on=false;renderScan()}
+}
+function sigBars(rssi){
+  if(rssi==null)return '<span class="sig"><span class="bars"><i></i><i></i><i></i><i></i></span><small>–</small></span>';
+  const b=rssi>=-60?4:rssi>=-70?3:rssi>=-82?2:1;
+  return `<span class="sig" title="ความแรงสัญญาณ ${rssi} dBm"><span class="bars b${b}"><i></i><i></i><i></i><i></i></span><small>${rssi}</small></span>`;
+}
+function renderScan(){
+  const list=$('#scanList');if(!list)return;
+  const c=scanCaps(),now=Date.now();
+  const rows=[...scan.rows.values()].filter(r=>r.known||r.seen)
+    .sort((a,b)=>(b.rssi??-999)-(a.rssi??-999)||String(a.name||'').localeCompare(String(b.name||'')));
+  const cur=ble.device&&ble.device.id;
+  list.innerHTML=rows.map((r,i)=>{
+    const sv=S.sensors[r.id],conn=cur===r.id;
+    const stale=scan.on&&r.seen&&now-r.seen>10000;
+    const sub=[sv?'เครื่อง: '+esc(sv.asset):'ยังไม่เคยเชื่อมต่อ',
+      conn?esc((BS[ble.state.phase]||BS.idle)[1]):'',
+      !r.seen&&r.known?'ยังไม่ได้ยินสัญญาณ':'' ].filter(Boolean).join(' · ');
+    const action=ble.busy&&conn?'กำลังทำงาน…':conn&&ble.state.phase!=='error'?'ดึงข้อมูลอีกครั้ง':scan.known.has(r.id)?'เชื่อมต่อ':'เลือกแล้วเชื่อมต่อ';
+    return `<button type="button" class="srow ${i===0&&r.rssi!=null?'top1':''} ${stale?'stale':''}" data-id="${esc(r.id)}" ${ble.busy?'disabled':''}>
+      ${sigBars(r.rssi)}<span style="min-width:0"><div class="nm">${esc(r.name||'(ไม่มีชื่อ)')}</div><div class="sub">${sub}</div></span><span class="go">${action}</span></button>`;
+  }).join('')||`<p class="muted" style="margin:4px 0">${scan.on?'กำลังฟังสัญญาณ… ถ้าไม่เจอ ให้ปิดแอป i-ALERT บนมือถือ และเข้าใกล้เซนเซอร์':'ยังไม่มีรายการ กด "สแกนหาเซนเซอร์"'}</p>`;
+  list.querySelectorAll('.srow').forEach(b=>b.onclick=()=>connectRow(b.dataset.id));
+  $('#bScan').textContent=scan.on?'หยุดสแกน':'สแกนหาเซนเซอร์';
+  $('#bScan').onclick=scan.on?()=>{stopScan();bleLog('หยุดสแกนแล้ว')}:startScan;
+  $('#scanNote').textContent=scan.on?'กำลังสแกน 30 วินาที · เรียงตามความแรงสัญญาณ (dBm ยิ่งใกล้ 0 ยิ่งแรง) · กดที่เซนเซอร์เพื่อเชื่อมต่อและดึงข้อมูล'
+    :rows.length?'กดที่เซนเซอร์เพื่อเชื่อมต่อและดึงข้อมูล':'';
+  // explain what this browser can and cannot do, once
+  $('#scanHelp').innerHTML=c.le&&c.gd&&c.wa?'':`<div class="scan-help"><b>${c.le||c.gd?'เปิดความสามารถเพิ่มได้อีก':'เบราว์เซอร์นี้ยังสแกนแบบเห็นความแรงสัญญาณไม่ได้'}</b> — ตอนนี้ปุ่มสแกนจะเปิดหน้าต่างเลือกของ Chrome แทน${c.gd?'':' และต้องเลือกเซนเซอร์ใหม่ทุกครั้งที่เปิดหน้าเว็บ'}. เปิดได้ใน Chrome:
+    <ol><li>เปิดแท็บใหม่ พิมพ์ <code>chrome://flags</code></li>
+    ${c.le?'':'<li>ค้นหา <code>Experimental Web Platform features</code> → Enabled (สแกนเห็นเซนเซอร์ทุกตัวพร้อมความแรงสัญญาณ)</li>'}
+    ${c.gd&&c.wa?'':'<li>ค้นหา <code>Use the new permissions backend for Web Bluetooth</code> → Enabled (จำเซนเซอร์ไว้ กดแล้วเชื่อมต่อได้ทันทีไม่ต้องเลือกใหม่)</li>'}
+    <li>กด Relaunch แล้วกลับมาที่หน้านี้</li></ol></div>`;
+}
+async function connectRow(id){
+  if(ble.busy)return;
+  stopScan();
+  const dev=scan.known.get(id);
+  if(dev){ // allowed before: connect straight away
+    if(ble.device===dev&&S.sensors[id])return bleFetch();
+    return useDevice(dev);
+  }
+  // seen only by the scan: Chrome still needs the user to allow this sensor once
+  const r=scan.rows.get(id);
+  pickAndUse(r&&r.name);
+}
+async function pickAndUse(name){
   const f=$('#bleForm');
   let dev;
   const before=ble.state;
   setBle('picking');
-  bleLog('กำลังเปิดหน้าต่างเลือกอุปกรณ์ Bluetooth …');
-  const slow=setTimeout(()=>bleLog('ถ้าหน้าต่างเลือกอุปกรณ์ขึ้นแต่ไม่เจอเซนเซอร์: รอสแกน 30–60 วินาที ถ้ายังไม่เจอ ให้ปิด/เปิด Bluetooth ของคอมแล้วลองใหม่ (ถ้าไม่มีหน้าต่างขึ้นเลย ให้ใช้ Chrome/Edge)'),8000);
+  bleLog(name?`เปิดหน้าต่างของ Chrome เพื่ออนุญาตเซนเซอร์ "${name}" (ครั้งแรกครั้งเดียว) …`:'กำลังเปิดหน้าต่างเลือกอุปกรณ์ Bluetooth …');
+  const slow=setTimeout(()=>bleLog('ถ้าหน้าต่างเลือกอุปกรณ์ขึ้นแต่ไม่เจอเซนเซอร์: รอสแกน 30–60 วินาที ถ้ายังไม่เจอ ให้ปิด/เปิด Bluetooth ของเครื่องแล้วลองใหม่ (ถ้าไม่มีหน้าต่างขึ้นเลย ให้ใช้ Chrome/Edge)'),8000);
   // i-ALERT sensors advertise 16-bit service 0xFEA3 (the official app scans for it)
-  const opts=f.all.checked?{acceptAllDevices:true,optionalServices:[IA3.svc]}
+  const opts=name?{filters:[{name}],optionalServices:[IA3.svc]}
+    :f.all.checked?{acceptAllDevices:true,optionalServices:[IA3.svc]}
     :{filters:[{services:[IA3.adv]},{serviceData:[{service:IA3.adv}]}],optionalServices:[IA3.svc]};
   try{
     try{dev=await navigator.bluetooth.requestDevice(opts)}
     catch(e){ // older Chrome rejects the serviceData filter
-      if(e.name!=='TypeError'||f.all.checked)throw e;
+      if(e.name!=='TypeError'||f.all.checked||name)throw e;
       dev=await navigator.bluetooth.requestDevice({filters:[{services:[IA3.adv]}],optionalServices:[IA3.svc]});
     }
   }catch(e){
@@ -1357,6 +1599,11 @@ $('#bleGo').onclick=async()=>{
     return;
   }finally{clearTimeout(slow)}
   bleLog('เลือกแล้ว: '+(dev.name||dev.id));
+  return useDevice(dev);
+}
+async function useDevice(dev){
+  const f=$('#bleForm');
+  rememberDevice(dev);
   if(!dev._ia3Watch){
     dev._ia3Watch=true;
     dev.addEventListener('gattserverdisconnected',()=>{
@@ -1368,23 +1615,35 @@ $('#bleGo').onclick=async()=>{
       if(ble.abort)ble.abort('เซนเซอร์ตัดการเชื่อมต่อระหว่างส่งข้อมูล ลองดึงใหม่อีกครั้ง (ครั้งต่อไปจะดึงต่อจากค่าล่าสุดที่ได้)');
     });
   }
+  // switching sensors: close the previous one's live link first (one sensor at a time)
+  if(ble.device&&ble.device!==dev){
+    if(ble.liveTimer)toggleLive();
+    try{if(ble.device.gatt.connected)ble.device.gatt.disconnect()}catch(e){}
+    ble.ch=null;
+  }
   const saved=S.sensors[dev.id]||{};
-  const asset=f.asset.value.trim()||saved.asset||dev.name||'i-ALERT3';
+  const typed=f.asset.value.trim();
+  const asset=typed||saved.asset||dev.name||'i-ALERT3';
   const scale=+f.scale.value||saved.scale||816;
   S.sensors[dev.id]={asset,scale};save();
+  f.asset.value=''; // the typed name belongs to this sensor only
   ble.device=dev;ble.cfg={asset,scale};
   clearInterval(ble.timer);ble.timer=null;
   if(f.auto.checked){
     ble.autoMs=+f.every.value*60000;ble.autoStart=Date.now();
     ble.timer=setInterval(bleFetch,ble.autoMs);bleLog(`ตั้งดึงอัตโนมัติทุก ${f.every.value} นาที`);
   }
+  renderScan();
   await bleFetch();
-};
+}
+$('#bleGo').onclick=()=>{stopScan();pickAndUse()};
 $('#bleStop').onclick=()=>{clearInterval(ble.timer);ble.timer=null;ble.autoMs=null;updateBleButton();bleLog('หยุดดึงอัตโนมัติแล้ว')};
 
 // ---- wiring ----
-$('#bBle').onclick=openBle;
 document.querySelectorAll('#views button').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+$('#bMenu').onclick=()=>document.body.classList.add('nav-open');
+$('#scrim').onclick=()=>document.body.classList.remove('nav-open');
+$('#mChip').onclick=openBle;
 // Copy the connection log (newest first, as shown) with version/status context for troubleshooting
 $('#bleCopy').onclick=async()=>{
   const lines=[...$('#bleLog').children].map(d=>d.textContent);
@@ -1398,13 +1657,7 @@ $('#bleCopy').onclick=async()=>{
   }
 };
 $('#bleChip').onclick=openBle;
-$('#bImport').onclick=()=>$('#file').click();
 $('#file').onchange=e=>{if(e.target.files.length)importFiles([...e.target.files]);e.target.value=''};
-$('#bDemo').onclick=demo;
-$('#bExport').onclick=exportCSV;
-$('#bAdd').onclick=openAdd;
-$('#sUnit').onchange=e=>{S.unit=e.target.value;save();render()};
-$('#sTUnit').onchange=e=>{S.tunit=e.target.value;save();render()};
 ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();document.body.classList.add('drop')}));
 ['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==='drop'||!e.relatedTarget)document.body.classList.remove('drop')}));
 document.addEventListener('drop',e=>{const fs=[...e.dataTransfer.files];if(fs.length)importFiles(fs)});
