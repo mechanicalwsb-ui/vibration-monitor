@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="ia3-fft.js"></script>
+<script src="fft-analysis.js"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -40,9 +41,12 @@ body{background:var(--bg);color:var(--ink);font:14px/1.5 "IBM Plex Sans Thai",sy
 button,select,input{font:inherit;color:inherit}
 .top{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
 .top-in{max-width:1400px;margin:auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-.brand{display:flex;flex-direction:column;margin-right:auto;min-width:0}
+.brand{display:flex;flex-direction:column;min-width:0}
 .brand b{font-size:16px;font-weight:600}
 .brand span{font-size:12px;color:var(--muted)}
+.views{margin-right:auto}
+.views button{padding:6px 14px}
+@media (max-width:600px){.views{order:3;margin-right:0;width:100%;display:flex}.views button{flex:1}}
 .brand .ver{display:inline-block;margin-left:8px;padding:1px 8px;border:1px solid var(--line);border-radius:999px;font-size:11.5px;font-weight:500;color:var(--muted);vertical-align:2px}
 .actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;cursor:pointer;white-space:nowrap}
@@ -163,12 +167,25 @@ table.thr th,table.thr td{padding:4px 8px}
 .diag ul{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:8px}
 .diag li .muted{font-size:12px;margin-top:2px}
 .diag-note{font-size:12px;margin:10px 0 0}
+.btn.sm{padding:2px 8px;font-size:12px}
+.fa-ctl{display:flex;flex-wrap:wrap;gap:10px 16px;padding:12px 14px;margin-bottom:12px;align-items:flex-end}
+.fa-ctl label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.fa-ctl label.check{flex-direction:row;align-items:center;gap:6px;color:var(--ink);flex-wrap:wrap}
+.fa-marks{align-items:center}
+.fa-range span,.fa-rpm{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.fa-range input,.fa-rpm input{width:90px}
+.fa-main{height:420px}
+.fa-note{font-size:12px;margin:0;padding:0 14px 12px}
+.fa-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px;margin-top:12px}
+.fa-diag .diag{border-top:0;margin-top:0}
+@media (max-width:600px){.fa-main{height:300px}}
 </style>
 </head>
 <body>
 <header class="top">
   <div class="top-in">
     <div class="brand"><b>Vibration Monitor <span class="ver" id="appVer"></span></b><span>แดชบอร์ดสำหรับข้อมูลเซนเซอร์ i-ALERT3</span></div>
+    <nav class="seg views" id="views" aria-label="เมนู"><button data-v="overview">ภาพรวม</button><button data-v="fft">วิเคราะห์ FFT</button></nav>
     <div class="actions">
       <button class="btn primary" id="bImport">นำเข้า CSV</button>
       <button type="button" class="conn" id="bleChip" title="สถานะการเชื่อมต่อเซนเซอร์"><i></i><span>ยังไม่ได้เชื่อมต่อเซนเซอร์</span></button>
@@ -186,6 +203,7 @@ table.thr th,table.thr td{padding:4px 8px}
 <div class="layout">
   <aside class="panel" id="side"></aside>
   <main id="main"></main>
+  <main id="fftPage" hidden></main>
 </div>
 
 <dialog id="dlg">
@@ -235,7 +253,7 @@ table.thr th,table.thr td{padding:4px 8px}
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='1.9.0',APP_BUILD='2026-10-16T15:02:00+07:00';
+const APP_VERSION='1.10.0',APP_BUILD='2026-10-16T15:08:16+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -442,8 +460,13 @@ function render(){
   $('#sUnit').value=S.unit;$('#sTUnit').value=S.tunit;
   const ns=names();
   if(ns.length&&!ns.includes(S.sel))S.sel=ns[0];
-  renderSide(ns);renderMain(ns);
+  const fft=S.view==='fft';
+  document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===(fft?'fft':'overview')));
+  $('#main').hidden=fft;$('#fftPage').hidden=!fft;
+  renderSide(ns);
+  if(fft){charts.forEach(c=>c.destroy());charts=[];renderFFTPage()}else renderMain(ns);
 }
+function setView(v){S.view=v;save();render();scrollTo(0,0)}
 function renderSide(ns){
   const side=$('#side');
   if(!ns.length){side.innerHTML='<div class="ph"><h3>เครื่องจักร</h3></div><p class="muted" style="padding:6px 14px 10px;margin:0">ยังไม่มีข้อมูล</p>';return}
@@ -1053,6 +1076,7 @@ async function renderFFT(){
         <select id="fftRec">${list.map((r,i)=>`<option value="${esc(r.key)}" ${r.key===rec.key?'selected':''}>${KIND_LABEL[r.kind||'alarm']} · ${dFull(r.ts*1000)}${i===0?' (ล่าสุด)':''}</option>`).join('')}</select>
         ${dec.single?'':`<select id="fftBand"><option value="combined" ${band==='combined'?'selected':''}>ช่วงความถี่: รวม</option><option value="low" ${band==='low'?'selected':''}>ความถี่ต่ำ (ละเอียด)</option>${hasHigh?`<option value="high" ${band==='high'?'selected':''}>ความถี่สูง</option>`:''}</select>`}
         <div class="seg" id="fftQty"><button data-q="vel" class="${FUI.qty==='vel'?'on':''}">Velocity</button><button data-q="acc" class="${FUI.qty==='acc'?'on':''}">Acceleration</button></div>
+        <button class="btn primary sm" onclick="FA.keyA=FUI.key;setView('fft')">เปิดในเมนูวิเคราะห์ FFT →</button>
       </div></div>
     <div class="fft-grid">
       <div><div class="sub-h">สเปกตรัม (${FUI.qty==='acc'?'g':uv()}) ${dec.single?'':'· ต่ำ '+bandInfo(dec.low)+(hasHigh?' · สูง '+bandInfo(dec.high):'')}</div><div class="cbox fft-box"><canvas id="cFft"></canvas></div></div>
@@ -1360,6 +1384,7 @@ $('#bleStop').onclick=()=>{clearInterval(ble.timer);ble.timer=null;ble.autoMs=nu
 
 // ---- wiring ----
 $('#bBle').onclick=openBle;
+document.querySelectorAll('#views button').forEach(b=>b.onclick=()=>setView(b.dataset.v));
 // Copy the connection log (newest first, as shown) with version/status context for troubleshooting
 $('#bleCopy').onclick=async()=>{
   const lines=[...$('#bleLog').children].map(d=>d.textContent);
