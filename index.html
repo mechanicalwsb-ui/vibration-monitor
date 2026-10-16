@@ -818,6 +818,17 @@ const FFTDB={
   async remove(asset){const all=await this.list(asset),db=await this.open();return new Promise((res,rej)=>{
     const t=db.transaction('rec','readwrite');all.forEach(r=>t.objectStore('rec').delete(r.key));t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}
 };
+// opcode 2: the sensor keeps only its most recent manual FFT; read-only request
+async function downloadManualFFT(ch,keep){
+  bleLog('ขอ FFT manual ล่าสุดที่เก็บไว้ในเซนเซอร์');
+  const buf=await bulkRequest(ch,0,2);
+  if(buf.length<=HDR+FFT_TS_OFF)throw new Error('เซนเซอร์ยังไม่มี FFT manual (ต้องสั่งวัด FFT ก่อน)');
+  const bytes=buf.slice(HDR),ts=new DataView(bytes.buffer).getUint32(FFT_TS_OFF,true);
+  if(!validTs(ts))throw new Error('ข้อมูล FFT manual มีเวลาไม่ถูกต้อง');
+  const added=await keep('manual',bytes,ts);
+  bleLog(`ได้ FFT manual: วัดเมื่อ ${dFull(ts*1000)}`);
+  return{ts,added};
+}
 // mode 'alarmLast' | 'alarmAll' | 'manual'. Alarm captures use the app's loop: ask from the newest
 // stored record's timestamp, one record per request, until the sensor reports none left.
 // FFT_LAST asks for only the most recent alarm capture; 'manual' (opcode 2) returns the last manual FFT.
@@ -836,13 +847,7 @@ async function bleFetchFFT(mode){
     };
     let added=0;
     if(mode==='manual'){
-      bleLog('ขอ FFT manual ล่าสุดที่เก็บไว้ในเซนเซอร์');
-      const buf=await bulkRequest(ch,0,2);
-      if(buf.length<=HDR+FFT_TS_OFF)throw new Error('เซนเซอร์ยังไม่มี FFT manual (ต้องกดวัด FFT ในแอป i-ALERT ก่อน)');
-      const bytes=buf.slice(HDR),ts=new DataView(bytes.buffer).getUint32(FFT_TS_OFF,true);
-      if(!validTs(ts))throw new Error('ข้อมูล FFT manual มีเวลาไม่ถูกต้อง');
-      if(await keep('manual',bytes,ts))added++;
-      bleLog(`ได้ FFT manual: วัดเมื่อ ${dFull(ts*1000)}`);
+      const r=await downloadManualFFT(ch,keep);if(r.added)added++;
     }else{
       const latestOnly=mode==='alarmLast',alarms=have.filter(h=>(h.kind||'alarm')==='alarm');
       let from=latestOnly?FFT_LAST:(alarms.length?alarms[0].ts:0);
@@ -861,6 +866,99 @@ async function bleFetchFFT(mode){
     toast(added?`ได้ข้อมูล FFT ${added} ชุด`:'ไม่มีข้อมูล FFT ใหม่');
     await renderFFT();
   }catch(e){err=e;bleLog('ดึง FFT ไม่สำเร็จ: '+e.message);toast('ดึง FFT ไม่สำเร็จ: '+e.message)}
+  finally{
+    ble.busy=false;
+    if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
+    bleFinish(dev,err);fillLive();
+  }
+}
+
+// ---- "Measure FFT now": the ONE configuration write this page can make ----
+// Mirrors the app's Measure FFT button (ITTiAlert3SystemStructureWriteCommand with
+// setDoManualVibrationFFTTWF): write the 220-byte system structure with command-queue bit 3 set,
+// wait until the sensor clears its pending bits, then download the result with opcode 2.
+// Stricter than the app on purpose, so a mistake cannot reach the sensor's settings:
+// - the read queue must be exactly 0 and we write exactly 0x00000008 (the app ORs into whatever was
+//   read, which would re-send any latched command, e.g. bit 10 factory reset, 15 system reset, 21 bootloader)
+// - every other byte is the sensor's own value, except the parameter timestamp @64 that the app always sets;
+//   thresholds and the baseline bit are NOT round-tripped like the app does
+// - only vibration i-ALERT3 (device type 8/9), firmware rev >= 10, baseline already set
+// - configuration bytes are compared before/after; nothing else is ever written
+const SYS_LEN=220,Q_MANUAL_FFT=1<<3,BUSY_BITS=0x7F,MEASURE_GAP_MS=120000,MEASURE_WAIT_MS=90000;
+const CONFIG_RANGES=[[10,60],[102,112],[114,115],[117,120],[212,218]]; // intervals, thresholds, bands, packet size, settings, tag, FFT options, mode/type/rev, MAC
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const hex2=v=>v.toString(16).padStart(2,'0');
+function sysBytes(v){return new Uint8Array(v.buffer,v.byteOffset,v.byteLength).slice()}
+function diffBytes(a,b,ranges){
+  const d=[],chk=i=>{if(a[i]!==b[i])d.push(i)};
+  if(ranges)ranges.forEach(([s,e])=>{for(let i=s;i<e;i++)chk(i)});else for(let i=0;i<a.length;i++)chk(i);
+  return d;
+}
+// Reasons not to write; empty = safe to send
+function measurePreflight(read){
+  if(read.length!==SYS_LEN)return['อ่านค่าตั้งค่าได้ไม่ครบ ('+read.length+' ไบต์)'];
+  const dv=new DataView(read.buffer),q=dv.getUint32(0,true),st=dv.getUint16(4,true),dt=read[118],rev=read[119],why=[];
+  if(dt!==8&&dt!==9)why.push('ไม่ใช่ i-ALERT3 แบบวัดการสั่น (device type '+dt+')');
+  if(rev<10)why.push('firmware rev '+rev+' ยังไม่รองรับ');
+  if(q!==0)why.push('เซนเซอร์มีคำสั่งค้างหรือกำลังทำงาน (queue 0x'+q.toString(16).padStart(8,'0')+') รอสักครู่แล้วลองใหม่');
+  if(!(st&0x20))why.push('เซนเซอร์ยังตั้ง baseline ไม่เสร็จ');
+  return why;
+}
+function buildMeasureWrite(read,nowSec){
+  const out=read.slice(),dv=new DataView(out.buffer);
+  dv.setUint32(0,Q_MANUAL_FFT,true); // queue verified 0 -> only "measure manual FFT/TWF"
+  dv.setUint32(64,nowSec>>>0,true);  // lastParamTimestamp, as the app writes on every system-structure write
+  return out;
+}
+async function bleMeasureFFT(){
+  if(ble.busy||!ble.device)return;
+  const since=Date.now()-(S.lastMeasure||0);
+  if(since<MEASURE_GAP_MS)return toast(`สั่งวัดได้อีกครั้งใน ${Math.ceil((MEASURE_GAP_MS-since)/1000)} วินาที (ถนอมแบตเซนเซอร์)`);
+  if(!confirm('สั่งให้เซนเซอร์วัด FFT ใหม่ตอนนี้?\n\nหน้าเว็บจะเขียนคำสั่ง "วัด FFT" ลงเซนเซอร์แบบเดียวกับปุ่มในแอป i-ALERT\n• เปลี่ยนแค่ช่องคำสั่ง และเวลาที่สั่ง\n• ค่าตั้งค่าอื่น (เกณฑ์ alarm ฯลฯ) คงเดิมทุกไบต์ และจะตรวจซ้ำหลังวัด\n• ใช้เวลาประมาณ 10–30 วินาที แล้วดาวน์โหลดผลให้อัตโนมัติ\n\nกด OK เพื่อสั่งวัด'))return;
+  ble.busy=true;updateBleButton();fillLive();
+  const dev=ble.device,asset=ble.cfg.asset;let err=null;
+  try{
+    const ch=await bleConnect(dev);
+    if(!ch.sys||!(ch.sys.properties.write||ch.sys.properties.writeWithoutResponse))throw new Error('ช่องค่าตั้งค่าของเซนเซอร์เขียนไม่ได้');
+    const read=sysBytes(await ch.sys.readValue());
+    const why=measurePreflight(read);
+    if(why.length)throw new Error('ไม่ได้สั่งวัด: '+why.join(' · '));
+    const s=parseSys(new DataView(read.buffer),ble.cfg.scale);applySys(s);
+    const out=buildMeasureWrite(read,Math.floor(Date.now()/1000));
+    const changed=diffBytes(read,out);
+    if(changed.some(i=>!(i<=3||(i>=64&&i<=67))))throw new Error('ตรวจพบไบต์ที่ไม่ควรเปลี่ยน ยกเลิกการเขียน'); // defensive, cannot happen
+    bleLog('เขียนลงเซนเซอร์: '+changed.map(i=>`ไบต์ ${i} ${hex2(read[i])}→${hex2(out[i])}`).join(', ')+' (ไบต์อื่นคงเดิม)');
+    setBle('transfer','ส่งคำสั่งวัด FFT');
+    S.lastMeasure=Date.now();save();
+    if(ch.sys.properties.write)await ch.sys.writeValueWithResponse(out);else await ch.sys.writeValueWithoutResponse(out);
+    bleLog('ส่งคำสั่งวัด FFT แล้ว กำลังรอเซนเซอร์วัด…');
+    // Only reads from here on: poll the system structure until no measurement bits are pending
+    const t0=Date.now();let after=null;
+    while(Date.now()-t0<MEASURE_WAIT_MS){
+      await sleep(2000);
+      if(!dev.gatt.connected)throw new Error('การเชื่อมต่อหลุดระหว่างวัด เซนเซอร์จะวัดต่อเองจนเสร็จ รอสักครู่แล้วกด "ดึง FFT manual ล่าสุด"');
+      const b=sysBytes(await ch.sys.readValue());
+      setBle('transfer',`เซนเซอร์กำลังวัด FFT (${Math.round((Date.now()-t0)/1000)} วินาที)`);
+      if(new DataView(b.buffer).getUint32(0,true)&BUSY_BITS)continue;
+      after=b;break;
+    }
+    if(!after)throw new Error('เซนเซอร์ยังวัดไม่เสร็จใน 90 วินาที หยุดรอแล้วโดยไม่ส่งคำสั่งอื่น ลองกด "ดึง FFT manual ล่าสุด" ภายหลัง');
+    const cfgDiff=diffBytes(read,after,CONFIG_RANGES);
+    if(cfgDiff.length){
+      const msg='⚠ ค่าตั้งค่าในเซนเซอร์ต่างจากก่อนสั่งวัด ที่ไบต์ '+cfgDiff.map(i=>`${i} (${hex2(read[i])}→${hex2(after[i])})`).join(', ');
+      bleLog(msg);alert(msg+'\n\nกรุณาตรวจค่าเกณฑ์และการตั้งค่าในแอป i-ALERT และแจ้งผู้ดูแลหน้าเว็บนี้');
+    }else bleLog('ตรวจซ้ำแล้ว: ค่าตั้งค่า (เกณฑ์ alarm, ช่วงเวลาวัด, settings, FFT options, tag, MAC) ไม่เปลี่ยน ✓');
+    if(new DataView(after.buffer).getUint16(8,true)&Q_MANUAL_FFT)bleLog('เซนเซอร์แจ้งว่าวัด FFT manual เสร็จ');
+    applySys(parseSys(new DataView(after.buffer),ble.cfg.scale));
+    // Download the new capture (read-only opcode 2)
+    const have=await FFTDB.list(asset),prev=(have.find(h=>h.kind==='manual')||{}).ts||0,sNow=ble.live&&ble.live.sys;
+    const keep=async(kind,bytes,ts)=>{const key=asset+'|m|'+ts;if(have.some(h=>h.key===key))return false;
+      await FFTDB.put({key,asset,ts,kind,rev:sNow?sNow.rev:null,devType:sNow?sNow.devType:null,bytes});FUI.key=key;return true};
+    const r=await downloadManualFFT(ch,keep);
+    if(r.ts<=prev)bleLog('⚠ ได้ FFT ชุดเดิม (เวลาไม่ใหม่กว่าเดิม) เซนเซอร์อาจไม่ได้วัดใหม่');
+    toast(r.ts>prev?'วัด FFT ใหม่เสร็จแล้ว':'ได้ FFT ชุดเดิม เซนเซอร์อาจไม่ได้วัดใหม่');
+    await renderFFT();
+  }catch(e){err=e;bleLog('สั่งวัด FFT ไม่สำเร็จ: '+e.message);toast(e.message)}
   finally{
     ble.busy=false;
     if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
@@ -1114,8 +1212,9 @@ function fillLive(){
       <button class="btn ${ble.liveTimer?'live':''}" id="bLiveLoop">${ble.liveTimer?'หยุดอ่านต่อเนื่อง':`อ่านต่อเนื่องทุก ${LIVE_MS/1000} วินาที`}</button>
       <button class="btn" id="bFftLast" ${ble.busy?'disabled':''}>ดึง FFT ตอน alarm ล่าสุด</button>
       <button class="btn" id="bFftAll" ${ble.busy?'disabled':''} title="ประมาณ 10 วินาทีต่อชุด">ดึง FFT ตอน alarm ทั้งหมด</button>
-      <button class="btn primary" id="bFftManual" ${ble.busy?'disabled':''} title="FFT ที่วัดไว้ล่าสุดจากปุ่มวัด FFT ในแอป i-ALERT (0–5,000 Hz)">ดึง FFT manual ล่าสุด</button></div></div>
-    <p class="muted live-note">ต้องการ FFT ใหม่: กด "วัด FFT" ในแอป i-ALERT บนมือถือ รอจนเสร็จ ปิดแอปและ Bluetooth มือถือ แล้วกด "ดึง FFT manual ล่าสุด" ที่นี่ (หน้านี้อ่านอย่างเดียว ไม่สั่งงานหรือแก้ค่าในเซนเซอร์)</p>
+      <button class="btn" id="bFftManual" ${ble.busy?'disabled':''} title="FFT ที่วัดไว้ล่าสุด (จากปุ่มสั่งวัดที่นี่หรือในแอป i-ALERT)">ดึง FFT manual ล่าสุด</button>
+      <button class="btn primary" id="bMeasure" ${ble.busy?'disabled':''} title="สั่งเซนเซอร์วัด FFT ใหม่แบบเดียวกับปุ่มในแอป (0–5,000 Hz)">สั่งวัด FFT ใหม่</button></div></div>
+    <p class="muted live-note">"สั่งวัด FFT ใหม่" เป็นปุ่มเดียวที่เขียนลงเซนเซอร์: ส่งเฉพาะคำสั่งวัด (เหมือนปุ่มในแอป) เมื่อเซนเซอร์ว่างเท่านั้น ค่าตั้งค่าอื่นคงเดิมและตรวจซ้ำหลังวัด สั่งได้ไม่เกิน 1 ครั้งต่อ 2 นาที ปุ่มอื่นทั้งหมดอ่านอย่างเดียว</p>
     <div class="kpis live-grid">
       ${liveTile('ค่าวัดล่าสุด (velocity รวม)',fv(ov),uv(),r?`${z?ZL[z]+' · ':''}วัดเมื่อ ${dFull(r.t)}`:'ยังไม่มีค่า','hero z'+(z||''))}
       ${liveTile('Velocity X / Y / Z',r?xyz([r.vx,r.vy,r.vz],fv):'–','',uv())}
@@ -1133,6 +1232,7 @@ function fillLive(){
   $('#bFftLast').onclick=()=>bleFetchFFT('alarmLast');
   $('#bFftAll').onclick=()=>bleFetchFFT('alarmAll');
   $('#bFftManual').onclick=()=>bleFetchFFT('manual');
+  $('#bMeasure').onclick=bleMeasureFFT;
 }
 // ---- connection status: one phase, shown as a chip in the header and a line in the connect dialog ----
 // [css class, label]; 'ready' = sensor paired and data fetched, link closed to save the sensor's battery
