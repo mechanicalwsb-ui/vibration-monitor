@@ -1,0 +1,16 @@
+{
+  "name": "ia3-gateway",
+  "version": "1.0.0",
+  "description": "i-ALERT3 Bluetooth gateway for Raspberry Pi (read-only trend download, LAN dashboard, LINE/Telegram alerts)",
+  "main": "ia3-gateway.js",
+  "private": true,
+  "scripts": {
+    "start": "node ia3-gateway.js",
+    "mock": "node ia3-gateway.js --mock",
+    "test": "node test-protocol.js"
+  },
+  "dependencies": {
+    "@abandonware/noble": "1.9.2-26"
+  },
+  "engines": { "node": ">=18" }
+}

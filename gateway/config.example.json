@@ -1,0 +1,13 @@
+{
+  "sensors": [
+    { "mac": "30:5A:85:4C:07:AC", "asset": "i-ALERT3", "scale": 816 }
+  ],
+  "intervalMin": 60,
+  "port": 8080,
+  "webRoot": "..",
+  "dataDir": "./data",
+  "alertGapH": 6,
+  "dailyAt": "08:00",
+  "telegram": { "token": "", "chatId": "" },
+  "line": { "channelToken": "", "to": "" }
+}

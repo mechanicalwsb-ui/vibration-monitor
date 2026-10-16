@@ -1,0 +1,16 @@
+[Unit]
+Description=i-ALERT3 vibration gateway
+After=bluetooth.target network-online.target
+Wants=bluetooth.target network-online.target
+
+[Service]
+WorkingDirectory=/home/pi/vibration-monitor/gateway
+ExecStart=/usr/bin/node ia3-gateway.js config.json
+Restart=always
+RestartSec=20
+User=pi
+# noble needs raw Bluetooth access; granted to node with setcap (see README) instead of running as root
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

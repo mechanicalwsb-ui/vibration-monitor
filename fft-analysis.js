@@ -103,7 +103,7 @@ async function renderFFTPage(){
   const b=c.bearing||{};
   el.innerHTML=`
   <div class="mainhead"><h2>วิเคราะห์ FFT · ${esc(S.sel)}</h2>
-    ${seg('faMode',[['spectrum','สเปกตรัม'],['waterfall','Waterfall'],['trend','แนวโน้มความถี่'],['wave','Waveform']],FA.mode)}</div>
+    ${seg('faMode',[['spectrum','สเปกตรัม'],['waterfall','Waterfall'],['trend','แนวโน้มความถี่'],['wave','Waveform'],['env','Envelope (bearing)']],FA.mode)}</div>
   <div class="panel fa-ctl">
     <label>ชุดข้อมูล<select id="faA">${list.map((r,i)=>opt(r.key,recLabel(r,i),recA.key)).join('')}</select></label>
     <label>เปรียบเทียบกับ<select id="faB"><option value="">— ไม่เทียบ —</option>${list.filter(r=>r.key!==recA.key).map(r=>opt(r.key,recLabel(r,list.indexOf(r)),FA.keyB)).join('')}</select></label>
@@ -125,7 +125,7 @@ async function renderFFTPage(){
   <div class="panel"><div class="cbox fa-main"><canvas id="faChart"></canvas></div><p class="muted fa-note" id="faNote"></p></div>
   <div class="fa-grid" id="faSide"></div>`;
   faBind(list);
-  ({spectrum:faSpectrum,waterfall:faWaterfall,trend:faTrend,wave:faWave})[FA.mode](decA,decB,recA,recB,list,f1,c,range);
+  ({spectrum:faSpectrum,waterfall:faWaterfall,trend:faTrend,wave:faWave,env:faEnv})[FA.mode](decA,decB,recA,recB,list,f1,c,range);
 }
 
 function faBind(list){
@@ -260,4 +260,78 @@ function faWave(decA,decB,recA,recB,list,f1,c,range){
   $('#faSide').innerHTML=`<div class="panel" style="grid-column:1/-1"><div class="ph"><h3>สถิติ waveform (g)</h3></div><div class="tablewrap"><table>
     <thead><tr><th>แกน</th><th>Peak</th><th>Peak-Peak</th><th>RMS</th><th>Crest factor</th><th>Kurtosis</th></tr></thead><tbody>${stats(decA,decB?'A ':'')}${decB?stats(decB,'B '):''}</tbody></table></div>
     <p class="muted fa-note">Crest factor = Peak/RMS (ปกติราว 3 สำหรับสัญญาณเรียบ) · Kurtosis ≈ 3 = ปกติ, > 4 = มีแรงกระแทก</p></div>`;
+}
+
+// ---- envelope (demodulation) spectrum for early bearing damage (#14) ----
+// Band-pass the waveform around the structural resonance, take the Hilbert envelope (analytic signal
+// built in the frequency domain), then the spectrum of that envelope. Repeating impacts from a bearing
+// defect show up at BPFO/BPFI/BSF/FTF and their harmonics, long before they are visible in the normal FFT.
+function fftC(re,im,inv){
+  const n=re.length;
+  for(let i=1,j=0;i<n;i++){let bit=n>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;if(i<j){let t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t}}
+  for(let len=2;len<=n;len<<=1){const ang=2*Math.PI/len*(inv?1:-1),wr=Math.cos(ang),wi=Math.sin(ang),h=len>>1;
+    for(let i=0;i<n;i+=len){let cr=1,ci=0;
+      for(let k=0;k<h;k++){const a=i+k,b=a+h,tr=re[b]*cr-im[b]*ci,ti=re[b]*ci+im[b]*cr;
+        re[b]=re[a]-tr;im[b]=im[a]-ti;re[a]+=tr;im[a]+=ti;const t=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=t}}}
+  if(inv)for(let i=0;i<n;i++){re[i]/=n;im[i]/=n}
+}
+function envSpectrum(x,fs,lo,hi){
+  let n=1;while(n*2<=x.length)n*=2;if(n<64)return null;
+  const re=new Float64Array(n),im=new Float64Array(n);let m=0;
+  for(let i=0;i<n;i++)m+=x[i];m/=n;for(let i=0;i<n;i++)re[i]=x[i]-m;
+  fftC(re,im,false);
+  const df=fs/n;
+  for(let k=0;k<n;k++){const keep=k>0&&k<n/2&&k*df>=lo&&k*df<=hi;if(keep){re[k]*=2;im[k]*=2}else{re[k]=0;im[k]=0}}
+  fftC(re,im,true);
+  const env=new Float64Array(n);let em=0,es=0;
+  for(let i=0;i<n;i++){env[i]=Math.hypot(re[i],im[i]);em+=env[i]}em/=n;
+  for(let i=0;i<n;i++)es+=(env[i]-em)**2;
+  const r2=new Float64Array(n),i2=new Float64Array(n);
+  for(let i=0;i<n;i++)r2[i]=(env[i]-em)*(0.5-0.5*Math.cos(2*Math.PI*i/(n-1)));
+  fftC(r2,i2,false);
+  const pts=[];for(let k=1;k<n/2;k++)pts.push({x:k*df,y:4*Math.hypot(r2[k],i2[k])/n}); // x2 one-sided, /0.5 Hann gain
+  return{pts,df,n,fs,mean:em,rms:Math.sqrt(es/n)};
+}
+const ENV_FAULT={BPFO:'รอยที่รางนอก (outer race)',BPFI:'รอยที่รางใน (inner race)',BSF:'ลูกปืน/ลูกกลิ้งเสีย (rolling element)',FTF:'รังลูกปืน (cage)'};
+function faEnv(decA,decB,recA,recB,list,f1,c,range){
+  const k=css(),col={x:k.x,y:k.y,z:k.z},axes=faAxes();
+  const B=decA.high&&decA.high.twf&&decA.high.twfSampleRate?decA.high:faBandOf(decA);
+  if(!B||!B.twf||!B.twfSampleRate){$('#faNote').textContent='ชุดนี้ไม่มี waveform สำหรับทำ envelope';$('#faSide').innerHTML='';return}
+  const fs=B.twfSampleRate,nyq=fs/2;
+  if(FA.envLo==null||FA.envHi==null||FA.envHi>nyq){FA.envLo=Math.round(nyq*0.2);FA.envHi=Math.round(nyq*0.9)}
+  const bf=bearingFreqs(f1,c.bearing),fmaxE=Math.min(nyq*0.5,Math.max(200,bf?bf.BPFI*4:f1?f1*12:400));
+  const res=axes.map(a=>[a,envSpectrum(B.twf[a],fs,FA.envLo,FA.envHi)]).filter(x=>x[1]);
+  if(!res.length){$('#faNote').textContent='waveform สั้นเกินไปสำหรับ envelope';return}
+  const ds=res.map(([a,e])=>({label:AXES.find(x=>x[0]===a)[1],data:e.pts.filter(p=>p.x<=fmaxE),borderColor:col[a],backgroundColor:col[a],borderWidth:1.2,pointRadius:0,tension:0}));
+  const L=[];
+  if(f1)for(let n=1;n<=4&&n*f1<=fmaxE;n++)L.push({x:n*f1,label:n+'X',color:k.muted});
+  if(bf)for(const[name,f]of Object.entries(bf))for(let h=1;h<=3&&h*f<=fmaxE;h++)L.push({x:h*f,label:h>1?`${h}×${name}`:name,color:k.zd});
+  const o=opts('gE');o.scales.x={type:'linear',min:0,max:fmaxE,title:{display:true,text:'ความถี่ของ envelope (Hz)',color:k.muted},ticks:{color:k.muted},grid:{color:k.line}};
+  o.plugins.tooltip.callbacks.title=it=>it.length?it[0].parsed.x.toFixed(2)+' Hz':'';o.plugins.faVlines={lines:L};
+  faCharts.push(new Chart($('#faChart'),{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}));
+  const df=res[0][1].df;
+  $('#faNote').textContent=`กรองช่วง ${FA.envLo}–${FA.envHi} Hz จาก waveform ${B===decA.high?'ช่วงสูง':'ช่วงต่ำ'} (${Math.round(fs)} ค่า/วินาที, ${res[0][1].n} ค่า) · ความละเอียด ${df.toFixed(2)} Hz${bf?'':' · ใส่ข้อมูล bearing (ด้านบน หรือหน้าข้อมูลเครื่อง) เพื่อดูเส้น BPFO/BPFI'}`;
+  // automatic check: energy at each defect frequency and its harmonics vs. the spectrum's median level
+  const finds=[];
+  if(bf)for(const[a,e]of res){
+    const ys=e.pts.filter(p=>p.x<=fmaxE).map(p=>p.y).sort((x,y)=>x-y),med=ys[Math.floor(ys.length/2)]||1e-12;
+    const at=f=>{let m=0;for(const p of e.pts)if(Math.abs(p.x-f)<=Math.max(2*e.df,f*0.03))m=Math.max(m,p.y);return m};
+    for(const[name,f]of Object.entries(bf)){if(f>fmaxE)continue;
+      const r=[1,2,3].map(h=>h*f<=nyq/2?at(h*f)/med:0),hits=r.filter(v=>v>=3).length;
+      if(r[0]>=6||hits>=2)finds.push({a,name,f,r,level:r[0]>=10||hits>=3?'สูง':'ปานกลาง'})}
+  }
+  finds.sort((x,y)=>y.r[0]-x.r[0]);
+  const best=new Map();finds.forEach(fd=>{if(!best.has(fd.name))best.set(fd.name,fd)});
+  $('#faSide').innerHTML=`
+    <div class="panel"><div class="ph"><h3>ตั้งค่า envelope</h3></div><div class="form">
+      <label>กรองตั้งแต่ (Hz)<input type="number" id="envLo" value="${FA.envLo}"></label><label>ถึง (Hz)<input type="number" id="envHi" value="${FA.envHi}"></label>
+      <p class="full muted" style="margin:0;font-size:12px">เลือกช่วงความถี่สูงที่แรงกระแทกไปกระตุ้น (มักเป็นช่วงกว้าง ๆ ใกล้ครึ่งบนของช่วงที่มี) waveform สูงสุด ${Math.round(nyq)} Hz</p>
+      <p class="full" style="margin:0;font-size:13px">ระดับ envelope (RMS): ${res.map(([a,e])=>`${a.toUpperCase()} ${e.rms.toFixed(3)} gE`).join(' · ')}</p></div></div>
+    <div class="panel fa-diag"><div class="diag"><div class="sub-h">ผลตรวจ bearing จาก envelope</div><ul>
+      ${!bf?'<li><span class="tag">ข้อมูลไม่พอ</span> <span class="muted">ใส่ RPM และข้อมูล bearing ก่อน</span></li>'
+        :best.size?[...best.values()].map(fd=>`<li><span class="tag ${fd.level==='สูง'?'zD':'zC'}">${fd.level}</span> <b>สงสัย${ENV_FAULT[fd.name]}</b><div class="muted">${fd.name} ${fd.f.toFixed(1)} Hz แกน ${fd.a.toUpperCase()} · สูงกว่าพื้น ${fd.r.map(v=>v.toFixed(1)+'×').join(' / ')} ที่ 1×/2×/3×</div></li>`).join('')
+        :'<li><span class="tag zB">ไม่พบ</span> <span class="muted">ไม่มียอดเด่นที่ความถี่ bearing</span></li>'}
+      </ul><p class="muted diag-note">ตรวจโดยเทียบยอดที่ความถี่ bearing (และ harmonic) กับระดับพื้นของสเปกตรัม ค่า bearing ที่ประมาณจากขนาดอาจคลาดเคลื่อน ±5–10% ควรยืนยันกับแคตตาล็อกและผู้เชี่ยวชาญ</p></div></div>`;
+  const upd=()=>{const lo=+$('#envLo').value,hi=+$('#envHi').value;if(lo>0&&hi>lo){FA.envLo=lo;FA.envHi=Math.min(hi,nyq);renderFFTPage()}};
+  $('#envLo').onchange=upd;$('#envHi').onchange=upd;
 }
