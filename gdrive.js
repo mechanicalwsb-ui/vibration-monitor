@@ -8,7 +8,7 @@
 
 const GD_KEY='vibmon-gdrive',GD_SCOPE='openid email profile https://www.googleapis.com/auth/drive.file';
 const GD_API='https://www.googleapis.com/drive/v3/',GD_UP='https://www.googleapis.com/upload/drive/v3/';
-const GD_FILES={state:'vibmon-state.json',fft:'vibmon-fft.json'};
+const GD_FILES={state:'vibmon-state.json',fft:'vibmon-fft.json',priv:'vibmon-private.json'};
 // SITE (site-config.js) can make sign-in mandatory for everyone: its Client ID and allow-list win
 const siteGate=()=>typeof SITE!=='undefined'&&!!SITE.clientId;
 function gdCfg(){let c={};try{c=JSON.parse(localStorage.getItem(GD_KEY)||'{}')}catch(e){}
@@ -119,6 +119,7 @@ async function gdSync(interactive){
       await gdUpload(folder,GD_FILES.fft,{format:'vibmon-fft',version:1,exportedAt:new Date().toISOString(),fft:all.map(r=>({...r,bytes:b64(r.bytes||new Uint8Array(0))}))},ff);
       const nf=await gdFind(folder,GD_FILES.fft);c.fftMt=nf&&nf.modifiedTime;c.fftSig=sig}
     else c.fftMt=ff.modifiedTime;
+    await gdSyncPrivate(folder);
     c.lastSync=Date.now();gdSave(c);save();persistBig(true);
     GD.status='ok';if(got||gotF){toast(`ซิงก์แล้ว: ได้ข้อมูลจากเครื่องอื่น ${got} ค่า${gotF?` · FFT ${gotF} ชุด`:''}`);render()}
   }catch(e){GD.err=e.message;GD.status='err';console.warn(e);if(interactive)toast('ซิงก์ไม่สำเร็จ: '+e.message)}
@@ -190,4 +191,23 @@ function checkLock(){
   if(c.lock==='pin'){const go=async()=>{const v=$('#lockPin').value;if(await sha256(c.salt+v)===c.pinHash){try{sessionStorage.setItem('vibmon-unlocked','1')}catch(e){}hideLock()}else{$('#lockMsg').textContent='PIN ไม่ถูกต้อง';$('#lockPin').value=''}};
     $('#lockGo').onclick=go;$('#lockPin').onkeydown=e=>{if(e.key==='Enter')go()};setTimeout(()=>$('#lockPin').focus(),50)}
   else $('#lockG').onclick=()=>gdLogin().then(()=>{if(authOk()||(!siteGate()&&gdTokenOk()))hideLock();else $('#lockMsg').textContent=GD.err||'ล็อกอินไม่สำเร็จ'});
+}
+
+// ---- private settings that follow the signed-in account (Gemini API key + AI options) ----
+// Kept in their own file in the user's Drive folder (only this account and this app can read it),
+// never in the shared state file or in backups. The most recently changed copy wins.
+async function gdSyncPrivate(folder){
+  const f=await gdFind(folder,GD_FILES.priv),local=aiCfg();
+  let remote=null;
+  if(f){try{remote=(await (await gdFetch(`${GD_API}files/${f.id}?alt=media`)).json()).gemini||null}catch(e){}}
+  if(remote&&remote.key&&(!local.key||(remote.mt||0)>(local.mt||0))){
+    aiSaveCfg(Object.assign({},local,remote),true);
+    if(!local.key)toast('ได้ Gemini API key จากบัญชี Google แล้ว');
+    if(S.view==='ai'||S.view==='settings')render();
+    return;
+  }
+  if(local.key&&(!remote||(local.mt||0)>(remote.mt||0)||remote.key!==local.key&&!(remote.mt>local.mt))){
+    await gdUpload(folder,GD_FILES.priv,{format:'vibmon-private',version:1,updated:new Date().toISOString(),
+      gemini:{key:local.key,model:local.model,temp:local.temp,anon:local.anon,maint:local.maint,mt:local.mt||Date.now()}},f);
+  }
 }

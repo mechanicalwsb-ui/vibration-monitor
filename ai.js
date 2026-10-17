@@ -9,7 +9,7 @@ const AI_DEFAULT_MODEL='gemini-2.5-flash';
 const GEMINI='https://generativelanguage.googleapis.com/v1beta/';
 function aiCfg(){let c={};try{c=JSON.parse(localStorage.getItem(AI_KEY_STORE)||'{}')}catch(e){}
   return Object.assign({key:'',model:AI_DEFAULT_MODEL,anon:false,maint:true,temp:0.3},c)}
-function aiSaveCfg(c){try{localStorage.setItem(AI_KEY_STORE,JSON.stringify(c))}catch(e){toast('บันทึกค่า AI ไม่ได้')}}
+function aiSaveCfg(c,fromSync){if(!fromSync)c.mt=Date.now();try{localStorage.setItem(AI_KEY_STORE,JSON.stringify(c))}catch(e){toast('บันทึกค่า AI ไม่ได้')}}
 const aiReady=()=>!!aiCfg().key;
 
 // ---------- Gemini client ----------
@@ -273,7 +273,7 @@ function aiSettingsHtml(){
     <div style="align-self:end"><button class="btn" id="aiTest" type="button">ทดสอบ</button></div>
     <label class="full check"><input type="checkbox" id="aiAnon" ${c.anon?'checked':''}> ซ่อนชื่อเครื่องจักร (ส่งเป็น "เครื่อง A")</label>
     <label class="full check"><input type="checkbox" id="aiMaint" ${c.maint?'checked':''}> ส่งบันทึกซ่อมไปประกอบการวิเคราะห์</label>
-    <p class="full muted" style="margin:0;font-size:12px" id="aiInfo">ขอ key ฟรีที่ aistudio.google.com → Get API key · key เก็บในเบราว์เซอร์นี้เท่านั้น ไม่อยู่ในไฟล์สำรอง และส่งตรงไปที่ Google เท่านั้น · ใช้ฟรีได้ภายในโควตาของ Google (ถ้าเปิด billing จะคิดเงินตามการใช้) · อย่าใช้ key นี้บนเครื่องที่คนอื่นใช้ร่วม</p>
+    <p class="full muted" style="margin:0;font-size:12px" id="aiInfo">ขอ key ฟรีที่ aistudio.google.com → Get API key · ${typeof gdCfg==='function'&&gdCfg().email?'🔄 key และค่า AI ซิงก์ตามบัญชี '+esc(gdCfg().email)+' (ไฟล์ส่วนตัวใน Google Drive ของบัญชีนี้) ทุกเครื่องที่ล็อกอินบัญชีนี้ใช้ key เดียวกัน':'ล็อกอิน Google แล้ว key จะซิงก์ให้ทุกเครื่องที่ใช้บัญชีเดียวกัน'} · ไม่อยู่ในไฟล์สำรอง และส่งตรงไปที่ Google เท่านั้น · ใช้ฟรีได้ภายในโควตาของ Google (ถ้าเปิด billing จะคิดเงินตามการใช้) · อย่าใช้ key นี้บนเครื่องที่คนอื่นใช้ร่วม</p>
   </div></div>`;
 }
 function aiBindSettings(){
