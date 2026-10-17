@@ -12,14 +12,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.2.3"></script>
-<script src="fft-analysis.js?v=2.2.3"></script>
-<script src="store.js?v=2.2.3"></script>
-<script src="insights.js?v=2.2.3"></script>
-<script src="pages.js?v=2.2.3"></script>
-<script src="ai.js?v=2.2.3"></script>
-<script src="tools.js?v=2.2.3"></script>
-<script src="machine.js?v=2.2.3"></script>
+<script src="ia3-fft.js?v=2.3.0"></script>
+<script src="fft-analysis.js?v=2.3.0"></script>
+<script src="store.js?v=2.3.0"></script>
+<script src="insights.js?v=2.3.0"></script>
+<script src="pages.js?v=2.3.0"></script>
+<script src="ai.js?v=2.3.0"></script>
+<script src="tools.js?v=2.3.0"></script>
+<script src="machine.js?v=2.3.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -409,7 +409,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.2.3',APP_BUILD='2026-10-17T10:51:39+07:00';
+const APP_VERSION='2.3.0',APP_BUILD='2026-10-17T10:53:59+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -1007,7 +1007,7 @@ $('#dlg').addEventListener('close',()=>{
 
 // ---- i-ALERT3 over Web Bluetooth (see ialert3-protocol.md) ----
 // i-ALERT3 uses 0xFEA3 for both advertising and its GATT primary service (8c3bff00-… is the i-ALERT2 service)
-const IA3={svc:'0000fea3-0000-1000-8000-00805f9b34fb',bulk:'8c3bff38-b853-40b5-85d2-86dda1e2cb28',
+const IA3={svc:'0000fea3-0000-1000-8000-00805f9b34fb',bulk:'8c3bff38-b853-40b5-85d2-86dda1e2cb28',sync:'8c3bff3f-97a1-40b5-85d2-86dda1e2cb28',
   sys:'8c3bff37-e796-40b5-85d2-86dda1e2cb28',cmd:'8c3bff34-caeb-40b5-85d2-86dda1e2cb28',adv:0xfea3};
 // System structure (220 bytes, read-only use). Offsets from the app's ITTiAlert3SystemStructure:
 // wake-up rate @10, trend interval @12 (s), run time @76 (s), device type @118 (8 std / 9 digital accel),
@@ -1146,6 +1146,7 @@ async function bleConnect(dev,tries=4){
       setBle('connected');
       ch.sys=await svc.getCharacteristic(IA3.sys).catch(()=>null);
       ch.cmd=await svc.getCharacteristic(IA3.cmd).catch(()=>null);
+      ch.sync=await svc.getCharacteristic(IA3.sync).catch(()=>null);
       ble.ch=ch;ble.chDev=dev;
       if(S.streamOpen&&ch.cmd){ // an earlier live stream was cut off before its stop command
         try{await sendStreamCmd(ch,STREAM_STOP);S.streamOpen=false;save();bleLog('ส่งคำสั่งหยุด stream ที่ค้างจากรอบก่อนแล้ว')}catch(e){}
@@ -1159,6 +1160,35 @@ async function bleConnect(dev,tries=4){
       await new Promise(r=>setTimeout(r,i<2?3000:6000)); // give the sensor longer to free itself on later tries
     }
   }
+}
+// ---- sensor clock: the second (and only other) write this page makes ----
+// Same as the i-ALERT app (ITTiAlert3TimeSyncCommand / syncSensorIfNeeded): when the sensor reports
+// "time sync not done" (status bit 4) on firmware rev >= 9, write the current Unix time, 4 bytes little-endian,
+// to the dedicated Sync Timestamp characteristic. Nothing else is written; the result is read back.
+const TS_MIN_REV=9;
+const timeSyncNeeded=s=>!!s&&(s.devType===8||s.devType===9)&&s.rev>=TS_MIN_REV&&!(s.status&0x10);
+async function syncSensorTime(ch,how){
+  if(!ch.sync||!(ch.sync.properties.write||ch.sync.properties.writeWithoutResponse))throw new Error('ไม่พบช่องตั้งเวลา (Sync Timestamp) ของเซนเซอร์');
+  const now=Math.floor(Date.now()/1000),b=new Uint8Array([now&255,(now>>>8)&255,(now>>>16)&255,(now>>>24)&255]);
+  bleLog(`${how==='auto'?'ตั้งเวลาอัตโนมัติ (เซนเซอร์แจ้งว่ายังไม่ได้ตั้งเวลา แบบเดียวกับแอป i-ALERT)':'ตั้งเวลาเซนเซอร์'}: เขียนช่อง Sync Timestamp 4 ไบต์ ${[...b].map(hex2).join(' ')} = ${dFull(now*1000)} (ไม่แตะค่าตั้งค่าอื่น)`);
+  if(ch.sync.properties.write)await ch.sync.writeValueWithResponse(b);else await ch.sync.writeValueWithoutResponse(b);
+  await sleep(800);
+  const s=parseSys(await ch.sys.readValue(),ble.cfg.scale);
+  const ok=s&&Math.abs(s.clock-Date.now()/1000)<=120;
+  bleLog(ok?`ตั้งเวลาแล้ว ✓ นาฬิกาเซนเซอร์: ${dFull(s.clock*1000)}${s.status&0x10?'':' (สถานะ time sync ยังไม่ขึ้น)'}`:`⚠ เขียนเวลาแล้ว แต่นาฬิกายังไม่ตรง (${s?dFull(s.clock*1000):'อ่านไม่ได้'})`);
+  if(s)s.wasReset=true;
+  return s;
+}
+async function bleSyncTime(){
+  if(ble.busy||!ble.device)return;
+  if(!confirm('ตั้งเวลาเซนเซอร์ตอนนี้?\n\nหน้าเว็บจะเขียนเวลาปัจจุบันลงช่อง Sync Timestamp ของเซนเซอร์ (4 ไบต์) แบบเดียวกับที่แอป i-ALERT ทำตอนเชื่อมต่อ\n• ไม่แตะค่าตั้งค่าอื่น (เกณฑ์ alarm ฯลฯ)\n• ทำเฉพาะเมื่อเซนเซอร์แจ้งว่ายังไม่ได้ตั้งเวลา\n• ค่า trend ที่บันทึกระหว่างที่นาฬิกาไม่ตรงจะยังกู้คืนไม่ได้'))return;
+  ble.busy=true;updateBleButton();fillLive();const dev=ble.device;let err=null;
+  try{
+    const ch=await bleConnect(dev),s=parseSys(await ch.sys.readValue(),ble.cfg.scale);
+    if(!timeSyncNeeded(s))throw new Error(clockOk(s)?'นาฬิกาเซนเซอร์ตรงอยู่แล้ว ไม่ได้เขียนอะไร':'เซนเซอร์แจ้งว่าตั้งเวลาแล้วแต่เวลาไม่ตรง หน้าเว็บจึงไม่เขียนทับ (ใช้แอป i-ALERT แทน)');
+    const s2=await syncSensorTime(ch,'manual');if(s2)applySys(s2);toast('ตั้งเวลาเซนเซอร์แล้ว');
+  }catch(e){err=e;bleLog('ตั้งเวลาไม่สำเร็จ: '+e.message);toast(e.message)}
+  finally{ble.busy=false;if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}bleFinish(dev,err);fillLive()}
 }
 async function bleFetch(){
   if(ble.busy||!ble.device)return;
@@ -1177,7 +1207,9 @@ async function bleFetch(){
           if(s.mac)bleLog('MAC เซนเซอร์: '+s.mac);
           sensorIdentity(dev,s); // may rename the machine so two sensors never share one name
           bleLog(`นาฬิกาเซนเซอร์: ${dFull(s.clock*1000)} (${fmtDrift(s.clock-Math.floor(Date.now()/1000))})`);
-          if(!clockOk(s))bleLog('⚠ นาฬิกาเซนเซอร์ยังไม่ได้ตั้งเวลา (มักเกิดหลังเซนเซอร์รีสตาร์ท) trend ใหม่จะมีเวลาผิดและถูกข้าม ให้เปิดแอป i-ALERT เชื่อมต่อเซนเซอร์ 1 ครั้งเพื่อตั้งเวลา');
+          if(timeSyncNeeded(s)){bleLog('⚠ นาฬิกาเซนเซอร์ยังไม่ได้ตั้งเวลา (มักเกิดหลังเซนเซอร์รีสตาร์ท)');
+            try{const s2=await syncSensorTime(ch,'auto');if(s2){Object.assign(s,s2);sysRead=s}}catch(e){bleLog('ตั้งเวลาอัตโนมัติไม่สำเร็จ: '+e.message)}}
+          if(!clockOk(s))bleLog('⚠ นาฬิกาเซนเซอร์ยังไม่ตรง trend ใหม่จะมีเวลาผิดและถูกข้าม'+(timeSyncNeeded(s)?' ลองกด "ตั้งเวลาเซนเซอร์" ในแผงค่าสด':' ให้ใช้แอป i-ALERT ตั้งเวลา'));
           bleLog(`trend ล่าสุดในเซนเซอร์: ${s.lastTrend?dFull(s.lastTrend*1000):'-'}`);
           applySys(s);
         }else bleLog('อ่านสถานะเซนเซอร์ได้ไม่ครบ ข้ามการเช็กนาฬิกา');
@@ -1350,7 +1382,7 @@ function measurePreflight(read){
   // the i-ALERT app sets the clock on connect, so ask for that first
   const clock=dv.getUint32(68,true);
   if(!(st&0x10)||Math.abs(clock-Date.now()/1000)>86400)
-    why.push('นาฬิกาเซนเซอร์ยังไม่ได้ตั้งเวลา (อาจเพิ่งรีสตาร์ท) ให้เปิดแอป i-ALERT เชื่อมต่อเซนเซอร์ 1 ครั้งเพื่อตั้งเวลาก่อน');
+    why.push('นาฬิกาเซนเซอร์ยังไม่ตรง (ตั้งเวลาอัตโนมัติไม่สำเร็จ) กด "ตั้งเวลาเซนเซอร์" หรือใช้แอป i-ALERT แล้วลองใหม่');
   return why;
 }
 function buildMeasureWrite(read,nowSec){
@@ -1372,7 +1404,9 @@ async function bleMeasureFFT(opt={}){
   try{
     const ch=await bleConnect(dev);
     if(!ch.sys||!(ch.sys.properties.write||ch.sys.properties.writeWithoutResponse))throw new Error('ช่องค่าตั้งค่าของเซนเซอร์เขียนไม่ได้');
-    const read=sysBytes(await ch.sys.readValue());
+    let read=sysBytes(await ch.sys.readValue());
+    if(timeSyncNeeded(parseSys(new DataView(read.buffer),ble.cfg.scale))){ // same as the app: set the clock first
+      try{await syncSensorTime(ch,'auto');read=sysBytes(await ch.sys.readValue())}catch(e){bleLog('ตั้งเวลาอัตโนมัติไม่สำเร็จ: '+e.message)}}
     const why=measurePreflight(read);
     if(why.length)throw new Error('ไม่ได้สั่งวัด: '+why.join(' · '));
     const s=parseSys(new DataView(read.buffer),ble.cfg.scale);applySys(s);
@@ -1653,7 +1687,7 @@ function sensorStatusHtml(s){
   return `<div class="sens-grid">
     <div><h4>สถานะจากเซนเซอร์</h4>
       <div class="row">${chips||'<span class="tag zB">ไม่มี alarm</span>'}<span class="tag">${F.running?'เครื่องเดินอยู่':'เครื่องหยุด'}</span>${clockOk(s)?'':'<span class="tag zD">นาฬิกาเซนเซอร์ไม่ได้ตั้งเวลา</span>'}</div>
-      ${clockOk(s)?'':'<p class="sens-note" style="color:var(--zd)">นาฬิกาเซนเซอร์ไม่ตรง (มักเกิดหลังรีสตาร์ท) ให้เปิดแอป i-ALERT เชื่อมต่อเซนเซอร์ 1 ครั้งเพื่อตั้งเวลา ระหว่างนี้ปุ่มสั่งวัด FFT จะไม่ทำงาน</p>'}
+      ${clockOk(s)?'':`<p class="sens-note" style="color:var(--zd)">นาฬิกาเซนเซอร์ไม่ตรง (มักเกิดหลังรีสตาร์ท — ถ้าเกิดบ่อยให้ตรวจแบตเตอรี่) ${timeSyncNeeded(s)?'กดปุ่มด้านล่างเพื่อตั้งเวลา หรือจะตั้งให้อัตโนมัติเมื่อดึงข้อมูลครั้งถัดไป':'เซนเซอร์แจ้งว่าตั้งเวลาแล้วแต่ไม่ตรง ให้ใช้แอป i-ALERT'}</p>${timeSyncNeeded(s)?`<button class="btn primary sm" id="bSyncTime" ${ble.busy?'disabled':''}>ตั้งเวลาเซนเซอร์</button>`:''}`}
       <p class="muted sens-note">alarm ครั้งล่าสุด: ${validTs(s.lastAlarm)?dFull(s.lastAlarm*1000):'ไม่มีบันทึก'} · เวลาที่อยู่ใน alarm รวม ${fmtDur(s.alarmSec)}</p></div>
     <div><h4>เกณฑ์ที่ตั้งไว้ในเซนเซอร์ (${uv()} / ${ut()})</h4>
       <table class="thr"><thead><tr><th></th><th>X</th><th>Y</th><th>Z</th><th>อุณหภูมิ</th></tr></thead><tbody>
@@ -1680,7 +1714,7 @@ function fillLive(){
       <button class="btn" id="bFftAll" ${ble.busy?'disabled':''} title="ประมาณ 10 วินาทีต่อชุด">ดึง FFT ตอน alarm ทั้งหมด</button>
       <button class="btn" id="bFftManual" ${ble.busy?'disabled':''} title="FFT ที่วัดไว้ล่าสุด (จากปุ่มสั่งวัดที่นี่หรือในแอป i-ALERT)">ดึง FFT manual ล่าสุด</button>
       <button class="btn primary" id="bMeasure" ${ble.busy?'disabled':''} title="สั่งเซนเซอร์วัด FFT ใหม่แบบเดียวกับปุ่มในแอป (0–5,000 Hz)">สั่งวัด FFT ใหม่</button></div></div>
-    <p class="muted live-note">"สั่งวัด FFT ใหม่" เป็นปุ่มเดียวที่เขียนลงเซนเซอร์: ส่งเฉพาะคำสั่งวัด (เหมือนปุ่มในแอป) เมื่อเซนเซอร์ว่างเท่านั้น ค่าตั้งค่าอื่นคงเดิมและตรวจซ้ำหลังวัด สั่งได้ไม่เกิน 1 ครั้งต่อ 2 นาที ปุ่มอื่นทั้งหมดอ่านอย่างเดียว</p>
+    <p class="muted live-note">การเขียนลงเซนเซอร์มีแค่ 2 อย่าง: ตั้งเวลา (เฉพาะเมื่อเซนเซอร์แจ้งว่ายังไม่ได้ตั้ง แบบเดียวกับแอป) และ "สั่งวัด FFT ใหม่": ส่งเฉพาะคำสั่งวัด (เหมือนปุ่มในแอป) เมื่อเซนเซอร์ว่างเท่านั้น ค่าตั้งค่าอื่นคงเดิมและตรวจซ้ำหลังวัด สั่งได้ไม่เกิน 1 ครั้งต่อ 2 นาที ปุ่มอื่นทั้งหมดอ่านอย่างเดียว</p>
     <div class="kpis live-grid">
       ${liveTile('ค่าวัดล่าสุด (velocity รวม)',fv(ov),uv(),r?`${z?ZL[z]+' · ':''}วัดเมื่อ ${dFull(r.t)}`:'ยังไม่มีค่า','hero z'+(z||''))}
       ${liveTile('Velocity X / Y / Z',r?xyz([r.vx,r.vy,r.vz],fv):'–','',uv())}
@@ -1694,6 +1728,7 @@ function fillLive(){
     ${sensorStatusHtml(s)}
     <p class="muted live-note">รุ่น ${s.devType===9?'Digital Accelerometer':s.devType===8?'มาตรฐาน':'ไม่ทราบ ('+s.devType+')'} · firmware rev ${s.rev} · บันทึก trend ทุก ${fmtSec(s.trendSec)} · ค่า "วัดล่าสุด" จะเปลี่ยนเมื่อเซนเซอร์บันทึก trend ใหม่ ส่วน "ตรวจ alarm" อัปเดตบ่อยกว่า</p>`;
   $('#bLiveOnce').onclick=bleLiveRead;
+  if($('#bSyncTime'))$('#bSyncTime').onclick=bleSyncTime;
   $('#bLiveLoop').onclick=toggleLive;
   $('#bFftLast').onclick=()=>bleFetchFFT('alarmLast');
   $('#bFftAll').onclick=()=>bleFetchFFT('alarmAll');

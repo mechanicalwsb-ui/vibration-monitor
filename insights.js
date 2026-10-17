@@ -177,13 +177,14 @@ function recordHealth(dev,s,res){
   const sv=S.sensors[dev.id]||{},key=(s&&s.mac)||sv.mac||dev.id,list=S.health[key]||(S.health[key]=[]);
   const row=scan.rows.get(dev.id);
   const h={t:Date.now(),ok:res.ok,att:res.attempts,ms:res.ms,rssi:row&&row.rssi!=null?row.rssi:null};
-  if(s)Object.assign(h,{batt:s.battV,drift:Math.round(s.clock-Date.now()/1000),reset:!clockOk(s),batLow:s.flags.battery,
+  if(s)Object.assign(h,{batt:s.battV,drift:Math.round(s.clock-Date.now()/1000),reset:!clockOk(s)||!!s.wasReset,batLow:s.flags.battery,
     rev:s.rev,devType:s.devType,trendSec:s.trendSec,wakeSec:s.wakeSec,runH:Math.round(s.runH)});
   list.push(h);if(list.length>3000)list.splice(0,list.length-3000);
   save();
   const asset=sv.asset||(ble.cfg&&ble.cfg.asset)||'';
   if(s&&s.flags.battery)notify('bat|'+key,'🔋 แบตเซนเซอร์ต่ำ',`${asset}: เตรียมเปลี่ยนแบตเตอรี่`,asset);
-  if(s&&!clockOk(s))notify('clk|'+key,'⏱ นาฬิกาเซนเซอร์รีเซ็ต',`${asset}: เปิดแอป i-ALERT เชื่อมต่อ 1 ครั้งเพื่อตั้งเวลา`,asset);
+  if(s&&!clockOk(s))notify('clk|'+key,'⏱ นาฬิกาเซนเซอร์ไม่ตรง',`${asset}: ${timeSyncNeeded(s)?'ตั้งเวลาอัตโนมัติไม่สำเร็จ กด "ตั้งเวลาเซนเซอร์" หรือใช้แอป i-ALERT':'เซนเซอร์แจ้งว่าตั้งเวลาแล้วแต่เวลาไม่ตรง ให้ใช้แอป i-ALERT'}`,asset);
+  else if(s&&s.wasReset)notify('clkfix|'+key,'⏱ เซนเซอร์รีสตาร์ท — ตั้งเวลาให้แล้ว',`${asset}: ถ้าเกิดบ่อยให้ตรวจแบตเตอรี่${s.battV?' ('+s.battV.toFixed(2)+' V)':''}`,asset);
 }
 const BATT_EMPTY=3.0; // V, assumed end of life for the estimate
 function healthSummary(id){
