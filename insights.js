@@ -177,7 +177,7 @@ function recordHealth(dev,s,res){
   const sv=S.sensors[dev.id]||{},key=(s&&s.mac)||sv.mac||dev.id,list=S.health[key]||(S.health[key]=[]);
   const row=scan.rows.get(dev.id);
   const h={t:Date.now(),ok:res.ok,att:res.attempts,ms:res.ms,rssi:row&&row.rssi!=null?row.rssi:null};
-  if(s)Object.assign(h,{batt:s.battV,drift:Math.round(s.clock-Date.now()/1000),reset:!clockOk(s)||!!s.wasReset,batLow:s.flags.battery,
+  if(s)Object.assign(h,{batt:s.battV,drift:Math.round(s.clock-Date.now()/1000),reset:!clockOk(s)||!!s.wasReset,clockBad:!clockOk(s),fixed:!!s.wasReset&&clockOk(s),batLow:s.flags.battery,
     rev:s.rev,devType:s.devType,trendSec:s.trendSec,wakeSec:s.wakeSec,runH:Math.round(s.runH)});
   list.push(h);if(list.length>3000)list.splice(0,list.length-3000);
   save();
@@ -212,7 +212,9 @@ function healthSummary(id){
   }
   if(last&&last.batLow)out.issues.push(['bad','เซนเซอร์แจ้งแบตเตอรี่ต่ำ ควรเปลี่ยนแบต']);
   else if(out.battMonths!=null&&out.battMonths<3)out.issues.push(['warn',`แบตน่าจะเหลือราว ${out.battMonths.toFixed(1)} เดือน (ประมาณจากแนวโน้ม)`]);
-  if(last&&last.reset)out.issues.push(['bad','นาฬิกาเซนเซอร์ยังไม่ได้ตั้งเวลา — เปิดแอป i-ALERT เชื่อมต่อ 1 ครั้ง']);
+  // clockBad = still wrong after connecting; older records only have reset (= clock was wrong when read)
+  const hb=H.filter(h=>h.batt!=null||h.drift!=null).at(-1),clockBad=hb&&(hb.clockBad!=null?hb.clockBad:hb.drift!=null?Math.abs(hb.drift)>86400:hb.reset);out.clockBad=!!clockBad;
+  if(clockBad)out.issues.push(['bad','นาฬิกาเซนเซอร์ยังไม่ตรง — เชื่อมต่อเซนเซอร์อีกครั้ง ระบบจะตั้งเวลาให้อัตโนมัติ (หรือกด "ตั้งเวลาเซนเซอร์")']);
   else if(last&&Math.abs(last.drift)>600)out.issues.push(['warn',`นาฬิกาเซนเซอร์คลาดเคลื่อน ${Math.round(Math.abs(last.drift)/60)} นาที`]);
   if(out.resets.length)out.issues.push(['warn',`เซนเซอร์รีสตาร์ท/นาฬิการีเซ็ต ${out.resets.length} ครั้ง (ล่าสุด ${dFull(out.resets.at(-1).t)})`]);
   if(out.complete!=null&&out.complete<0.8)out.issues.push(['warn',`ได้ข้อมูล ${Math.round(out.complete*100)}% ของที่ควรได้ใน 30 วัน`]);
