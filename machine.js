@@ -117,11 +117,12 @@ function editFailure(id,asset,prefill){
   $('#frSave').onclick=async()=>{
     ['title','symptom','evidence','cause','action','priority','status','owner','due'].forEach(k=>f[k]=fm[k].value.trim?fm[k].value.trim():fm[k].value);
     if(!f.title)return toast('ใส่หัวข้อ');
+    f.mt=Date.now();
     if(f.status==='closed'&&!f.closedAt)f.closedAt=Date.now();if(f.status!=='closed')f.closedAt=null;
     if(fm.snap.checked&&!f.chart)f.chart=await chartSnapshot();if(!fm.snap.checked)f.chart=null;
     if(fm.photo.files[0])f.photo=await shrinkImage(fm.photo.files[0]);
     if(!S.failures.includes(f))S.failures.push(f);S.lastBy=f.owner||S.lastBy;save();$('#infoDlg').close();render();toast('บันทึกรายงานแล้ว')};
-  if($('#frDel'))$('#frDel').onclick=()=>{if(!confirm('ลบรายงานนี้?'))return;S.failures=S.failures.filter(x=>x!==f);save();$('#infoDlg').close();render()};
+  if($('#frDel'))$('#frDel').onclick=()=>{if(!confirm('ลบรายงานนี้?'))return;tomb().failures.push(f.id);S.failures=S.failures.filter(x=>x!==f);save();$('#infoDlg').close();render()};
 }
 function failureHtml(f){
   const row=(l,t)=>t?`<tr><th style="width:28%">${l}</th><td style="white-space:pre-wrap">${esc(t)}</td></tr>`:'';
@@ -300,6 +301,7 @@ function askMerge(i,assetsIn){
 // Move everything stored under `froms` to `to`
 async function mergeAssets(froms,to){
   froms=froms.filter(a=>a!==to);if(!froms.length)return series(to).length;
+  S.renames=S.renames||{};for(const f of froms)S.renames[f]=to;delete S.renames[to];
   const keep=new Map();for(const r of S.readings)if(r.asset===to)keep.set(r.t,r);
   S.readings=S.readings.filter(r=>{
     if(!froms.includes(r.asset))return true;

@@ -12,14 +12,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.4.0"></script>
-<script src="fft-analysis.js?v=2.4.0"></script>
-<script src="store.js?v=2.4.0"></script>
-<script src="insights.js?v=2.4.0"></script>
-<script src="pages.js?v=2.4.0"></script>
-<script src="ai.js?v=2.4.0"></script>
-<script src="tools.js?v=2.4.0"></script>
-<script src="machine.js?v=2.4.0"></script>
+<script src="ia3-fft.js?v=2.5.0"></script>
+<script src="fft-analysis.js?v=2.5.0"></script>
+<script src="store.js?v=2.5.0"></script>
+<script src="insights.js?v=2.5.0"></script>
+<script src="pages.js?v=2.5.0"></script>
+<script src="ai.js?v=2.5.0"></script>
+<script src="tools.js?v=2.5.0"></script>
+<script src="machine.js?v=2.5.0"></script>
+<script src="gdrive.js?v=2.5.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -291,6 +292,18 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
 .rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
 .plabel svg{width:38mm;height:38mm}
+.gd-user{display:flex;align-items:center;gap:8px;width:100%;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:6px 8px;cursor:pointer;text-align:left}
+.gd-user:hover{background:var(--soft)}
+.gd-user img,.gd-av{width:30px;height:30px;border-radius:50%;flex:none;object-fit:cover}
+.gd-av{display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font-weight:600}
+.gd-user span{display:flex;flex-direction:column;min-width:0}.gd-user b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gd-user small{font-size:11.5px;color:var(--muted)}
+.gd-help summary{cursor:pointer;font-weight:600;font-size:13px}.gd-help ol{margin:6px 0 0;padding-left:20px;font-size:13px;line-height:1.8}
+.gd-help code{font-family:"IBM Plex Mono",monospace;font-size:12px;background:var(--soft);padding:0 4px;border-radius:4px;word-break:break-all}
+#lockScr{position:fixed;inset:0;z-index:100;background:var(--bg);display:grid;place-items:center;padding:16px}
+.lock-box{display:flex;flex-direction:column;align-items:center;gap:10px;padding:28px 24px;width:min(340px,100%);text-align:center}
+.lock-box h2{margin:0;font-size:20px}.lock-box p{margin:0}
+.lock-box input{width:100%;text-align:center;font-size:22px;letter-spacing:6px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink)}
+.lock-box .btn{width:100%;padding:10px}
 #faMode{flex-wrap:wrap}
 .fa-tools{align-items:center}
 .fbars{display:flex;flex-direction:column;gap:8px}
@@ -311,6 +324,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <div class="app">
 <nav class="nav" id="nav" aria-label="เมนูหลัก">
   <div class="brand"><b>Vibration Monitor</b><span>แดชบอร์ดเซนเซอร์ i-ALERT3</span><span class="ver" id="appVer"></span></div>
+  <div id="gdChip"></div>
   <div class="row" style="flex-wrap:nowrap"><button type="button" class="conn" id="bleChip" title="สถานะการเชื่อมต่อเซนเซอร์" style="flex:1;min-width:0"><i></i><span>ยังไม่ได้เชื่อมต่อเซนเซอร์</span></button>
   <button type="button" class="icon-btn" id="bTheme" title="สลับโหมดมืด/สว่าง" style="width:34px;height:34px"></button></div>
   <div class="navlist" id="views">
@@ -411,7 +425,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.4.0',APP_BUILD='2026-10-17T11:02:51+07:00';
+const APP_VERSION='2.5.0',APP_BUILD='2026-10-17T11:13:16+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -637,7 +651,7 @@ function render(){
   document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   Object.entries(VIEWS).forEach(([k,[id]])=>$('#'+id).hidden=k!==v);
   $('#mTitle').textContent=VIEWS[v][1];
-  renderSide(ns);
+  renderSide(ns);renderGdChip();
   if(v!=='overview'){charts.forEach(c=>c.destroy());charts=[]}
   pDestroy();
   try{({overview:()=>renderMain(ns),fft:renderFFTPage,sensor:renderSensorPage,settings:()=>renderSettings(ns),
@@ -792,6 +806,7 @@ function renderSettings(ns){
         <div style="align-self:end"><button class="btn" id="nTest">ทดสอบแจ้งเตือน</button></div>
         <p class="full muted" style="margin:0;font-size:12px">${'Notification' in window?'สิทธิ์แจ้งเตือนของเบราว์เซอร์: '+({granted:'อนุญาตแล้ว',denied:'ถูกปฏิเสธ (เปิดได้ในการตั้งค่าเว็บไซต์ของ Chrome)',default:'ยังไม่ได้ขอ'}[Notification.permission]):'เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน จะแจ้งเป็นข้อความในหน้าเว็บ'} · แจ้งได้เฉพาะตอนหน้าเว็บเปิดอยู่ ถ้าต้องการ 24 ชม. ใช้ Gateway</p>
       </div></div>
+    ${gdSettingsHtml()}
     ${aiSettingsHtml()}
     <div class="panel"><div class="ph"><h3>Gateway (Raspberry Pi)</h3></div>
       <div class="form">
@@ -861,7 +876,7 @@ function renderSettings(ns){
   $('#gwTest').onclick=async()=>{gwSet();const st=await gatewayStatus(gwBase());S._gw=st;
     $('#gwInfo').textContent=st?`พบ Gateway: ${st.sensors.map(s=>s.asset).join(', ')} · ${st.readings.toLocaleString('th-TH')} ค่า · ดึงทุก ${st.intervalMin} นาที`:'ติดต่อ Gateway ไม่ได้ (ตรวจที่อยู่ และต้องอยู่วง LAN เดียวกัน; หน้า https เรียก http ไม่ได้)'};
   $('#gwSync').onclick=()=>{gwSet();gatewaySync()};
-  aiBindSettings();bindCopySettings();bindMergeTool();
+  aiBindSettings();bindCopySettings();bindMergeTool();gdBindSettings();
   storageInfo().then(i=>{const el=$('#storeInfo');if(i&&el)el.textContent+=` · ใช้ ${fmtBytes(i.used)} จาก ${fmtBytes(i.quota)}`});
 
   $('#sUnit').value=S.unit;$('#sTUnit').value=S.tunit;
@@ -915,7 +930,7 @@ function renderSettings(ns){
     save();render();toast('บันทึกเกณฑ์แล้ว');
   };
   $('#bDel').onclick=()=>{const n=series(a).length;if(!confirm(`ลบข้อมูลทั้งหมดของ "${a}" (${n} ค่า)? กู้คืนไม่ได้`))return;
-    S.readings=S.readings.filter(r=>r.asset!==a);delete S.assets[a];S.sel=null;save();render()};
+    S.readings=S.readings.filter(r=>r.asset!==a);delete S.assets[a];tomb().assets[a]=Date.now();S.sel=null;save();render()};
 }
 
 function css(){const g=getComputedStyle(document.documentElement),v=n=>g.getPropertyValue(n).trim();
@@ -1252,6 +1267,7 @@ async function bleFetch(){
     bleLog(added?`เพิ่ม ${added} ค่าใหม่ให้ ${asset}`:'ไม่มีค่าใหม่');
     toast(added?`ดึงข้อมูลจากเซนเซอร์ได้ ${added} ค่า`:'เซนเซอร์ยังไม่มีค่าใหม่');
     if(added)checkAlerts(asset,recs);
+    if(added&&gdCfg().auto&&gdTokenOk())setTimeout(()=>gdSync(false),500);
   }catch(e){
     err=e;bleLog('ผิดพลาด: '+e.message);toast('ดึงข้อมูลจากเซนเซอร์ไม่สำเร็จ: '+e.message);
   }finally{
@@ -2063,7 +2079,7 @@ $('#file').onchange=e=>{if(e.target.files.length)importFiles([...e.target.files]
 document.addEventListener('drop',e=>{const fs=[...e.dataTransfer.files];if(fs.length)importFiles(fs)});
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',render);
 if(window.Chart)Chart.defaults.font.family='"IBM Plex Sans Thai",system-ui,sans-serif';
-loadState().then(()=>{render();initApp()});
+loadState().then(()=>{render();initApp();checkLock()});
 </script>
 </body>
 </html>

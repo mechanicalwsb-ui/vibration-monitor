@@ -321,7 +321,7 @@ function renderAssetPage(){
     S.lastBy=m.by;S.maint.push(m);save();render();toast('เพิ่มบันทึกแล้ว');
   };
   p.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>showMaint(b.dataset.view));
-  p.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(!confirm('ลบบันทึกนี้?'))return;S.maint=S.maint.filter(m=>m.id!==b.dataset.del);save();render()});
+  p.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{if(!confirm('ลบบันทึกนี้?'))return;tomb().maint.push(b.dataset.del);S.maint=S.maint.filter(m=>m.id!==b.dataset.del);save();render()});
 }
 
 // ================= INSPECTION ROUTE + QR (#19) =================

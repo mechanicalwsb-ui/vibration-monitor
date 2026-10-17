@@ -98,22 +98,7 @@ async function importBackup(file,mode){
     save();persistBig(true);render();
     return toast(`กู้คืนแล้ว ${S.readings.length.toLocaleString('th-TH')} ค่า · FFT ${fft.length} ชุด`);
   }
-  // merge
-  const idx=new Set(S.readings.map(r=>r.asset+'|'+r.t));let nR=0;
-  for(const r of st.readings||[])if(!idx.has(r.asset+'|'+r.t)){S.readings.push(r);idx.add(r.asset+'|'+r.t);nR++}
-  for(const[a,c]of Object.entries(st.assets||{}))if(!S.assets[a])S.assets[a]=c;
-  for(const[id,s]of Object.entries(st.sensors||{}))if(!S.sensors[id])S.sensors[id]=s;
-  const mIds=new Set((S.maint||[]).map(m=>m.id));for(const m of st.maint||[])if(!mIds.has(m.id))S.maint.push(m);
-  for(const[k,list]of Object.entries(st.health||{})){
-    const cur=S.health[k]||(S.health[k]=[]),ts=new Set(cur.map(h=>h.t));
-    for(const h of list)if(!ts.has(h.t))cur.push(h);cur.sort((a,b)=>a.t-b.t);
-  }
-  for(const[a,list]of Object.entries(st.ai||{})){const cur=S.ai[a]||(S.ai[a]=[]),ids=new Set(cur.map(h=>h.id));for(const h of list)if(!ids.has(h.id))cur.push(h)}
-  {const ids=new Set((S.failures||[]).map(f=>f.id));S.failures=S.failures||[];for(const f of st.failures||[])if(!ids.has(f.id))S.failures.push(f)}
-  if(st.brgDb)S.brgDb=Object.assign({},st.brgDb,S.brgDb||{});
-  for(const k of['routes'])if(st[k]&&!S[k])S[k]=st[k];
-  const have=new Set((await FFTDB.all()).map(r=>r.key));let nF=0;
-  for(const r of fft)if(!have.has(r.key)){await FFTDB.put(r);nF++}
+  const{nR,nF}=await mergeState(st,fft);
   save();persistBig(true);render();
   toast(`รวมข้อมูลแล้ว: เพิ่ม ${nR.toLocaleString('th-TH')} ค่า · FFT ${nF} ชุด`);
 }
@@ -150,4 +135,47 @@ async function gatewaySync(quiet){
     S.gw=Object.assign(S.gw||{},{last:Date.now()});
     await importBackup(new File([text],'gateway.json'),'merge');
   }catch(e){if(!quiet)toast('ดึงข้อมูลจาก Gateway ไม่ได้: '+e.message)}
+}
+
+// ---- merging state from another device (backup file, gateway, Google Drive) ----
+// Deletes and renames are remembered as tombstones, so data removed or merged on one device does not
+// come back from another: S.tomb = {assets:{name:deletedAt}, maint:[ids], failures:[ids]}, S.renames = {from:to}
+function tomb(){return S.tomb||(S.tomb={assets:{},maint:[],failures:[]})}
+function finalName(a,ren){const seen=new Set();while(ren[a]&&!seen.has(a)){seen.add(a);a=ren[a]}return a}
+async function mergeState(st,fft){
+  const ren=Object.assign({},st.renames||{},S.renames||{});S.renames=ren;
+  const tb=tomb(),rt=st.tomb||{};
+  for(const[a,t]of Object.entries(rt.assets||{}))tb.assets[a]=Math.max(tb.assets[a]||0,t);
+  tb.maint=[...new Set([...(tb.maint||[]),...(rt.maint||[])])];tb.failures=[...new Set([...(tb.failures||[]),...(rt.failures||[])])];
+  const fix=a=>finalName(a,ren),dead=(a,t)=>tb.assets[a]!=null&&t<=tb.assets[a];
+  // apply renames/deletes that arrived from the other device to local data too
+  for(const r of S.readings)r.asset=fix(r.asset);
+  S.readings=S.readings.filter(r=>!dead(r.asset,r.t));
+  const idx=new Map(S.readings.map((r,i)=>[r.asset+'|'+r.t,i]));let nR=0;
+  for(const r0 of st.readings||[]){const r={...r0,asset:fix(r0.asset)};if(dead(r.asset,r.t))continue;const k=r.asset+'|'+r.t;
+    if(!idx.has(k)){idx.set(k,S.readings.length);S.readings.push(r);nR++}
+    else{const ex=S.readings[idx.get(k)];if(ex.live&&!r.live){Object.assign(ex,r);delete ex.live}}}
+  for(const[a0,c]of Object.entries(st.assets||{})){const a=fix(a0);if(!S.assets[a]&&!dead(a,Infinity))S.assets[a]=c;else if(S.assets[a])for(const[k,v]of Object.entries(c))if(S.assets[a][k]==null)S.assets[a][k]=v}
+  for(const k of Object.keys(S.assets))if(fix(k)!==k){const t=fix(k);S.assets[t]=Object.assign({},S.assets[k],S.assets[t]||{});delete S.assets[k]}
+  for(const[id,sv]of Object.entries(st.sensors||{})){if(!S.sensors[id])S.sensors[id]=sv;else{const m=S.sensors[id];m.names=[...new Set([...(m.names||[]),...(sv.names||[])])];if(!m.mac&&sv.mac)m.mac=sv.mac}}
+  for(const sv of Object.values(S.sensors))sv.asset=fix(sv.asset);
+  const mIds=new Set((S.maint||[]).map(m=>m.id));for(const m of st.maint||[])if(!mIds.has(m.id))S.maint.push({...m,asset:fix(m.asset)});
+  S.maint=S.maint.filter(m=>!tb.maint.includes(m.id)).map(m=>({...m,asset:fix(m.asset)}));
+  for(const[k,list]of Object.entries(st.health||{})){
+    const cur=S.health[k]||(S.health[k]=[]),ts=new Set(cur.map(h=>h.t));
+    for(const h of list)if(!ts.has(h.t))cur.push(h);cur.sort((a,b)=>a.t-b.t);
+  }
+  S.ai=S.ai||{};for(const[a0,list]of Object.entries(st.ai||{})){const a=fix(a0),cur=S.ai[a]||(S.ai[a]=[]),ids=new Set(cur.map(h=>h.id));for(const h of list)if(!ids.has(h.id))cur.push(h)}
+  {S.failures=S.failures||[];const ids=new Map(S.failures.map(f=>[f.id,f]));
+    for(const f of st.failures||[]){const ex=ids.get(f.id);if(!ex)S.failures.push({...f,asset:fix(f.asset)});else if((f.mt||0)>(ex.mt||0))Object.assign(ex,f,{asset:fix(f.asset)})}
+    S.failures=S.failures.filter(f=>!tb.failures.includes(f.id))}
+  if(st.brgDb)S.brgDb=Object.assign({},st.brgDb,S.brgDb||{});
+  if(st.routes){S.routes=S.routes||[];const ids=new Set(S.routes.map(r=>r.id));for(const r of st.routes)if(!ids.has(r.id))S.routes.push(r)}
+  if(st.fav)S.fav=[...new Set([...(S.fav||[]),...st.fav].map(fix))];
+  let nF=0;
+  if(fft&&fft.length){const have=new Set((await FFTDB.all()).map(r=>r.key));
+    for(const r of fft){const a=fix(r.asset);if(dead(a,r.ts*1000))continue;const key=a===r.asset?r.key:a+r.key.slice(r.asset.length);
+      if(!have.has(key)){await FFTDB.put({...r,asset:a,key});have.add(key);nF++}}}
+  if(S.sel)S.sel=fix(S.sel);
+  return{nR,nF};
 }
