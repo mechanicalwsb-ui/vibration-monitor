@@ -167,9 +167,9 @@ async function gatewaySync(quiet){
 // ---- merging state from another device (backup file, gateway, Google Drive) ----
 // Deletes, moves and renames are remembered as tombstones, so data removed or merged on one device does not
 // come back from another: S.tomb = {assets:{name:deletedAt}, maint/failures/routes/ai/sensors:[ids],
-// moves:[{from,to,t0,t1,at}]}, S.renames = {from:{to,t}} (to null = cancelled), S.favT = {name:changedAt}.
+// fft:[capture keys], moves:[{from,to,t0,t1,at}]}, S.renames = {from:{to,t}} (to null = cancelled), S.favT = {name:changedAt}.
 // Records edited on several devices carry mt (stampChanges) and the newest version wins.
-const TOMB_LISTS=['maint','failures','routes','ai','sensors'];
+const TOMB_LISTS=['maint','failures','routes','ai','sensors','fft'];
 function tomb(){const tb=S.tomb||(S.tomb={assets:{}});tb.assets=tb.assets||{};return tb}
 function tombList(k){const tb=tomb();return tb[k]||(tb[k]=[])}
 // Everything stored for one machine, on this device (used by delete and when another device's delete arrives)
@@ -246,9 +246,10 @@ async function mergeState(st,fft){
     for(const n of new Set([...lf,...rf,...Object.keys(lt),...Object.keys(rtT)])){const a=lt[n]||0,b=rtT[n]||0;
       if(b>a?rf.has(n):a>b?lf.has(n):(lf.has(n)||rf.has(n)))out.add(fix(n));if(a||b)FT[n]=Math.max(a,b)}
     S.fav=[...out];S.favT=FT}
-  let nF=0;
-  if(fft&&fft.length){const have=new Set((await FFTDB.all()).map(r=>r.key));
-    for(const r of fft){const a=fix(r.asset);if(dead(a,r.ts*1000))continue;const key=a===r.asset?r.key:a+r.key.slice(r.asset.length);
+  let nF=0;const deadF=T('fft');
+  if(deadF.size){const gone=(await FFTDB.keys()).filter(k=>deadF.has(k));if(gone.length){await FFTDB.del(gone);gone.forEach(k=>faDecCache.delete(k))}}
+  if(fft&&fft.length){const have=new Set(await FFTDB.keys());
+    for(const r of fft){const a=fix(r.asset);if(dead(a,r.ts*1000)||deadF.has(r.key))continue;const key=a===r.asset?r.key:a+r.key.slice(r.asset.length);if(deadF.has(key))continue;
       if(!have.has(key)){await FFTDB.put({...r,asset:a,key});have.add(key);nF++}}}
   if(S.sel)S.sel=fix(S.sel);
   stampChanges(false); // what came in keeps its own edit time; only later local edits get a new one

@@ -114,7 +114,7 @@ async function renderFFTPage(){
   <div class="mainhead"><h2>วิเคราะห์ FFT · ${esc(S.sel)}</h2>
     ${seg('faMode',FA_MODES,FA.mode)}</div>
   <div class="panel fa-ctl">
-    <label>ชุดข้อมูล<select id="faA">${list.map((r,i)=>opt(r.key,recLabel(r,i),recA.key)).join('')}</select></label>
+    <label>ชุดข้อมูล<span class="row" style="flex-wrap:nowrap;gap:6px"><select id="faA" style="flex:1;min-width:0">${list.map((r,i)=>opt(r.key,recLabel(r,i),recA.key)).join('')}</select><button type="button" class="btn sm" id="faDel" title="ลบชุดข้อมูล FFT ที่ไม่ต้องการ">🗑 ลบ…</button></span></label>
     <label>เปรียบเทียบกับ<select id="faB"><option value="">— ไม่เทียบ —</option>${list.filter(r=>r.key!==recA.key).map(r=>opt(r.key,recLabel(r,list.indexOf(r)),FA.keyB)).join('')}</select></label>
     <label>แกน${seg('faAxis',[['all','ทุกแกน'],['x','X'],['y','Y'],['z','Z']],FA.axis)}</label>
     <label>ปริมาณ${seg('faQty',[['vel','Velocity'],['acc','Acceleration']],FA.qty)}</label>
@@ -152,6 +152,7 @@ function faBind(list){
   const segBind=(id,fn)=>document.querySelectorAll('#'+id+' button').forEach(b=>b.onclick=()=>{fn(b.dataset.v);re()});
   segBind('faMode',v=>{FA.mode=v;cancelAnimationFrame(motionAnim)});segBind('faCur',v=>{FA.cur={mode:v,pts:[]}});segBind('faXu',v=>FA.xu=v);segBind('faAxis',v=>FA.axis=v);segBind('faQty',v=>FA.qty=v);segBind('faLog',v=>FA.logY=v==='log');
   $('#faA').onchange=e=>{FA.keyA=e.target.value;if(FA.keyB===FA.keyA)FA.keyB='';re()};
+  $('#faDel').onclick=()=>faManageDelete(list,FA.keyA);
   $('#faB').onchange=e=>{FA.keyB=e.target.value;re()};
   if($('#faBand'))$('#faBand').onchange=e=>{FA.band=e.target.value;FA.fmin=FA.fmax=null;re()};
   const num=v=>v===''?null:+v;
@@ -388,4 +389,32 @@ function faAfterRender(decA,recA,list,f1,c){
   $('#faImp').onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='.csv,.txt';
     i.onchange=async()=>{const f=i.files[0];if(!f)return;const u=prompt('หน่วยของค่าในไฟล์?\nพิมพ์: mms = mm/s, ips = in/s, g = g, ms2 = m/s²\n(ไฟล์ time signal ใช้ g หรือ ms2)','mms');if(!u)return;
       try{const r=await importFftCsv(f,S.sel,['mms','ips','g','ms2'].includes(u.trim())?u.trim():'mms');FA.keyA=r.key;toast('นำเข้าแล้ว: '+f.name);renderFFTPage()}catch(e){toast('นำเข้าไม่ได้: '+e.message)}};i.click()};
+}
+
+// ---------- delete unwanted FFT captures ----------
+// Only the copy kept by this page (and its Drive sync) is removed; the sensor itself is never touched.
+// Deleted keys are remembered (S.tomb.fft) so another device's sync does not bring them back.
+function faManageDelete(list,curKey){
+  const ref=cfg(S.sel).refFft,label=(r,i)=>`${r.key===ref?'★ ':''}${KIND_LABEL[r.kind||'alarm']||r.kind||''}${r.tag==='bump'?' (bump test)':''}${r.src?' '+r.src:''} · ${dFull(r.ts*1000)}${i===0?' (ล่าสุด)':''}`;
+  infoDialog('ลบชุดข้อมูล FFT · '+esc(S.sel),`<p class="muted" style="margin:0 0 8px;font-size:12.5px">เลือกชุดที่ไม่ต้องการ แล้วกดลบ · ลบเฉพาะข้อมูลที่เก็บในหน้าเว็บนี้และใน Google Drive (ทุกเครื่องที่ซิงก์จะลบตาม) ไม่แตะข้อมูลในเซนเซอร์ · กู้คืนไม่ได้ ยกเว้นจากไฟล์สำรอง</p>
+    <div class="row" style="margin-bottom:6px"><button type="button" class="btn sm" id="fdAll">เลือกทั้งหมด</button><button type="button" class="btn sm" id="fdNone">ไม่เลือก</button></div>
+    ${list.map((r,i)=>`<label class="check" style="display:flex;font-size:13.5px;padding:3px 0"><input type="checkbox" data-fd="${esc(r.key)}" ${r.key===curKey?'checked':''}> ${esc(label(r,i))}</label>`).join('')}
+    <div class="row" style="justify-content:flex-end;margin-top:10px"><button type="button" class="btn" onclick="exportBackup()">สำรองข้อมูลก่อน</button><button type="button" class="btn danger" id="fdGo">ลบที่เลือก</button></div>`);
+  const boxes=()=>[...document.querySelectorAll('[data-fd]')];
+  $('#fdAll').onclick=()=>boxes().forEach(b=>b.checked=true);
+  $('#fdNone').onclick=()=>boxes().forEach(b=>b.checked=false);
+  $('#fdGo').onclick=async()=>{const keys=boxes().filter(b=>b.checked).map(b=>b.dataset.fd);
+    if(!keys.length)return toast('ยังไม่ได้เลือก');
+    if(!confirm(`ลบ FFT ${keys.length} ชุดของ "${S.sel}"?\n\nลบแล้วกู้คืนไม่ได้ (ยกเว้นจากไฟล์สำรอง) และเครื่องอื่นที่ซิงก์จะลบตาม`))return;
+    $('#fdGo').disabled=true;
+    try{await deleteFfts(keys);$('#infoDlg').close();toast(`ลบ FFT แล้ว ${keys.length} ชุด`)}
+    catch(e){$('#fdGo').disabled=false;toast('ลบไม่สำเร็จ: '+e.message)}};
+}
+async function deleteFfts(keys){
+  const tl=tombList('fft');for(const k of keys)if(!tl.includes(k))tl.push(k);
+  await FFTDB.del(keys);
+  for(const k of keys)faDecCache.delete(k);
+  for(const c of Object.values(S.assets||{}))if(keys.includes(c.refFft))delete c.refFft; // reference capture gone
+  if(keys.includes(FA.keyA))FA.keyA=null;if(keys.includes(FA.keyB))FA.keyB='';if(keys.includes(FUI.key))FUI.key=null;
+  save();render();
 }
