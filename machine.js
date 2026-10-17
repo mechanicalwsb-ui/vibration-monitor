@@ -249,3 +249,85 @@ function playVideoOut(){
   const step=t=>{if(!VID.playing||!document.body.contains(out))return;if(t-last>=1000/VID.fps){g.putImageData(VID.frames[i],0,0);i=(i+1)%VID.frames.length;last=t}requestAnimationFrame(step)};
   requestAnimationFrame(step);
 }
+
+// ---------- one sensor = one machine: find duplicates and merge them under one chosen name ----------
+// A sensor ends up under two machine names when it is renamed, or seen again under a new browser id.
+// Evidence used: the sensor's own name history, the same MAC, and identical readings at the same times.
+function noteSensorName(sv,name){if(!sv||!name)return;sv.names=sv.names||[];if(!sv.names.includes(name))sv.names.push(name)}
+function findDuplicateAssets(){
+  const ns=names(),groups=[],seen=new Set(),dismissed=S.dupIgnore||[];
+  const add=(list,why,mac)=>{list=[...new Set(list)].filter(a=>ns.includes(a));if(list.length<2)return;
+    const key=list.slice().sort().join('|');if(seen.has(key)||dismissed.includes(key))return;seen.add(key);groups.push({assets:list,why,mac})};
+  // 1. name history and MAC of each remembered sensor
+  const byMac={};
+  for(const sv of Object.values(S.sensors||{})){
+    add([sv.asset,...(sv.names||[])],'เซนเซอร์ตัวนี้เคยใช้ชื่อเหล่านี้',sv.mac);
+    if(sv.mac)(byMac[sv.mac]=byMac[sv.mac]||[]).push(sv.asset,...(sv.names||[]));
+  }
+  for(const[mac,list]of Object.entries(byMac))add(list,'MAC เดียวกัน '+mac,mac);
+  // 2. identical readings at identical timestamps (same sensor downloaded under two names)
+  const idx=new Map();for(const a of ns){const m=new Map();for(const r of series(a))if(!r.live&&r.vx!=null)m.set(r.t,r);idx.set(a,m)}
+  for(let i=0;i<ns.length;i++)for(let j=i+1;j<ns.length;j++){
+    const A=idx.get(ns[i]),B=idx.get(ns[j]);let same=0;
+    for(const[t,r]of A){const q=B.get(t);if(q&&q.vx===r.vx&&q.vy===r.vy&&q.vz===r.vz)same++}
+    if(same>=10&&same>=0.3*Math.min(A.size,B.size)){const sv=Object.values(S.sensors).find(v=>v.asset===ns[i]||v.asset===ns[j]);
+      add([ns[i],ns[j]],`ค่าที่วัดตรงกันทุกตัว ${same} ค่า (เวลาเดียวกัน)`,sv&&sv.mac)}
+  }
+  // groups sharing a machine name are the same sensor: join them so the user picks one name once
+  const out=[];
+  for(const g of groups){const hit=out.find(o=>o.assets.some(x=>g.assets.includes(x)));
+    if(hit){hit.assets=[...new Set([...hit.assets,...g.assets])];if(!hit.why.includes(g.why))hit.why+=' · '+g.why;hit.mac=hit.mac||g.mac}else out.push({...g,assets:[...g.assets]})}
+  return out.filter(o=>!dismissed.includes(o.assets.slice().sort().join('|')));
+}
+function dupBannerHtml(){
+  const g=findDuplicateAssets();if(!g.length)return'';
+  return g.map((d,i)=>`<div class="panel banner warn" data-dup="${i}"><span>พบเครื่องจักร ${d.assets.length} ชื่อที่น่าจะเป็น<b>เซนเซอร์ตัวเดียวกัน</b>${d.mac?` (MAC ${esc(d.mac)})`:''}: ${d.assets.map(a=>`<b>${esc(a)}</b> (${series(a).length} ค่า)`).join(', ')} · ${esc(d.why)}</span>
+    <span class="row"><button class="btn primary" onclick="askMerge(${i})">เลือก 1 ชื่อแล้วรวมข้อมูล</button><button class="btn sm" onclick="ignoreDup(${i})">ไม่ใช่ตัวเดียวกัน</button></span></div>`).join('');
+}
+function ignoreDup(i){const d=findDuplicateAssets()[i];if(!d)return;S.dupIgnore=[...(S.dupIgnore||[]),d.assets.slice().sort().join('|')];save();render()}
+function askMerge(i,assetsIn){
+  const d=assetsIn?{assets:assetsIn}:findDuplicateAssets()[i];if(!d)return;
+  const def=d.assets.slice().sort((a,b)=>series(b).at(-1).t-series(a).at(-1).t)[0];
+  infoDialog('รวมเป็นเครื่องเดียว — เลือกชื่อที่จะใช้',`<div class="form" style="padding:0">
+    ${d.assets.map(a=>{const s=series(a);return`<label class="full check" style="font-size:14px"><input type="radio" name="mgName" value="${esc(a)}" ${a===def?'checked':''}> <b>${esc(a)}</b> <span class="muted">· ${s.length} ค่า · ${dShort(s[0].t)} – ${dShort(s.at(-1).t)}</span></label>`}).join('')}
+    <label class="full check" style="font-size:14px"><input type="radio" name="mgName" value="__new"> ชื่อใหม่: <input id="mgNew" placeholder="เช่น P-101 ปั๊มน้ำดิบ" style="flex:1"></label>
+    <p class="full muted" style="margin:0;font-size:12px">ข้อมูลทั้งหมด (trend, FFT, บันทึกซ่อม, รายงานความผิดปกติ, ผล AI, การตั้งค่า) จะย้ายมาอยู่ในชื่อที่เลือก ค่าที่ซ้ำเวลาเดียวกันจะเก็บไว้ค่าเดียว เซนเซอร์จะใช้ชื่อนี้ต่อไป · แนะนำให้กด "สำรองข้อมูล" ก่อน</p>
+    <div class="full row" style="justify-content:flex-end"><button class="btn" onclick="exportBackup()">สำรองข้อมูลก่อน</button><button class="btn primary" id="mgGo">รวมข้อมูล</button></div></div>`);
+  $('#mgGo').onclick=async()=>{let to=(document.querySelector('input[name=mgName]:checked')||{}).value;
+    if(to==='__new'){to=$('#mgNew').value.trim();if(!to)return toast('ใส่ชื่อใหม่')}
+    $('#mgGo').disabled=true;const n=await mergeAssets(d.assets.filter(a=>a!==to),to);$('#infoDlg').close();render();toast(`รวมเป็น "${to}" แล้ว (${n} ค่า)`)};
+}
+// Move everything stored under `froms` to `to`
+async function mergeAssets(froms,to){
+  froms=froms.filter(a=>a!==to);if(!froms.length)return series(to).length;
+  const keep=new Map();for(const r of S.readings)if(r.asset===to)keep.set(r.t,r);
+  S.readings=S.readings.filter(r=>{
+    if(!froms.includes(r.asset))return true;
+    const ex=keep.get(r.t);if(ex){if(ex.live&&!r.live){Object.assign(ex,r,{asset:to});delete ex.live}return false}
+    r.asset=to;keep.set(r.t,r);return true});
+  const tc=cfg(to);
+  for(const f of froms){const fc=S.assets[f];if(fc){for(const[k,v]of Object.entries(fc))if(tc[k]==null||(k==='profile'&&!Object.keys(tc.profile||{}).length))tc[k]=v;delete S.assets[f]}}
+  const ren=list=>(list||[]).forEach(x=>{if(froms.includes(x.asset))x.asset=to});
+  ren(S.maint);ren(S.failures);
+  if(S.ai)for(const f of froms)if(S.ai[f]){S.ai[to]=[...(S.ai[to]||[]),...S.ai[f]];delete S.ai[f]}
+  for(const sv of Object.values(S.sensors||{}))if(froms.includes(sv.asset)||sv.asset===to){froms.forEach(f=>noteSensorName(sv,f));sv.asset=to;sv.auto=false;noteSensorName(sv,to)}
+  if(ble.cfg&&froms.includes(ble.cfg.asset))ble.cfg.asset=to;
+  (S.routes||[]).forEach(r=>{r.assets=[...new Set(r.assets.map(a=>froms.includes(a)?to:a))]});
+  S.fav=[...new Set((S.fav||[]).map(a=>froms.includes(a)?to:a))];
+  if(froms.includes(S.sel)||!S.sel)S.sel=to;
+  // FFT captures: the key starts with the machine name, so re-store them under the new key
+  try{const all=await FFTDB.all(),have=new Set(all.map(r=>r.key));const db=await FFTDB.open();
+    for(const r of all)if(froms.includes(r.asset)){const old=r.key,nk=to+old.slice(r.asset.length);r.asset=to;r.key=nk;
+      if(!have.has(nk))await FFTDB.put(r);await new Promise(res=>{const t=db.transaction('rec','readwrite');t.objectStore('rec').delete(old);t.oncomplete=res;t.onerror=res})}
+    if(S.assets[to]&&froms.some(f=>String(S.assets[to].refFft||'').startsWith(f+'|')))S.assets[to].refFft=to+S.assets[to].refFft.slice(S.assets[to].refFft.indexOf('|'))}catch(e){console.warn(e)}
+  faDecCache.clear();save();persistBig(true);
+  return series(to).length;
+}
+function mergeToolHtml(ns){
+  if(ns.length<2)return'';
+  return`<div class="panel span"><div class="ph"><h3>รวมเครื่องจักร (ชื่อซ้ำของเซนเซอร์เดียวกัน)</h3></div><div class="pbody">
+    <div class="row">${ns.map(n=>`<label class="check" style="font-size:13px"><input type="checkbox" data-mg="${esc(n)}"> ${esc(n)} <span class="muted">(${series(n).length})</span></label>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button class="btn" id="mgPick">รวมที่เลือก…</button></div>
+    <p class="muted" style="margin:6px 0 0;font-size:12px">ใช้เมื่อเครื่องเดียวกันถูกเก็บเป็นหลายชื่อ เลือก 2 ชื่อขึ้นไป แล้วเลือกชื่อที่จะใช้ต่อ</p></div></div>`;
+}
+function bindMergeTool(){if(!$('#mgPick'))return;$('#mgPick').onclick=()=>{const sel=[...document.querySelectorAll('[data-mg]:checked')].map(i=>i.dataset.mg);if(sel.length<2)return toast('เลือกอย่างน้อย 2 เครื่อง');askMerge(null,sel)}}
