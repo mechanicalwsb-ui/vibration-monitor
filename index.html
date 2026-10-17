@@ -12,16 +12,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.8.2"></script>
-<script src="fft-analysis.js?v=2.8.2"></script>
-<script src="store.js?v=2.8.2"></script>
-<script src="insights.js?v=2.8.2"></script>
-<script src="pages.js?v=2.8.2"></script>
-<script src="ai.js?v=2.8.2"></script>
-<script src="tools.js?v=2.8.2"></script>
-<script src="machine.js?v=2.8.2"></script>
-<script src="site-config.js?v=2.8.2"></script>
-<script src="gdrive.js?v=2.8.2"></script>
+<script src="ia3-fft.js?v=2.9.0"></script>
+<script src="fft-analysis.js?v=2.9.0"></script>
+<script src="store.js?v=2.9.0"></script>
+<script src="insights.js?v=2.9.0"></script>
+<script src="pages.js?v=2.9.0"></script>
+<script src="ai.js?v=2.9.0"></script>
+<script src="tools.js?v=2.9.0"></script>
+<script src="machine.js?v=2.9.0"></script>
+<script src="site-config.js?v=2.9.0"></script>
+<script src="gdrive.js?v=2.9.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -293,6 +293,9 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
 .rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
 .plabel svg{width:38mm;height:38mm}
+.batt-row{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:12px;align-items:center;margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+.batt-fc{font-size:13px}.batt-fc b{display:block;font-size:18px;font-weight:600;margin:2px 0}
+@media (max-width:700px){.batt-row{grid-template-columns:minmax(0,1fr)}}
 /* live log dock: a right-hand column on wide screens, a corner box elsewhere */
 .main-wrap{min-width:0;display:grid;grid-template-columns:minmax(0,1fr);align-items:start}
 .log-dock{position:fixed;right:16px;bottom:16px;z-index:40;width:min(380px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}
@@ -452,7 +455,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.8.2',APP_BUILD='2026-10-17T11:45:05+07:00';
+const APP_VERSION='2.9.0',APP_BUILD='2026-10-17T11:54:43+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -961,7 +964,7 @@ function renderSettings(ns){
 }
 
 function css(){const g=getComputedStyle(document.documentElement),v=n=>g.getPropertyValue(n).trim();
-  return{ink:v('--ink'),muted:v('--muted'),line:v('--line'),x:v('--x'),y:v('--y'),z:v('--z'),t:v('--t'),r:v('--r'),zb:v('--zb'),zc:v('--zc'),zd:v('--zd')}}
+  return{ink:v('--ink'),muted:v('--muted'),line:v('--line'),x:v('--x'),y:v('--y'),z:v('--z'),t:v('--t'),r:v('--r'),za:v('--za'),zb:v('--zb'),zc:v('--zc'),zd:v('--zd')}}
 function line(label,color,pts,extra){return Object.assign({label,data:pts,borderColor:color,backgroundColor:color,borderWidth:1.6,pointRadius:pts.length>120?0:2,pointHoverRadius:4,tension:.25,spanGaps:false},extra)}
 function ref(label,color,y,x0,x1){return{label,data:[{x:x0,y},{x:x1,y}],borderColor:color,backgroundColor:color,borderDash:[6,4],borderWidth:1.2,pointRadius:0,pointHoverRadius:0,isRef:true}}
 function opts(yTitle,extraScales){const c=css();
@@ -1301,7 +1304,6 @@ async function bleFetch(){
     bleLog(added?`เพิ่ม ${added} ค่าใหม่ให้ ${asset}`:'ไม่มีค่าใหม่');
     toast(added?`ดึงข้อมูลจากเซนเซอร์ได้ ${added} ค่า`:'เซนเซอร์ยังไม่มีค่าใหม่');
     if(added)checkAlerts(asset,recs);
-    if(added&&gdCfg().auto&&gdTokenOk())setTimeout(()=>gdSync(false),500);
   }catch(e){
     err=e;bleLog('ผิดพลาด: '+e.message);toast('ดึงข้อมูลจากเซนเซอร์ไม่สำเร็จ: '+e.message);
   }finally{
@@ -1872,13 +1874,17 @@ function renderHealth(){
     const sv=S.sensors[id],h=healthSummary(id),l=h.last||{},sch=sv.sched||{};
     return`<div class="hcard"><h4>${esc(sv.asset)} <span class="tag ${sc[h.score][0]}">${sc[h.score][1]}</span>${sv.mac?`<span class="muted mono" style="font-size:12px">${sv.mac}</span>`:''}</h4>
       <div class="hgrid">
-        <div>แบตเตอรี่<b>${l.batt?l.batt.toFixed(2)+' V':'–'}${h.bars?' · '+'▮'.repeat(h.bars)+'▯'.repeat(4-h.bars):''}</b>${h.bars?`เต็ม &gt; ${h.cut[2].toFixed(2)} V · เปลี่ยนเมื่อ ≤ ${h.cut[0].toFixed(2)} V<br>`:''}${h.battMonths!=null?`เหลือ ~${h.battMonths.toFixed(1)} เดือน`:''}</div>
+        <div>แบตเตอรี่<b>${l.batt?l.batt.toFixed(2)+' V':'–'}${h.bars?' · '+'▮'.repeat(h.bars)+'▯'.repeat(4-h.bars):''}</b>${h.bars?`เต็ม &gt; ${h.cut[2].toFixed(2)} V · เปลี่ยนเมื่อ ≤ ${h.cut[0].toFixed(2)} V<br>`:''}${h.bpts&&h.bpts.length?`≈ ${Math.round(h.bpts.at(-1).pct)}%`:''}</div>
         <div>นาฬิกาเซนเซอร์<b>${l.drift==null?'–':h.clockBad?'ไม่ได้ตั้งเวลา':(l.fixed||(l.fixed==null&&l.reset&&Math.abs(l.drift)<=86400))?'ตั้งเวลาแล้ว ✓':fmtDrift(l.drift)}</b>รีสตาร์ท ${h.resets?h.resets.length:0} ครั้ง</div>
         <div>ความครบของข้อมูล 30 วัน<b>${h.complete!=null?Math.round(h.complete*100)+'%':'–'}</b>${l.trendSec?'บันทึกทุก '+Math.round(l.trendSec/60)+' นาที':''}</div>
         <div>เชื่อมต่อสำเร็จครั้งแรก<b>${h.firstTry!=null?Math.round(h.firstTry*100)+'%':'–'}</b>${h.n} ครั้งที่บันทึก</div>
         <div>สัญญาณ<b>${h.rssi!=null?h.rssi+' dBm':'–'}</b>จากการสแกน</div>
         <div>ตัวเครื่อง<b>${l.devType===9?'Digital Accel.':l.devType===8?'มาตรฐาน':'–'}</b>${l.rev!=null?'firmware rev '+l.rev:''}${l.runH?' · '+l.runH.toLocaleString('th-TH')+' ชม.':''}</div>
       </div>
+      ${h.bpts&&h.bpts.length?`<div class="batt-row"><div class="cbox" style="height:170px;padding:4px 0 0"><canvas data-bc="${esc(id)}"></canvas></div>
+        <div class="batt-fc">${h.bfc&&h.bfc.ok?`<div class="muted">คาดว่าต้องเปลี่ยนแบต</div><b>${new Date(h.bfc.date).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})}</b><div>อีก ~${Math.round(h.bfc.days)} วัน · ลดลง ${Math.abs(h.bfc.perMonth).toFixed(1)}% ต่อเดือน</div><div class="muted" style="font-size:11.5px">ความเชื่อมั่นของเส้นแนวโน้ม R² ${h.bfc.r2.toFixed(2)}</div>`
+          :`<div class="muted">คาดการณ์วันเปลี่ยนแบต</div><b>${h.bars===1?'ควรเปลี่ยนแล้ว':'ยังคาดการณ์ไม่ได้'}</b><div class="muted" style="font-size:12px">${esc((h.bfc&&h.bfc.why)||'')}</div>`}
+          <div class="muted" style="font-size:11px;margin-top:6px">% ประมาณจากแรงดันเทียบเกณฑ์ของแอป i-ALERT (0% = 1 ขีด ควรเปลี่ยน) แบตลิเธียมแรงดันจะทรงตัวนานแล้วตกเร็วช่วงท้าย วันที่คาดการณ์จะปรับใหม่ทุกครั้งที่เชื่อมต่อ</div></div></div>`:''}
       ${h.issues.length?`<ul style="margin:8px 0 0;padding-left:18px;font-size:12.5px">${h.issues.map(([k,t])=>`<li class="${k==='bad'?'up':''}">${t}</li>`).join('')}</ul>`:''}
       <div class="row" style="margin-top:8px;font-size:12.5px;border-top:1px solid var(--line);padding-top:8px">
         <label class="check"><input type="checkbox" data-sch="${esc(id)}" ${sch.on?'checked':''}> สั่งวัด FFT ตามตาราง</label>
@@ -1887,6 +1893,17 @@ function renderHealth(){
         <span class="muted">${sch.on?`ครั้งล่าสุด ${sv.schedLog&&sv.schedLog.length?dFull(Math.max(...sv.schedLog)):'ยังไม่เคย'}${sv.schedFail>=3?' · <span class="up">หยุดชั่วคราว (ไม่สำเร็จ 3 ครั้ง)</span>':''}`:'ปิดอยู่'}</span>
       </div></div>`}).join('')||'<p class="muted" style="margin:0">ยังไม่มีเซนเซอร์</p>'}
     <p class="muted" style="margin:4px 0 0;font-size:12px">ข้อมูลสุขภาพเก็บทุกครั้งที่ดึงข้อมูล · "สั่งวัด FFT ตามตาราง" เขียนคำสั่งวัดลงเซนเซอร์แบบเดียวกับปุ่ม "สั่งวัด FFT ใหม่" (ผ่านด่านป้องกันทุกข้อ) ทำงานเฉพาะตอนที่ดึงข้อมูลอยู่และเครื่องเดิน ไม่เกินวันละ 2 ครั้ง และข้ามเมื่อแบตต่ำ</p></div>`;
+  (window._hCharts||[]).forEach(c=>c.destroy());window._hCharts=[];
+  el.querySelectorAll('canvas[data-bc]').forEach(cv_=>{
+    const h=healthSummary(cv_.dataset.bc),k=css(),pts=h.bpts.map(p=>({x:p.t,y:+p.pct.toFixed(1)}));
+    const ds=[{label:'แบต %',data:pts,borderColor:k.za,backgroundColor:k.za,borderWidth:1.8,pointRadius:pts.length>60?0:2.5,tension:.2}];
+    let xMax=pts.at(-1).x;
+    if(h.bfc&&h.bfc.ok){const t0=Math.max(pts[0].x,Date.now()-90*DAY);xMax=Math.max(xMax,Math.min(h.bfc.date,Date.now()+730*DAY));
+      ds.push({label:'คาดการณ์',data:[{x:t0,y:+(h.bfc.a+h.bfc.b*t0/DAY).toFixed(1)},{x:xMax,y:+Math.max(0,h.bfc.a+h.bfc.b*xMax/DAY).toFixed(1)}],borderColor:k.ink,backgroundColor:k.ink,borderDash:[8,5],borderWidth:1.3,pointRadius:0,isRef:true})}
+    const o=opts('%');o.scales.y.min=0;o.scales.y.max=100;o.scales.x.max=xMax;o.plugins.legend.display=ds.length>1;
+    o.plugins.tooltip.callbacks.label=it=>{const p=h.bpts[it.dataIndex];return it.datasetIndex?'คาดการณ์ '+it.parsed.y.toFixed(0)+'%':`${it.parsed.y.toFixed(0)}% · ${p?p.v.toFixed(2)+' V'+(p.T!=null?' @ '+p.T.toFixed(0)+' °C':''):''}`};
+    window._hCharts.push(new Chart(cv_,{type:'line',data:{datasets:ds},options:o}));
+  });
   el.querySelectorAll('[data-sch]').forEach(i=>i.onchange=()=>{
     const sv=S.sensors[i.dataset.sch];
     if(i.checked&&!confirm(`เปิด "สั่งวัด FFT ตามตาราง" ให้ ${sv.asset}?\n\n• หน้าเว็บจะเขียนคำสั่งวัด FFT ลงเซนเซอร์เองโดยไม่ถามทุกครั้ง (คำสั่งเดียวกับปุ่ม "สั่งวัด FFT ใหม่")\n• ทำเฉพาะตอนที่กำลังดึงข้อมูล เครื่องเดินอยู่ แบตไม่ต่ำ และนาฬิกาตรง\n• ไม่เกินวันละ 2 ครั้ง และหยุดเองถ้าไม่สำเร็จ 3 ครั้งติด\n• การวัดแต่ละครั้งใช้แบตเซนเซอร์เพิ่ม\n\nกด OK เพื่อเปิด`)){i.checked=false;return}

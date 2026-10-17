@@ -176,7 +176,7 @@ setInterval(updateWakeLock,20000);
 function recordHealth(dev,s,res){
   const sv=S.sensors[dev.id]||{},key=(s&&s.mac)||sv.mac||dev.id,list=S.health[key]||(S.health[key]=[]);
   const row=scan.rows.get(dev.id);
-  const h={t:Date.now(),ok:res.ok,att:res.attempts,ms:res.ms,rssi:row&&row.rssi!=null?row.rssi:null};
+  const h={t:Date.now(),ok:res.ok,att:res.attempts,ms:res.ms,rssi:row&&row.rssi!=null?row.rssi:null,temp:s&&s.rec&&s.rec.temp!=null?s.rec.temp:null};
   if(s)Object.assign(h,{batt:s.battV,drift:Math.round(s.clock-Date.now()/1000),reset:!clockOk(s)||!!s.wasReset,clockBad:!clockOk(s),fixed:!!s.wasReset&&clockOk(s),batLow:s.flags.battery,
     rev:s.rev,devType:s.devType,trendSec:s.trendSec,wakeSec:s.wakeSec,runH:Math.round(s.runH)});
   list.push(h);if(list.length>3000)list.splice(0,list.length-3000);
@@ -190,19 +190,37 @@ function recordHealth(dev,s,res){
 // cut-offs 3.02 / 2.93 / 2.74 V plus 0.0049 V per °C of sensor temperature; 1 bar = battery alarm
 const battCut=T=>[2.74,2.93,3.02].map(b=>b+0.0049*(T==null?25:T));
 function batteryBars(v,T){if(!(v>0))return null;const c=battCut(T);return v>c[2]?4:v>c[1]?3:v>c[0]?2:1}
-const BATT_EMPTY=2.74+0.0049*25; // V, the app's 1-bar cut-off at 25 °C, used for the months-left estimate
+const BATT_EMPTY=2.74+0.0049*25; // V, the app's 1-bar cut-off at 25 °C
+// Battery %: 0 % at the app's 1-bar cut-off (replace), 100 % at a fresh cell (3.30 V under load at 25 °C),
+// both shifted 0.0049 V/°C like the app. Lithium cells hold their voltage until late, so this is a rough
+// guide that drops faster near the end; the forecast is redone at every connection.
+const BATT_FULL=3.30;
+function battPct(v,T){if(!(v>0))return null;const d=0.0049*(T==null?25:T),e=2.74+d,f=BATT_FULL+d;return Math.max(0,Math.min(100,(v-e)/(f-e)*100))}
+// Straight line through daily averages of the last 90 days → date the % reaches 0
+function battForecast(pts){
+  const from=Date.now()-90*DAY,byDay=new Map();
+  for(const p of pts){if(p.t<from||p.pct==null)continue;const d=Math.floor(p.t/DAY),e=byDay.get(d)||{s:0,n:0};e.s+=p.pct;e.n++;byDay.set(d,e)}
+  const xs=[...byDay.entries()].map(([d,e])=>({x:d+0.5,y:e.s/e.n})).sort((a,b)=>a.x-b.x);
+  const now=pts.length?pts.at(-1).pct:null;
+  if(xs.length<3||xs.at(-1).x-xs[0].x<7)return{ok:false,now,why:`ต้องมีข้อมูลแบตอย่างน้อย 3 วันที่ต่างกัน ครอบคลุม 7 วันขึ้นไป (ตอนนี้มี ${xs.length} วัน)`};
+  const n=xs.length,mx=xs.reduce((a,p)=>a+p.x,0)/n,my=xs.reduce((a,p)=>a+p.y,0)/n;let sxy=0,sxx=0,st=0,ss=0;
+  xs.forEach(p=>{sxy+=(p.x-mx)*(p.y-my);sxx+=(p.x-mx)**2});const b=sxx?sxy/sxx:0,a=my-b*mx;
+  xs.forEach(p=>{st+=(p.y-my)**2;ss+=(p.y-(a+b*p.x))**2});const r2=st?1-ss/st:0;
+  const today=Date.now()/DAY,fit=a+b*today;
+  if(b>=-0.005)return{ok:false,now,a,b,r2,why:'ยังไม่เห็นแบตลดลงชัดเจนในช่วงที่มีข้อมูล'};
+  const zero=-a/b,days=Math.max(0,zero-today);
+  return{ok:true,now,a,b,r2,perMonth:b*30,days,date:zero*DAY,fit};
+}
 function healthSummary(id){
   const sv=S.sensors[id]||{},key=sv.mac||id,H=(S.health[key]||[]).slice(),last=H.filter(h=>h.batt!=null).at(-1);
   const out={key,n:H.length,last,issues:[],score:'ok'};
   if(!H.length){out.score='none';return out}
-  // battery trend over the last 90 days
-  const bt=H.filter(h=>h.batt>0&&h.t>Date.now()-90*DAY);
-  if(bt.length>=3&&bt.at(-1).t-bt[0].t>=14*DAY){
-    const n=bt.length,mx=bt.reduce((a,h)=>a+h.t,0)/n,my=bt.reduce((a,h)=>a+h.batt,0)/n;
-    let sxy=0,sxx=0;bt.forEach(h=>{sxy+=(h.t-mx)*(h.batt-my);sxx+=(h.t-mx)**2});
-    const slope=sxx?sxy/sxx:0; // V per ms
-    if(slope<0){const ms=(bt.at(-1).batt-BATT_EMPTY)/-slope;out.battMonths=Math.max(0,ms/(30*DAY))}
-  }
+  // battery % history and the date it reaches "replace" (0 % = the app's 1-bar cut-off)
+  const tr=sv.asset?series(sv.asset).filter(r=>r.temp!=null):[]; // sorted by time
+  const tempAt=t=>{if(!tr.length)return null;let lo=0,hi=tr.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if(tr[m].t<t)lo=m;else hi=m}return(Math.abs(tr[lo].t-t)<Math.abs(tr[hi].t-t)?tr[lo]:tr[hi]).temp};
+  out.bpts=H.filter(h=>h.batt>0).map(h=>{const T=h.temp!=null?h.temp:tempAt(h.t);return{t:h.t,v:h.batt,T,pct:battPct(h.batt,T)}});
+  out.bfc=battForecast(out.bpts);
+  if(out.bfc&&out.bfc.ok)out.battMonths=out.bfc.days/30;
   out.resets=H.filter((h,i)=>h.reset&&!(H[i-1]&&H[i-1].reset));
   const okd=H.filter(h=>h.ok);
   out.firstTry=okd.length?okd.filter(h=>h.att===1).length/okd.length:null;
@@ -218,7 +236,7 @@ function healthSummary(id){
   if(last&&last.batLow)out.issues.push(['bad','เซนเซอร์แจ้งแบตเตอรี่ต่ำ ควรเปลี่ยนแบต']);
   else if(out.bars===1)out.issues.push(['bad',`แบต ${last.batt.toFixed(2)} V = 1 ขีดจาก 4 (เกณฑ์แบบแอป i-ALERT ที่ ${out.battT!=null?out.battT.toFixed(0):25} °C) ควรเปลี่ยนแบต`]);
   else if(out.bars===2)out.issues.push(['warn',`แบต ${last.batt.toFixed(2)} V = 2 ขีดจาก 4 ควรเตรียมแบตสำรอง`]);
-  else if(out.battMonths!=null&&out.battMonths<3)out.issues.push(['warn',`แบตน่าจะเหลือราว ${out.battMonths.toFixed(1)} เดือน (ประมาณจากแนวโน้ม)`]);
+  else if(out.bfc&&out.bfc.ok&&out.bfc.days<90)out.issues.push(['warn',`คาดว่าต้องเปลี่ยนแบตประมาณ ${new Date(out.bfc.date).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})} (อีก ~${Math.round(out.bfc.days)} วัน)`]);
   // clockBad = still wrong after connecting; older records only have reset (= clock was wrong when read)
   const hb=H.filter(h=>h.batt!=null||h.drift!=null).at(-1),clockBad=hb&&(hb.clockBad!=null?hb.clockBad:hb.drift!=null?Math.abs(hb.drift)>86400:hb.reset);out.clockBad=!!clockBad;
   if(clockBad)out.issues.push(['bad','นาฬิกาเซนเซอร์ยังไม่ตรง — เชื่อมต่อเซนเซอร์อีกครั้ง ระบบจะตั้งเวลาให้อัตโนมัติ (หรือกด "ตั้งเวลาเซนเซอร์")']);

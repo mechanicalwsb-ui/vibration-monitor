@@ -104,7 +104,7 @@ async function gdSync(interactive){
     if(!(await gdToken(interactive))){GD.status='need';renderGdChip();return}
     if(!GD.drive){GD.needDrive=true;GD.err=DRIVE_HELP;GD.status='err';renderGdChip();if(interactive)toast(DRIVE_HELP);return}
   }catch(e){GD.err=e.message;renderGdChip();return toast(e.message)}
-  GD.busy=true;GD.err='';GD.status='busy';renderGdChip();
+  GD.busy=true;GD.err='';GD.status='busy';GD.pending=false;GD.pendingDuring=false;clearTimeout(gdDirtyT);gdDirtyT=null;renderGdChip();
   try{
     const folder=await gdFolder();
     const [fs,ff]=await Promise.all([gdFind(folder,GD_FILES.state),gdFind(folder,GD_FILES.fft)]);
@@ -120,10 +120,10 @@ async function gdSync(interactive){
       const nf=await gdFind(folder,GD_FILES.fft);c.fftMt=nf&&nf.modifiedTime;c.fftSig=sig}
     else c.fftMt=ff.modifiedTime;
     await gdSyncPrivate(folder);
-    c.lastSync=Date.now();gdSave(c);save();persistBig(true);
-    GD.status='ok';GD.pending=false;clearTimeout(gdDirtyT);gdDirtyT=null;if(got||gotF){toast(`ซิงก์แล้ว: ได้ข้อมูลจากเครื่องอื่น ${got} ค่า${gotF?` · FFT ${gotF} ชุด`:''}`);render()}
+    c.lastSync=Date.now();gdSave(c);GD.selfSave=true;try{save()}finally{GD.selfSave=false}persistBig(true);
+    GD.status='ok';GD.pending=GD.pendingDuring||false;GD.pendingDuring=false;if(got||gotF){toast(`ซิงก์แล้ว: ได้ข้อมูลจากเครื่องอื่น ${got} ค่า${gotF?` · FFT ${gotF} ชุด`:''}`);render()}
   }catch(e){GD.err=e.message;GD.status='err';console.warn(e);if(interactive)toast('ซิงก์ไม่สำเร็จ: '+e.message)}
-  finally{GD.busy=false;renderGdChip();if(S.view==='settings'&&$('#gdInfo'))$('#gdInfo').innerHTML=gdInfoHtml()}
+  finally{GD.busy=false;if(GD.pending&&GD.status==='ok'&&gdTokenOk())setTimeout(()=>gdSync(false),500);renderGdChip();if(S.view==='settings'&&$('#gdInfo'))$('#gdInfo').innerHTML=gdInfoHtml()}
 }
 // ---- automatic sync ----
 // Google only issues a new access token in response to a user action on a page without a server,
@@ -131,9 +131,14 @@ async function gdSync(interactive){
 // the next tap anywhere on the page renews it (a Google window may flash briefly) and syncs.
 const gdAuto=()=>{const c=gdCfg();return c.auto&&c.email&&c.clientId};
 let gdDirtyT=null;
-function gdMarkDirty(){ // called after every save: sync shortly after the last change
-  if(!gdAuto()||GD.busy)return;clearTimeout(gdDirtyT);
-  gdDirtyT=setTimeout(()=>{if(gdTokenOk())gdSync(false);else GD.pending=true},30000);
+// Called after every save (sensor download, settings, notes...): sync almost immediately. A 2-second
+// pause groups quick successive edits into one upload; a change made while a sync is running is queued.
+function gdMarkDirty(){
+  if(!gdAuto()||GD.selfSave)return;
+  GD.pending=true;renderGdChip();
+  if(GD.busy){GD.pendingDuring=true;return} // picked up when the running sync finishes
+  clearTimeout(gdDirtyT);
+  gdDirtyT=setTimeout(()=>{gdDirtyT=null;if(gdTokenOk())gdSync(false)},2000);
 }
 setInterval(()=>{if(gdAuto()&&gdTokenOk())gdSync(false)},5*60000);
 document.addEventListener('visibilitychange',()=>{
@@ -154,7 +159,7 @@ document.addEventListener('pointerup',e=>{
 function renderGdChip(){
   const el=$('#gdChip');if(!el)return;const c=gdCfg();
   if(!c.email){el.innerHTML=`<button class="btn sm" style="width:100%" onclick="${c.clientId?'gdLogin()':"S._setFocus='gd';setView('settings')"}">👤 ล็อกอินด้วย Google</button>`;return}
-  const st=GD.busy?'กำลังซิงก์…':GD.needDrive?'ยังไม่ได้อนุญาต Drive — กดที่นี่':GD.status==='err'?'ซิงก์ไม่สำเร็จ — กดลองใหม่':!gdTokenOk()?'กดเพื่อซิงก์':c.lastSync?'ซิงก์ล่าสุด '+new Date(c.lastSync).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):'กดเพื่อซิงก์';
+  const st=GD.busy?'กำลังซิงก์…':GD.needDrive?'ยังไม่ได้อนุญาต Drive — กดที่นี่':GD.status==='err'?'ซิงก์ไม่สำเร็จ — กดลองใหม่':!gdTokenOk()?(GD.pending?'มีข้อมูลใหม่รอซิงก์ — แตะเพื่อซิงก์':'กดเพื่อซิงก์'):GD.pending?'กำลังจะซิงก์…':c.lastSync?'ซิงก์ล่าสุด '+new Date(c.lastSync).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):'กดเพื่อซิงก์';
   el.innerHTML=`<button class="gd-user" onclick="gdSync(true)" title="${esc(c.email)} — กดเพื่อซิงก์ Google Drive">
     ${c.picture?`<img src="${esc(c.picture)}" alt="" referrerpolicy="no-referrer">`:'<span class="gd-av">'+esc((c.name||'?')[0])+'</span>'}
     <span><b>${esc(c.name||c.email)}</b><small class="${GD.status==='err'?'up':''}">☁ ${st}</small></span></button>`;
@@ -167,7 +172,7 @@ function gdSettingsHtml(){
     ${siteGate()?'<p class="full" style="margin:0;font-size:13px">🔒 เว็บนี้<b>บังคับล็อกอิน</b>ด้วย Google ก่อนใช้งาน (ตั้งโดยผู้ดูแลใน site-config.js) · เครื่องนี้จะจำการล็อกอินไว้ '+((typeof SITE!=="undefined"&&SITE.rememberDays)||30)+' วัน</p>':''}
     <label class="full" ${siteGate()?'hidden':''}>Google OAuth Client ID<input id="gdCid" value="${esc(c.clientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="off"></label>
     <div class="full row">${c.email?`<button class="btn primary" id="gdSyncBtn">☁ ซิงก์ตอนนี้</button><button class="btn" id="gdOut">ออกจากระบบ</button>`:`<button class="btn primary" id="gdIn">👤 ล็อกอินด้วย Google</button>`}
-      <label class="check"><input type="checkbox" id="gdAuto" ${c.auto?'checked':''}> ซิงก์อัตโนมัติ (หลังมีการเปลี่ยนแปลง 30 วินาที, ทุก 5 นาที, ตอนกลับมาที่หน้าเว็บ และก่อนปิด)</label></div>
+      <label class="check"><input type="checkbox" id="gdAuto" ${c.auto?'checked':''}> ซิงก์อัตโนมัติทันทีที่มีการเปลี่ยนแปลง (ดึงข้อมูลเซนเซอร์, แก้ค่าตั้ง, บันทึกซ่อม ฯลฯ) + ทุก 5 นาที และตอนกลับมาที่หน้าเว็บ</label></div>
     <p class="full" id="gdInfo" style="margin:0;font-size:13px">${gdInfoHtml()}</p>
     <label class="full" ${siteGate()?'hidden':''}>อีเมลที่อนุญาตให้ล็อกอิน (เว้นว่าง = ทุกบัญชีที่เพิ่มใน Google Cloud)<input id="gdAllow" value="${esc(c.allow)}" placeholder="เช่น a@company.com, b@gmail.com"></label>
     <label class="full" ${siteGate()?'hidden':''}>ล็อกหน้าเว็บบนเครื่องนี้<select id="gdLock"><option value="none" ${c.lock==='none'?'selected':''}>ไม่ล็อก</option><option value="pin" ${c.lock==='pin'?'selected':''}>ต้องใส่ PIN ก่อนใช้งาน</option><option value="google" ${c.lock==='google'?'selected':''}>ต้องล็อกอิน Google ก่อนใช้งาน (ต้องมีอินเทอร์เน็ต)</option></select></label>
