@@ -2,7 +2,7 @@
 // Loaded before the dashboard script; uses its globals at call time (S, $, esc, cfg, FFTDB, decodeRec,
 // specPoints, twfPoints, diagnose, diagHtml, opts, css, cv, uv, fv, dFull, ble, toast, KIND_LABEL).
 
-const FA={keyA:null,keyB:'',mode:'spectrum',axis:'all',qty:'vel',band:'low',logY:false,fmin:null,fmax:null,
+const FA={keyA:null,keyB:'',cmp:[],cmpView:'split',mode:'spectrum',axis:'all',qty:'vel',band:'low',logY:false,fmin:null,fmax:null,
   marks:{harm:true,bearing:false,vane:false,line:false,drive:true},cur:{mode:'off',pts:[]},xu:'hz'};
 let faCharts=[];
 const faDecCache=new Map();
@@ -100,6 +100,7 @@ async function renderFFTPage(){
     return;
   }
   const recA=list.find(r=>r.key===FA.keyA)||list[0];FA.keyA=recA.key;
+  FA.cmp=(FA.cmp||[]).filter(k=>k!==recA.key&&list.some(r=>r.key===k)).slice(0,CMP_MAX);FA.keyB=FA.cmp[0]||'';
   const recB=FA.keyB?list.find(r=>r.key===FA.keyB&&r.key!==recA.key):null;
   const decA=faDecode(recA),decB=recB?faDecode(recB):null;
   if(!decA){el.innerHTML='<div class="panel empty"><h2>ถอดข้อมูล FFT ชุดนี้ไม่ได้</h2></div>';return}
@@ -116,7 +117,9 @@ async function renderFFTPage(){
   <div class="panel fa-ctl">
     <label>ชุดข้อมูล<span class="row" style="flex-wrap:nowrap;gap:6px"><select id="faA" style="flex:1;min-width:0">${list.map((r,i)=>opt(r.key,recLabel(r,i),recA.key)).join('')}</select><button type="button" class="btn sm" id="faDel" title="ลบชุดข้อมูล FFT ที่ไม่ต้องการ">🗑 ลบ…</button></span></label>
     <label style="flex:1 1 260px">โน้ตของชุดนี้<input type="text" id="faNoteIn" maxlength="300" value="${esc(fftNote(recA.key))}" placeholder="เช่น หลังเปลี่ยน bearing, วัดตอนโหลดเต็ม, ข้อมูลไม่น่าเชื่อถือ"></label>
-    <label>เปรียบเทียบกับ<select id="faB"><option value="">— ไม่เทียบ —</option>${list.filter(r=>r.key!==recA.key).map(r=>opt(r.key,recLabel(r,list.indexOf(r)),FA.keyB)).join('')}</select></label>
+    <label class="cmp-ctl">เปรียบเทียบกับ (สูงสุด ${CMP_MAX} ชุด)<span class="row" style="gap:6px;flex-wrap:nowrap"><select id="faB" ${FA.cmp.length>=CMP_MAX?'disabled':''}><option value="">${FA.cmp.length?'+ เพิ่มชุด…':'— ไม่เทียบ —'}</option>${list.filter(r=>r.key!==recA.key&&!FA.cmp.includes(r.key)).map(r=>opt(r.key,recLabel(r,list.indexOf(r)),'')).join('')}</select>
+      ${FA.cmp.length&&['spectrum','wave'].includes(FA.mode)?seg('faCmpView',[['split','แยกกราฟ'],['overlay','รวมกราฟเดียว']],FA.cmpView):''}</span>
+      ${FA.cmp.length?`<span class="cmp-chips"><span class="cmp-chip"><i style="background:${CMP_COL[0]}"></i>A · ${esc(dShort(recA.ts*1000))} ${esc(new Date(recA.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))}</span>${FA.cmp.map((k,i)=>{const r=list.find(x=>x.key===k);return`<span class="cmp-chip"><i style="background:${CMP_COL[i+1]}"></i>${CMP_LET[i+1]} · ${esc(dShort(r.ts*1000))} ${esc(new Date(r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))}<button type="button" data-cmpx="${esc(k)}" title="เอาออก">×</button></span>`}).join('')}<button type="button" class="btn sm" id="faCmpClr">ล้าง</button></span>`:''}</label>
     <label>แกน${seg('faAxis',[['all','ทุกแกน'],['x','X'],['y','Y'],['z','Z']],FA.axis)}</label>
     <label>ปริมาณ${seg('faQty',[['vel','Velocity'],['acc','Acceleration']],FA.qty)}</label>
     ${decA.single?'':`<label>ช่วงความถี่ของข้อมูล<select id="faBand">${opt('low','ต่ำ (ละเอียด)',FA.band)}${hasHigh?opt('high','สูง',FA.band)+opt('combined','รวม',FA.band):''}</select></label>`}
@@ -152,10 +155,13 @@ function faBind(list){
   const re=()=>renderFFTPage();
   const segBind=(id,fn)=>document.querySelectorAll('#'+id+' button').forEach(b=>b.onclick=()=>{fn(b.dataset.v);re()});
   segBind('faMode',v=>{FA.mode=v;cancelAnimationFrame(motionAnim)});segBind('faCur',v=>{FA.cur={mode:v,pts:[]}});segBind('faXu',v=>FA.xu=v);segBind('faAxis',v=>FA.axis=v);segBind('faQty',v=>FA.qty=v);segBind('faLog',v=>FA.logY=v==='log');
-  $('#faA').onchange=e=>{FA.keyA=e.target.value;if(FA.keyB===FA.keyA)FA.keyB='';re()};
+  $('#faA').onchange=e=>{FA.keyA=e.target.value;FA.cmp=FA.cmp.filter(k=>k!==FA.keyA);re()};
   $('#faDel').onclick=()=>faManageDelete(list,FA.keyA);
   $('#faNoteIn').onchange=e=>{setFftNote(FA.keyA,e.target.value);toast(e.target.value.trim()?'บันทึกโน้ตแล้ว':'ลบโน้ตแล้ว');re()};
-  $('#faB').onchange=e=>{FA.keyB=e.target.value;re()};
+  $('#faB').onchange=e=>{const k=e.target.value;if(k&&!FA.cmp.includes(k))FA.cmp.push(k);re()};
+  document.querySelectorAll('[data-cmpx]').forEach(b=>b.onclick=()=>{FA.cmp=FA.cmp.filter(k=>k!==b.dataset.cmpx);re()});
+  if($('#faCmpClr'))$('#faCmpClr').onclick=()=>{FA.cmp=[];re()};
+  segBind('faCmpView',v=>FA.cmpView=v);
   if($('#faBand'))$('#faBand').onchange=e=>{FA.band=e.target.value;FA.fmin=FA.fmax=null;re()};
   const num=v=>v===''?null:+v;
   $('#faMin').onchange=e=>{FA.fmin=num(e.target.value);re()};
@@ -185,16 +191,26 @@ const faLogSafe=pts=>FA.logY?pts.map(p=>({x:p.x,y:p.y>0?p.y:null})):pts;
 // ---- spectrum: main view with markers, peak table, band breakdown, waveform stats, diagnosis ----
 function faSpectrum(decA,decB,recA,recB,list,f1,c,range){
   const k=css(),col={x:k.x,y:k.y,z:k.z},axes=faAxes(),ds=[];
-  axes.forEach(a=>ds.push({label:(decB?'A ':'')+AXES.find(x=>x[0]===a)[1],data:faLogSafe(faSpec(decA,a)),borderColor:col[a],backgroundColor:col[a],borderWidth:1.2,pointRadius:0,tension:0}));
-  if(decB)axes.forEach(a=>ds.push({label:'B '+AXES.find(x=>x[0]===a)[1],data:faLogSafe(faSpec(decB,a)),borderColor:col[a],backgroundColor:col[a],borderWidth:1.2,borderDash:[5,4],pointRadius:0,tension:0}));
+  const cmps=FA.cmp.map(key=>list.find(r=>r.key===key)).filter(Boolean).map(r=>({r,d:faDecode(r)})).filter(x=>x.d);
+  const items=[{r:recA,d:decA},...cmps].map((it,i)=>({...it,letter:CMP_LET[i],color:CMP_COL[i]}));
+  if(cmps.length&&FA.cmpView==='split')faSplitSpectra(items,axes,f1,c,range);
+  else if(cmps.length) // one line per capture (largest of the shown axes), so captures are told apart by colour
+    items.forEach((it,i)=>ds.push({label:`${it.letter} ${dShort(it.r.ts*1000)} ${new Date(it.r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}`,
+      data:faLogSafe(faEnvelope(it.d,axes).map(p=>({x:p.x,y:p.y}))),borderColor:it.color,backgroundColor:it.color,borderWidth:i?1.1:1.6,pointRadius:0,tension:0}));
+  else axes.forEach(a=>ds.push({label:AXES.find(x=>x[0]===a)[1],data:faLogSafe(faSpec(decA,a)),borderColor:col[a],backgroundColor:col[a],borderWidth:1.2,pointRadius:0,tension:0}));
   // reference spectrum mask (velocity): line + points above it
   const refRec=c.refFft&&c.refFft!==recA.key?list.find(r=>r.key===c.refFft):null,refDec=refRec&&faDecode(refRec);
   const mask=refDec&&FA.qty==='vel'?refMask(refDec,c):null,ex=mask?maskExceed(decA,mask):[];
   if(mask){ds.push({label:`เส้นอ้างอิง ×${c.maskMul||2}`,data:faLogSafe(mask.map(p=>({x:p.x,y:cv(p.y)}))),borderColor:k.zd,backgroundColor:k.zd,borderWidth:1,borderDash:[3,3],pointRadius:0,tension:0,isRef:true});
     if(ex.length)ds.push({label:'เกินเส้นอ้างอิง',type:'scatter',data:ex.map(e=>({x:e.x,y:cv(e.y)})),borderColor:k.zd,backgroundColor:k.zd,pointRadius:5,pointStyle:'triangle'})}
-  const o=faChartOpts(faUnit(),range);o.plugins.faVlines={lines:faMarkers(f1,c,range.max)};
-  faCharts.push(new Chart($('#faChart'),{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}));
-  $('#faNote').textContent=(mask?`เทียบกับชุดอ้างอิง ${dFull(refRec.ts*1000)}: ${ex.length?'เกิน '+ex.length+' ยอด':'ไม่มียอดเกิน'} · `:'')+(decB?`A = ${dFull(recA.ts*1000)} (เส้นทึบ) · B = ${dFull(recB.ts*1000)} (เส้นประ) · `:'')+'ซูมด้วยช่อง "ซูมความถี่" หรือปุ่มลัด · ชี้หรือแตะบนกราฟเพื่อดูค่า'+(FA.qty==='vel'?` · velocity แสดงตั้งแต่ ${VEL_MIN_HZ} Hz ขึ้นไป (ต่ำกว่านั้นเป็น noise ที่ถูกขยายจากการแปลงหน่วย)`:'');
+  if(!(cmps.length&&FA.cmpView==='split')){
+    const o=faChartOpts(faUnit(),range);o.plugins.faVlines={lines:faMarkers(f1,c,range.max)};
+    faCharts.push(new Chart($('#faChart'),{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}));
+  }else if(mask){const ch=faCharts[0];ch.data.datasets.push(ds.find(d=>d.isRef));ch.update('none')} // reference line on chart A
+  if(cmps.length){$('#faNote').textContent=(mask?`เทียบกับชุดอ้างอิง ${dFull(refRec.ts*1000)}: ${ex.length?'เกิน '+ex.length+' ยอด':'ไม่มียอดเกิน'} · `:'')+
+    (FA.cmpView==='split'?`แยกกราฟ ${items.length} ชุด สเกลแกนตั้งเท่ากันทุกกราฟ (เทียบความสูงยอดได้ตรง ๆ) · ตาราง/การวินิจฉัยด้านล่างเป็นของชุด A`
+      :`รวมกราฟเดียว ${items.length} ชุด สีละชุด (ค่าสูงสุดของแกนที่เลือก) · ตาราง/การวินิจฉัยด้านล่างเป็นของชุด A`)}
+  else $('#faNote').textContent=(mask?`เทียบกับชุดอ้างอิง ${dFull(refRec.ts*1000)}: ${ex.length?'เกิน '+ex.length+' ยอด':'ไม่มียอดเกิน'} · `:'')+(decB?`A = ${dFull(recA.ts*1000)} (เส้นทึบ) · B = ${dFull(recB.ts*1000)} (เส้นประ) · `:'')+'ซูมด้วยช่อง "ซูมความถี่" หรือปุ่มลัด · ชี้หรือแตะบนกราฟเพื่อดูค่า'+(FA.qty==='vel'?` · velocity แสดงตั้งแต่ ${VEL_MIN_HZ} Hz ขึ้นไป (ต่ำกว่านั้นเป็น noise ที่ถูกขยายจากการแปลงหน่วย)`:'');
 
   const env=faEnvelope(decA,axes).filter(p=>p.x>=range.min&&p.x<=range.max);
   const marks=faMarkers(f1,c,range.max*1.1);
@@ -418,7 +434,7 @@ async function deleteFfts(keys){
   await FFTDB.del(keys);
   for(const k of keys){faDecCache.delete(k);if(S.fftNotes)delete S.fftNotes[k]}
   for(const c of Object.values(S.assets||{}))if(keys.includes(c.refFft))delete c.refFft; // reference capture gone
-  if(keys.includes(FA.keyA))FA.keyA=null;if(keys.includes(FA.keyB))FA.keyB='';if(keys.includes(FUI.key))FUI.key=null;
+  if(keys.includes(FA.keyA))FA.keyA=null;FA.cmp=(FA.cmp||[]).filter(k=>!keys.includes(k));if(keys.includes(FUI.key))FUI.key=null;
   save();render();
 }
 
@@ -441,7 +457,7 @@ function wfPickerHtml(list,n){
   return`<div class="wf-head"><button type="button" class="btn sm wf-tog" id="wfTog" title="${S.wfCollapsed?'แสดงรายการชุดข้อมูล':'ยุบรายการ'}">${S.wfCollapsed?'▶':'◀'}</button>
       <b class="wf-title">ชุดข้อมูล (${shown.size}/${list.length})</b></div>
     <div class="wf-body"><div class="row wf-btns"><button type="button" class="btn sm" data-wfp="all">ทั้งหมด</button><button type="button" class="btn sm" data-wfp="new">ล่าสุด ${n}${own?'':' ✓'}</button><button type="button" class="btn sm" data-wfp="none">ล้าง</button></div>
-    <div class="wf-pick">${list.map(r=>`<label class="check"><input type="checkbox" data-wfk="${esc(r.key)}" ${shown.has(r.key)?'checked':''}><span>${esc(dShort(r.ts*1000))} ${esc(new Date(r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))} · ${esc(KIND_LABEL[r.kind||'alarm']||r.kind||'')}${fftNote(r.key)?'<small class="muted"> 📝 '+esc(fftNote(r.key))+'</small>':''}</span></label>`).join('')}</div></div>`;
+    <div class="wf-pick">${wfGroupsHtml(list,shown)}</div></div>`;
 }
 // Put the picker in a column to the left of the chart (inside the chart panel), before the chart is sized
 function wfMountPicker(list,n){
@@ -454,9 +470,55 @@ function wfMountPicker(list,n){
   wfPickerBind(list,n);
 }
 function wfPickerBind(list,n){
+  wfGroupsBind(list,n);
   const set=keys=>{S.wfSel=S.wfSel||{};if(keys)S.wfSel[S.sel]=keys;else delete S.wfSel[S.sel];save();renderFFTPage()};
   document.querySelectorAll('[data-wfk]').forEach(i=>i.onchange=()=>{const keys=[...document.querySelectorAll('[data-wfk]:checked')].map(x=>x.dataset.wfk);
     if(!keys.length){toast('เลือกอย่างน้อย 1 ชุด');i.checked=true;return}set(keys)});
   document.querySelectorAll('[data-wfp]').forEach(b=>b.onclick=()=>{const v=b.dataset.wfp;
     if(v==='all')set(list.map(r=>r.key));else if(v==='new')set(null);else set([list[0].key])});
+}
+
+// ---------- comparing several captures ----------
+const CMP_MAX=5,CMP_LET=['A','B','C','D','E','F'],CMP_COL=['#2563eb','#ea580c','#16a34a','#9333ea','#db2777','#0891b2'];
+// One chart per capture, stacked, same frequency range and the same vertical scale so peak heights compare directly
+function faSplitSpectra(items,axes,f1,c,range){
+  const k=css(),col={x:k.x,y:k.y,z:k.z},host=document.querySelector('#fftPage .fa-main')||$('#faChart').parentElement;
+  host.classList.add('cmp-split');
+  host.innerHTML=items.map((it,i)=>`<div class="cmp-row"><div class="cmp-title"><i style="background:${it.color}"></i><b>${it.letter}</b> ${esc(dFull(it.r.ts*1000))} · ${esc(KIND_LABEL[it.r.kind||'alarm']||it.r.kind||'')}${fftNote(it.r.key)?' · <span class="muted">📝 '+esc(fftNote(it.r.key))+'</span>':''}</div><div class="cmp-box"><canvas ${i===0?'id="faChart"':''}></canvas></div></div>`).join('');
+  let top=0;for(const it of items)for(const p of faEnvelope(it.d,axes))if(p.x>=range.min&&p.x<=range.max&&p.y>top)top=p.y;
+  host.querySelectorAll('canvas').forEach((cv_,i)=>{const it=items[i];
+    const ds=axes.map(a=>({label:AXES.find(x=>x[0]===a)[1],data:faLogSafe(faSpec(it.d,a)),borderColor:col[a],backgroundColor:col[a],borderWidth:1.1,pointRadius:0,tension:0}));
+    const o=faChartOpts(faUnit(),range);o.plugins.faVlines={lines:faMarkers(f1,c,range.max)};o.plugins.legend.display=i===0;
+    if(!FA.logY&&top>0)o.scales.y.max=+(top*1.08).toPrecision(3);
+    if(i<items.length-1){o.scales.x.title.display=false}
+    faCharts.push(new Chart(cv_,{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}))});
+}
+
+// Captures grouped by year (พ.ศ.) > month > day, newest first. A group opens when it holds a shown capture
+// or the newest one; opening/closing is remembered while the page is open (FA.wfOpen).
+FA.wfOpen=FA.wfOpen||{};
+function wfGroupsHtml(list,shown){
+  const Y=new Map();
+  for(const r of list){const d=new Date(r.ts*1000),yk='y'+d.getFullYear(),mk=yk+'m'+d.getMonth(),dk=mk+'d'+d.getDate();
+    if(!Y.has(yk))Y.set(yk,{id:yk,label:'พ.ศ. '+(d.getFullYear()+543),kids:new Map(),recs:[]});const y=Y.get(yk);y.recs.push(r);
+    if(!y.kids.has(mk))y.kids.set(mk,{id:mk,label:d.toLocaleDateString('th-TH',{month:'long'}),kids:new Map(),recs:[]});const m=y.kids.get(mk);m.recs.push(r);
+    if(!m.kids.has(dk))m.kids.set(dk,{id:dk,label:d.toLocaleDateString('th-TH',{weekday:'short',day:'numeric',month:'short'}),recs:[]});m.kids.get(dk).recs.push(r)}
+  const newest=list[0]&&list[0].key;
+  const isOpen=g=>FA.wfOpen[g.id]!=null?FA.wfOpen[g.id]:g.recs.some(r=>shown.has(r.key)||r.key===newest);
+  const box=g=>{const n=g.recs.filter(r=>shown.has(r.key)).length;
+    return`<input type="checkbox" data-wfg="${esc(JSON.stringify(g.recs.map(r=>r.key)))}" ${n===g.recs.length?'checked':''} ${n&&n<g.recs.length?'data-ind="1"':''}>`};
+  const head=(g,lvl)=>`<div class="wfg-h lvl${lvl}"><button type="button" class="wfg-c" data-gt="${g.id}">${isOpen(g)?'▾':'▸'}</button><label class="check">${box(g)}<span>${esc(g.label)} <small class="muted">${g.recs.filter(r=>shown.has(r.key)).length}/${g.recs.length}</small></span></label></div>`;
+  const item=r=>`<label class="check wfg-i"><input type="checkbox" data-wfk="${esc(r.key)}" ${shown.has(r.key)?'checked':''}><span>${esc(new Date(r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))} · ${esc(KIND_LABEL[r.kind||'alarm']||r.kind||'')}${fftNote(r.key)?'<small class="muted"> 📝 '+esc(fftNote(r.key))+'</small>':''}</span></label>`;
+  const grp=(g,lvl,inner)=>`<div class="wfg${isOpen(g)?'':' shut'}" data-g="${g.id}">${head(g,lvl)}<div class="wfg-b">${inner}</div></div>`;
+  return[...Y.values()].map(y=>grp(y,0,[...y.kids.values()].map(m=>grp(m,1,[...m.kids.values()].map(d=>grp(d,2,d.recs.map(item).join(''))).join(''))).join(''))).join('');
+}
+function wfGroupsBind(list,n){
+  document.querySelectorAll('[data-wfg][data-ind]').forEach(i=>i.indeterminate=true);
+  document.querySelectorAll('[data-gt]').forEach(b=>b.onclick=()=>{const g=b.closest('.wfg'),open=g.classList.toggle('shut')===false;
+    FA.wfOpen[b.dataset.gt]=open;b.textContent=open?'▾':'▸'});
+  document.querySelectorAll('[data-wfg]').forEach(i=>i.onchange=()=>{
+    const keys=JSON.parse(i.dataset.wfg),cur=new Set(wfRecs(list,n).map(r=>r.key));
+    keys.forEach(k=>i.checked?cur.add(k):cur.delete(k));
+    if(!cur.size){toast('เลือกอย่างน้อย 1 ชุด');i.checked=true;return}
+    S.wfSel=S.wfSel||{};S.wfSel[S.sel]=list.filter(r=>cur.has(r.key)).map(r=>r.key);save();renderFFTPage()});
 }
