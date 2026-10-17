@@ -12,14 +12,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.2.1"></script>
-<script src="fft-analysis.js?v=2.2.1"></script>
-<script src="store.js?v=2.2.1"></script>
-<script src="insights.js?v=2.2.1"></script>
-<script src="pages.js?v=2.2.1"></script>
-<script src="ai.js?v=2.2.1"></script>
-<script src="tools.js?v=2.2.1"></script>
-<script src="machine.js?v=2.2.1"></script>
+<script src="ia3-fft.js?v=2.2.2"></script>
+<script src="fft-analysis.js?v=2.2.2"></script>
+<script src="store.js?v=2.2.2"></script>
+<script src="insights.js?v=2.2.2"></script>
+<script src="pages.js?v=2.2.2"></script>
+<script src="ai.js?v=2.2.2"></script>
+<script src="tools.js?v=2.2.2"></script>
+<script src="machine.js?v=2.2.2"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -409,7 +409,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.2.1',APP_BUILD='2026-10-17T10:44:34+07:00';
+const APP_VERSION='2.2.2',APP_BUILD='2026-10-17T10:48:02+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -1133,6 +1133,7 @@ function bulkRequest(ch,from,opcode=1){
 // its services (first discovery is slow; later ones hit the OS cache), so retry connect + lookup together
 async function bleConnect(dev,tries=4){
   if(dev.gatt.connected&&ble.ch&&ble.chDev===dev)return ble.ch; // live mode keeps the link open
+  stopScan(); // never listen for advertisements while connecting (some Bluetooth stacks drop the link)
   for(let i=1;;i++){
     ble.attempts=i;
     bleLog(`กำลังเชื่อมต่อเซนเซอร์ (ครั้งที่ ${i}/${tries}) …`);
@@ -1153,9 +1154,9 @@ async function bleConnect(dev,tries=4){
     }catch(e){
       if(e.name==='NotFoundError'&&dev.gatt.connected)throw new Error('เซนเซอร์ตัวนี้ไม่มี service ของ i-ALERT3 ('+e.message+')');
       try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(_){}
-      if(i>=tries)throw new Error(e.message+' — ปิด Bluetooth บนมือถือ (หรือปิดแอป i-ALERT ให้หมด) แล้ววางคอมให้ใกล้เซนเซอร์ จากนั้นลองใหม่');
+      if(i>=tries)throw new Error(e.message+' — เซนเซอร์อาจถูกอุปกรณ์อื่นเชื่อมอยู่: ปิดแอป i-ALERT/Bluetooth บนมือถือ, ปิดหน้าเว็บนี้บนแท็บเล็ตหรือแท็บอื่นที่ดึงข้อมูลอัตโนมัติอยู่ (และ Gateway ถ้ามี) แล้ววางเครื่องให้ใกล้เซนเซอร์ รอ 1 นาทีแล้วลองใหม่');
       bleLog('เชื่อมต่อไม่สำเร็จ ('+e.message+') จะลองใหม่ใน 3 วินาที');
-      await new Promise(r=>setTimeout(r,3000));
+      await new Promise(r=>setTimeout(r,i<2?3000:6000)); // give the sensor longer to free itself on later tries
     }
   }
 }
@@ -1823,7 +1824,7 @@ function onAdv(e){
 navigator.bluetooth&&navigator.bluetooth.addEventListener('advertisementreceived',onAdv);
 // Remembered sensors: listen for their advertisements (no permission prompt, no connection)
 function watchKnown(){
-  const c=scanCaps();if(!c.wa||!scan.known.size)return false;
+  const c=scanCaps();if(!c.wa||!scan.known.size||ble.busy||ble.state.phase==='picking'||ble.state.phase==='connecting')return false;
   if(scan.ac)scan.ac.abort();scan.ac=new AbortController();
   for(const dev of scan.known.values()){
     if(!dev._advL){dev._advL=true;dev.addEventListener('advertisementreceived',onAdv)}
