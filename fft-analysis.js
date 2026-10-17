@@ -92,7 +92,7 @@ async function renderFFTPage(){
   const el=$('#fftPage');if(!el||el.hidden)return;
   let list=[];try{list=await FFTDB.list(S.sel)}catch(e){}
   if($('#fftPage').hidden)return;
-  faCharts.forEach(c=>c.destroy());faCharts=[];
+  faCharts.forEach(c=>c.destroy());faCharts=[];FA._syncGroup=null;
   if(!S.sel||!list.length){
     el.innerHTML=`<div class="panel empty"><h2>ยังไม่มีข้อมูล FFT${S.sel?' ของ '+esc(S.sel):''}</h2>
       <p>ไปที่เมนู "ภาพรวม" เชื่อมต่อเซนเซอร์ แล้วในแผงค่าสดกด "สั่งวัด FFT ใหม่", "ดึง FFT manual ล่าสุด" หรือ "ดึง FFT ตอน alarm" ข้อมูลที่ได้จะมาแสดงในเมนูนี้</p>
@@ -518,12 +518,55 @@ function faSplitCharts(items,dsFn,optFn,symmetric,topFn){
   const dss=items.map(dsFn);let top=0,bot=0;
   items.forEach((it,i)=>{if(topFn){top=Math.max(top,topFn(it));return}for(const d of dss[i])for(const p of d.data)if(p&&p.y!=null){if(p.y>top)top=p.y;if(p.y<bot)bot=p.y}});
   if(symmetric){const m=Math.max(top,-bot);top=m;bot=-m}
+  FA._syncGroup=[];
   host.querySelectorAll('canvas').forEach((cv_,i)=>{const ds=dss[i];
     const o=optFn();o.plugins.legend.display=i===0;
+    o.plugins.tooltip.enabled=false; // the shared cursor line shows the values instead
+    o.scales.y.afterFit=s=>{s.width=58}; // same y-axis width: the plot areas line up, so the cursor is at the same place on every chart
     if(!FA.logY&&top>0){o.scales.y.max=+(top*1.08).toPrecision(3);if(symmetric)o.scales.y.min=-o.scales.y.max}
     if(i<items.length-1){o.scales.x.title.display=false}
-    faCharts.push(new Chart(cv_,{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}))});
+    const ch=new Chart(cv_,{type:'line',data:{datasets:ds},options:o,plugins:[faVlines,faSync]});faCharts.push(ch);FA._syncGroup.push(ch)});
+  host.insertAdjacentHTML('afterbegin','<p class="muted fa-note" id="faSyncHint" style="margin:0 4px 4px">ชี้หรือแตะกราฟใดก็ได้ เส้นแดงจะขึ้นที่ความถี่เดียวกันในทุกกราฟ พร้อมค่าของแต่ละแกน · คลิก/แตะเพื่อตรึงเส้น · คลิกที่อื่นเพื่อย้าย · คลิกที่เส้นเพื่อปลด</p>');
 }
+// ---------- shared cursor across the stacked comparison charts ----------
+// Hover (or touch) one chart: a vertical line at that frequency/time appears on every chart with each axis's value.
+// A click pins it (solid line); another click releases it. With a Cursor tool switched on, clicks on chart A stay with that tool.
+function faNearest(data,x){let lo=0,hi=data.length-1;if(hi<0)return null;
+  while(hi-lo>1){const m=(lo+hi)>>1;if(data[m].x<x)lo=m;else hi=m}
+  return Math.abs(data[lo].x-x)<=Math.abs(data[hi].x-x)?data[lo]:data[hi]}
+const faSync={id:'faSync',
+  afterEvent(chart,args){
+    const g=FA._syncGroup,e=args.event;if(!g||!g.includes(chart))return;
+    const a=chart.chartArea,inside=e.x>=a.left&&e.x<=a.right&&e.y>=a.top-4&&e.y<=a.bottom+4;
+    const redraw=()=>{g.forEach(c=>{if(c!==chart)c.draw()});args.changed=true};
+    if(e.type==='click'){
+      if(chart===g[0]&&FA.cur&&FA.cur.mode!=='off')return;
+      if(!inside)return;const x=chart.scales.x.getValueForPixel(e.x);
+      // pinned: a click on the line releases it, a click elsewhere moves the pin there
+      const near=FA._syncX!=null&&Math.abs(chart.scales.x.getPixelForValue(FA._syncX)-e.x)<8;
+      if(FA._syncPin&&near)FA._syncPin=false;else{FA._syncPin=true;FA._syncX=x}
+      redraw();return}
+    if(FA._syncPin)return;
+    if((e.type==='mousemove'||e.type==='touchmove'||e.type==='touchstart')&&inside){FA._syncX=chart.scales.x.getValueForPixel(e.x);redraw()}
+    else if(e.type==='mouseout'){FA._syncX=null;redraw()}
+  },
+  afterDraw(chart){
+    const g=FA._syncGroup;if(!g||!g.includes(chart)||FA._syncX==null)return;
+    const{ctx,chartArea:a}=chart,xs=chart.scales.x,px=xs.getPixelForValue(FA._syncX);if(!(px>=a.left&&px<=a.right))return;
+    const k=css(),wave=FA.mode==='wave',f1=FA._f1,x=FA._syncX;
+    ctx.save();ctx.strokeStyle='#ef4444';ctx.globalAlpha=FA._syncPin?1:.8;ctx.lineWidth=FA._syncPin?1.6:1.2;ctx.setLineDash(FA._syncPin?[]:[5,3]);
+    ctx.beginPath();ctx.moveTo(px,a.top);ctx.lineTo(px,a.bottom);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+    const head=wave?x.toFixed(2)+' ms':x.toFixed(2)+' Hz · '+Math.round(x*60).toLocaleString()+' CPM'+(f1?' · '+(x/f1).toFixed(2)+'X':'');
+    const rows=chart.data.datasets.filter(d=>!d.isRef&&d.type!=='scatter'&&Array.isArray(d.data)&&d.data.length).map(d=>{const p=faNearest(d.data,x);
+      return p&&p.y!=null?{c:d.borderColor,t:String(d.label).split(' ')[0]+'  '+(wave?(+p.y).toFixed(3)+' g':faFmt(p.y)+' '+faUnit())}:null}).filter(Boolean);
+    ctx.font='600 11px "IBM Plex Sans Thai",sans-serif';
+    const w=Math.max(ctx.measureText(head).width,...rows.map(r=>ctx.measureText(r.t).width+14))+12,h=16+rows.length*14+4;
+    let bx=px+8;if(bx+w>a.right)bx=px-8-w;const by=a.top+4;
+    ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--panel').trim()||'#fff';ctx.globalAlpha=.92;ctx.fillRect(bx,by,w,h);ctx.globalAlpha=1;ctx.strokeStyle='#ef4444';ctx.lineWidth=1;ctx.strokeRect(bx+.5,by+.5,w-1,h-1);
+    ctx.fillStyle=k.ink||'#111';ctx.fillText(head,bx+6,by+12);ctx.font='11px "IBM Plex Sans Thai",sans-serif';
+    rows.forEach((r,i)=>{const yy=by+26+i*14;ctx.fillStyle=r.c;ctx.fillRect(bx+6,yy-8,8,8);ctx.fillStyle=k.ink||'#111';ctx.fillText(r.t,bx+18,yy)});
+    ctx.restore();
+  }};
 
 // Captures grouped by year (พ.ศ.) > month > day, newest first. A group opens when it holds a shown capture
 // or the newest one; opening/closing is remembered while the page is open (FA.wfOpen).
