@@ -14,7 +14,7 @@ assert.ok(Math.abs(r.vx - 1.21) < 0.02 && Math.abs(r.vz - 0.65) < 0.02 && Math.a
 const bad = Buffer.alloc(P.HDR + P.REC); assert.strictEqual(P.parseTrend(bad, 816, now).length, 0);
 // system structure
 const s = Buffer.alloc(220); s.writeUInt16LE(1 << 9 | 1 << 6, 4); s.writeUInt32LE(0, 68); s[118] = 9; s[119] = 16;
-[0x30, 0x5A, 0x85, 0x4C, 0x07, 0xAC].forEach((x, i) => s[212 + i] = x); s.writeUInt16LE(3600, 206); s.writeUInt16LE(0xFFFF, 18);
+[0xAC, 0x07, 0x4C, 0x85, 0x5A, 0x30].forEach((x, i) => s[212 + i] = x); s.writeUInt16LE(3600, 206); s.writeUInt16LE(0xFFFF, 18);
 const y = P.parseSys(s, 816, now);
 assert.strictEqual(y.scale, 1289); assert.strictEqual(y.mac, '30:5A:85:4C:07:AC'); assert.strictEqual(y.clockOk, false);
 assert.strictEqual(y.flags.running, true); assert.strictEqual(y.flags.battery, true); assert.strictEqual(y.thr.alarm[0], null); assert.strictEqual(y.battV, 3.6);

@@ -36,7 +36,7 @@ function parseSys(b, fallbackScale = 816, nowMs = Date.now()) {
   const tth = o => { const v = b.readInt16LE(o); return v >= 0x7FFF ? null : v / 100; };
   const st = u16(4), bit = n => !!((st >> n) & 1);
   const recBuf = Buffer.alloc(HDR + REC); b.copy(recBuf, HDR, 144, 144 + REC);
-  const mac = b.length >= 218 ? [...b.subarray(212, 218)].map(x => x.toString(16).padStart(2, '0').toUpperCase()).join(':') : null;
+  const mac = b.length >= 218 ? [...b.subarray(212, 218)].reverse().map(x => x.toString(16).padStart(2, '0').toUpperCase()).join(':') : null;
   const rpm = u16(172), clock = u32(68);
   return {
     clock, clockOk: Math.abs(clock - nowMs / 1000) <= 86400, lastTrend: u32(144), devType, rev: u8(119), scale, mac,

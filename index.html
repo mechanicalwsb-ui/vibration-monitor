@@ -12,14 +12,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.2.2"></script>
-<script src="fft-analysis.js?v=2.2.2"></script>
-<script src="store.js?v=2.2.2"></script>
-<script src="insights.js?v=2.2.2"></script>
-<script src="pages.js?v=2.2.2"></script>
-<script src="ai.js?v=2.2.2"></script>
-<script src="tools.js?v=2.2.2"></script>
-<script src="machine.js?v=2.2.2"></script>
+<script src="ia3-fft.js?v=2.2.3"></script>
+<script src="fft-analysis.js?v=2.2.3"></script>
+<script src="store.js?v=2.2.3"></script>
+<script src="insights.js?v=2.2.3"></script>
+<script src="pages.js?v=2.2.3"></script>
+<script src="ai.js?v=2.2.3"></script>
+<script src="tools.js?v=2.2.3"></script>
+<script src="machine.js?v=2.2.3"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -409,7 +409,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.2.2',APP_BUILD='2026-10-17T10:48:02+07:00';
+const APP_VERSION='2.2.3',APP_BUILD='2026-10-17T10:51:39+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -1023,8 +1023,8 @@ function parseSys(dv,fallbackScale){
   const vth=o=>{const v=u16(o);return v>=0xFFFF?null:r4(v/scale*25.4)};
   const tth=o=>{const v=dv.getInt16(o,true);return v>=0x7FFF?null:v/100};
   const st=u16(4),bit=n=>!!((st>>n)&1); // device status bits (ITTiAlert3DeviceStatus)
-  // MAC @212: 6 bytes in stored order, as the app's getMacAddress() prints them
-  const mac=dv.byteLength>=218?[0,1,2,3,4,5].map(i=>u8(212+i).toString(16).padStart(2,'0').toUpperCase()).join(':'):null;
+  // MAC @212: stored least-significant byte first; shown in Bluetooth-address order (30:5A:85:…)
+  const mac=dv.byteLength>=218?[5,4,3,2,1,0].map(i=>u8(212+i).toString(16).padStart(2,'0').toUpperCase()).join(':'):null;
   return{clock:u32(68),lastTrend:u32(144),devType,rev:u8(119),scale,m4:u16(6),pkt:u16(54),mac:mac==='00:00:00:00:00:00'?null:mac,
     status:st,
     thr:{alarm:[18,20,22].map(vth),warn:[24,26,28].map(vth),ta:tth(14),tw:tth(16)},
