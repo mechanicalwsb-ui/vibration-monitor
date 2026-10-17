@@ -239,6 +239,7 @@ function faExportCsv(dec,rec){
 
 // ---- waterfall: newest captures stacked with a vertical offset ----
 function faWaterfall(decA,decB,recA,recB,list,f1,c,range){
+  wfMountPicker(list,12);
   const k=css(),recs=wfRecs(list,12),axes=faAxes(),series=[];
   for(const r of recs){const d=faDecode(r);if(!d)continue;series.push({r,pts:faEnvelope(d,axes)})}
   let top=0;series.forEach(s=>s.pts.forEach(p=>{if(p.x>=range.min&&p.x<=range.max&&p.y>top)top=p.y}));
@@ -250,9 +251,8 @@ function faWaterfall(decA,decB,recA,recB,list,f1,c,range){
   o.plugins.faVlines={lines:faMarkers(f1,c,range.max)};
   faCharts.push(new Chart($('#faChart'),{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}));
   $('#faNote').textContent=`แสดง ${series.length} ชุดล่าสุด เก่าอยู่ล่าง ใหม่อยู่บน (ค่าสูงสุดของแกนที่เลือก) · ดูว่ายอดที่ความถี่เดิมสูงขึ้นเรื่อย ๆ หรือมียอดใหม่เกิดขึ้น`;
-  $('#faSide').innerHTML='<div class="panel pbody" style="grid-column:1/-1"><div class="seg" id="wfMode"><button data-v="3d">3D</button><button data-v="2d" class="on">2D</button></div></div>'+wfPickerHtml(list,12);
+  $('#faSide').innerHTML='<div class="panel pbody" style="grid-column:1/-1"><div class="seg" id="wfMode"><button data-v="3d">3D</button><button data-v="2d" class="on">2D</button></div></div>';
   document.querySelectorAll('#wfMode button').forEach(b=>b.onclick=()=>{FA.wf2d=b.dataset.v==='2d';renderFFTPage()});
-  wfPickerBind(list,12);
 }
 
 // ---- frequency trend: amplitude at 1X/2X/3X and high-frequency energy across captures ----
@@ -438,9 +438,20 @@ function wfRecs(list,n){
 }
 function wfPickerHtml(list,n){
   const shown=new Set(wfRecs(list,n).map(r=>r.key)),own=!!(S.wfSel&&S.wfSel[S.sel]&&S.wfSel[S.sel].length);
-  return`<div class="panel" style="grid-column:1/-1"><div class="ph"><h3>เลือกชุดที่จะแสดง (${shown.size}/${list.length})</h3>
-    <div class="row"><button type="button" class="btn sm" data-wfp="all">ทั้งหมด</button><button type="button" class="btn sm" data-wfp="new">ล่าสุด ${n} ชุด${own?'':' ✓'}</button><button type="button" class="btn sm" data-wfp="none">ล้าง</button></div></div>
-    <div class="pbody wf-pick">${list.map(r=>`<label class="check"><input type="checkbox" data-wfk="${esc(r.key)}" ${shown.has(r.key)?'checked':''}> ${esc(dShort(r.ts*1000))} ${esc(new Date(r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))} · ${esc(KIND_LABEL[r.kind||'alarm']||r.kind||'')}${fftNote(r.key)?' · <span class="muted">'+esc(fftNote(r.key))+'</span>':''}</label>`).join('')}</div></div>`;
+  return`<div class="wf-head"><button type="button" class="btn sm wf-tog" id="wfTog" title="${S.wfCollapsed?'แสดงรายการชุดข้อมูล':'ยุบรายการ'}">${S.wfCollapsed?'▶':'◀'}</button>
+      <b class="wf-title">ชุดข้อมูล (${shown.size}/${list.length})</b></div>
+    <div class="wf-body"><div class="row wf-btns"><button type="button" class="btn sm" data-wfp="all">ทั้งหมด</button><button type="button" class="btn sm" data-wfp="new">ล่าสุด ${n}${own?'':' ✓'}</button><button type="button" class="btn sm" data-wfp="none">ล้าง</button></div>
+    <div class="wf-pick">${list.map(r=>`<label class="check"><input type="checkbox" data-wfk="${esc(r.key)}" ${shown.has(r.key)?'checked':''}><span>${esc(dShort(r.ts*1000))} ${esc(new Date(r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))} · ${esc(KIND_LABEL[r.kind||'alarm']||r.kind||'')}${fftNote(r.key)?'<small class="muted"> 📝 '+esc(fftNote(r.key))+'</small>':''}</span></label>`).join('')}</div></div>`;
+}
+// Put the picker in a column to the left of the chart (inside the chart panel), before the chart is sized
+function wfMountPicker(list,n){
+  const main=document.querySelector('#fftPage .fa-main')||document.querySelector('.fa-main');if(!main||main.parentElement.classList.contains('wf-wrap'))return;
+  const wrap=document.createElement('div');wrap.className='wf-wrap'+(S.wfCollapsed?' collapsed':'');
+  main.parentElement.insertBefore(wrap,main);
+  const side=document.createElement('aside');side.className='wf-side';side.innerHTML=wfPickerHtml(list,n);
+  wrap.append(side,main);
+  $('#wfTog').onclick=()=>{S.wfCollapsed=!S.wfCollapsed;save();renderFFTPage()};
+  wfPickerBind(list,n);
 }
 function wfPickerBind(list,n){
   const set=keys=>{S.wfSel=S.wfSel||{};if(keys)S.wfSel[S.sel]=keys;else delete S.wfSel[S.sel];save();renderFFTPage()};

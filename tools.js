@@ -404,6 +404,7 @@ async function onFftSaved(rec){
 FA.wf={az:-0.55,el:0.55,h:1};
 function faWaterfallMode(...a){return FA.wf2d?faWaterfall(...a):faWaterfall3D(...a)}
 function faWaterfall3D(decA,decB,recA,recB,list,f1,c,range){
+  wfMountPicker(list,24);
   const k=css(),axes=faAxes(),recs=wfRecs(list,24),series=[];
   for(const r of recs){const d=faDecode(r);if(!d)continue;
     const pts=faEnvelope(d,axes).filter(p=>p.x>=range.min&&p.x<=range.max);
@@ -456,8 +457,7 @@ function faWaterfall3D(decA,decB,recA,recB,list,f1,c,range){
   $('#faSide').innerHTML=`<div class="panel pbody" style="grid-column:1/-1"><div class="row">
     <div class="seg" id="wfMode"><button data-v="3d" class="on">3D</button><button data-v="2d">2D</button></div>
     <button class="btn sm" id="wfUp">ยอดสูงขึ้น</button><button class="btn sm" id="wfDn">ยอดต่ำลง</button>
-    <button class="btn sm" data-view="front">มุมหน้า</button><button class="btn sm" data-view="side">มุมเฉียง</button><button class="btn sm" data-view="top">มุมบน</button></div></div>`+wfPickerHtml(list,24);
-  wfPickerBind(list,24);
+    <button class="btn sm" data-view="front">มุมหน้า</button><button class="btn sm" data-view="side">มุมเฉียง</button><button class="btn sm" data-view="top">มุมบน</button></div></div>`;
   $('#wfUp').onclick=()=>{FA.wf.h=Math.min(4,FA.wf.h*1.25);draw()};$('#wfDn').onclick=()=>{FA.wf.h=Math.max(0.2,FA.wf.h/1.25);draw()};
   const views={front:{az:0,el:0.35},side:{az:-0.55,el:0.55},top:{az:-0.2,el:1.25}};
   document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{Object.assign(FA.wf,views[b.dataset.view]);draw()});

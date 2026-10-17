@@ -12,16 +12,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.11.0"></script>
-<script src="fft-analysis.js?v=2.11.0"></script>
-<script src="store.js?v=2.11.0"></script>
-<script src="insights.js?v=2.11.0"></script>
-<script src="pages.js?v=2.11.0"></script>
-<script src="ai.js?v=2.11.0"></script>
-<script src="tools.js?v=2.11.0"></script>
-<script src="machine.js?v=2.11.0"></script>
-<script src="site-config.js?v=2.11.0"></script>
-<script src="gdrive.js?v=2.11.0"></script>
+<script src="ia3-fft.js?v=2.11.1"></script>
+<script src="fft-analysis.js?v=2.11.1"></script>
+<script src="store.js?v=2.11.1"></script>
+<script src="insights.js?v=2.11.1"></script>
+<script src="pages.js?v=2.11.1"></script>
+<script src="ai.js?v=2.11.1"></script>
+<script src="tools.js?v=2.11.1"></script>
+<script src="machine.js?v=2.11.1"></script>
+<script src="site-config.js?v=2.11.1"></script>
+<script src="gdrive.js?v=2.11.1"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -293,7 +293,21 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
 .rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
 .plabel svg{width:38mm;height:38mm}
-.wf-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:2px 14px;max-height:240px;overflow:auto;font-size:13px}
+.wf-wrap{display:flex;gap:10px;align-items:stretch}
+.wf-wrap>.fa-main{flex:1;min-width:0}
+.wf-side{flex:0 0 240px;display:flex;flex-direction:column;min-height:0;max-height:420px;border-right:1px solid var(--line);padding:8px 10px 8px 12px}
+.wf-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.wf-title{font-size:13px;font-weight:600}
+.wf-btns{gap:4px;margin-bottom:6px}
+.wf-body{display:flex;flex-direction:column;min-height:0;flex:1}
+.wf-pick{overflow:auto;flex:1;font-size:12.5px}
+.wf-pick label{display:flex;align-items:flex-start;gap:6px;padding:3px 0;line-height:1.35}
+.wf-pick label small{display:block}
+.wf-wrap.collapsed .wf-side{flex-basis:44px;padding:8px 4px}
+.wf-wrap.collapsed .wf-body,.wf-wrap.collapsed .wf-title{display:none}
+.wf-wrap.collapsed .wf-head{flex-direction:column}
+@media (max-width:700px){.wf-wrap{flex-direction:column}.wf-side{flex-basis:auto;max-height:200px;border-right:0;border-bottom:1px solid var(--line)}
+  .wf-wrap.collapsed .wf-side{flex-basis:auto}.wf-wrap.collapsed .wf-head{flex-direction:row}.wf-wrap.collapsed .wf-title{display:inline}}
 @media (pointer:coarse){.btn,.btn.sm,.seg button,select{min-height:36px}.star{min-width:36px;min-height:36px}}
 .side-dup{display:block;width:calc(100% - 12px);margin:2px 6px 6px;text-align:left;white-space:normal;line-height:1.35;border-color:var(--warn,#d9a400);color:inherit;background:color-mix(in srgb,var(--warn,#d9a400) 14%,transparent)}
 .batt-row{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:12px;align-items:center;margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
@@ -458,7 +472,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.11.0',APP_BUILD='2026-10-17T14:50:37+07:00';
+const APP_VERSION='2.11.1',APP_BUILD='2026-10-17T14:53:27+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
