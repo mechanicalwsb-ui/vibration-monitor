@@ -175,7 +175,7 @@ function playTwf(dec,band,axis,speed){
   const ctx=audioCtx||(audioCtx=new AudioContext()),src=B.twf[axis]||B.twf.x;
   let sp=speed||Math.max(1,Math.ceil(8000/B.twfSampleRate));
   const rate=Math.min(96000,Math.max(3000,B.twfSampleRate*sp));
-  const peak=Math.max(...src.map(Math.abs))||1,mean=src.reduce((a,b)=>a+b,0)/src.length;
+  const peak=vmax(src.map(Math.abs))||1,mean=src.reduce((a,b)=>a+b,0)/src.length;
   const reps=Math.max(1,Math.ceil(3*rate/src.length)),buf=ctx.createBuffer(1,src.length*reps,rate),d=buf.getChannelData(0);
   for(let r=0;r<reps;r++)for(let i=0;i<src.length;i++){const w=Math.min(1,i/64,(src.length-i)/64);d[r*src.length+i]=(src[i]-mean)/peak*0.9*w}
   const n=ctx.createBufferSource();n.buffer=buf;n.connect(ctx.destination);n.start();twfAudio=n;
@@ -219,7 +219,7 @@ function faAcorr(decA,decB,recA,recB,list,f1,c){
 }
 function faCirc(decA,decB,recA,recB,list,f1,c){
   const k=css(),B=twfOf(decA);if(!B||!f1){$('#faNote').textContent=f1?'ไม่มี waveform':'ต้องทราบ RPM ก่อน';$('#faSide').innerHTML='';return}
-  const fs=B.twfSampleRate,a=faAxes()[0],x=B.twf[a],m=x.reduce((p,q)=>p+q,0)/x.length,amp=Math.max(...x.map(v=>Math.abs(v-m)))||1;
+  const fs=B.twfSampleRate,a=faAxes()[0],x=B.twf[a],m=x.reduce((p,q)=>p+q,0)/x.length,amp=vmax(x.map(v=>Math.abs(v-m)))||1;
   const spr=fs/f1,revs=Math.min(6,Math.floor(x.length/spr)),R0=amp*2.5,pal=[k.x,k.y,k.z,k.r,k.t,k.zb],ds=[];
   for(let r=0;r<revs;r++){const pts=[];for(let i=Math.floor(r*spr);i<=Math.floor((r+1)*spr)&&i<x.length;i++){const th=2*Math.PI*(i-r*spr)/spr-Math.PI/2,rr=R0+(x[i]-m);pts.push({x:rr*Math.cos(th),y:-rr*Math.sin(th)})}
     ds.push({label:'รอบที่ '+(r+1),data:pts,showLine:true,borderColor:pal[r],backgroundColor:pal[r],borderWidth:1,pointRadius:0})}
@@ -245,10 +245,11 @@ function faSgram(decA,decB,recA,recB,list,f1,c,range){
   g.fillStyle=k.muted;g.font='11px "IBM Plex Sans Thai",sans-serif';
   for(let j=0;j<=5;j++){const f=range.min+(range.max-range.min)*j/5,y=T+ph-j/5*ph;g.fillText(f.toFixed(0)+' Hz',4,y+4)}
   cols.forEach((cl,i)=>{if(cols.length<=12||i%Math.ceil(cols.length/10)===0)g.fillText(dShort(cl.r.ts*1000),L+i*cw,H-14)});
-  cv_.onmousemove=e=>{const b=cv_.getBoundingClientRect(),i=Math.floor((e.clientX-b.left-L)/cw),f=range.min+(T+ph-(e.clientY-b.top))/ph*(range.max-range.min);const cl=cols[i];
+  cv_.style.touchAction='none';
+  cv_.onpointermove=cv_.onpointerdown=e=>{const b=cv_.getBoundingClientRect(),i=Math.floor((e.clientX-b.left-L)/cw),f=range.min+(T+ph-(e.clientY-b.top))/ph*(range.max-range.min);const cl=cols[i];
     if(!cl||f<range.min||f>range.max)return;const p=cl.pts.reduce((a,q)=>Math.abs(q.x-f)<Math.abs(a.x-f)?q:a,cl.pts[0]);
     $('#faNote').textContent=`${dFull(cl.r.ts*1000)} · ${p.x.toFixed(1)} Hz · ${faFmt(p.y)} ${faUnit()}`};
-  $('#faNote').textContent=`Spectrograph ${cols.length} ชุด (เก่า → ใหม่ จากซ้ายไปขวา) สีเหลือง = สูง · ชี้เมาส์เพื่อดูค่า · เส้นแนวนอนที่สว่างขึ้นเรื่อย ๆ = ยอดที่โตขึ้น`;
+  $('#faNote').textContent=`Spectrograph ${cols.length} ชุด (เก่า → ใหม่ จากซ้ายไปขวา) สีเหลือง = สูง · ชี้หรือแตะเพื่อดูค่า · เส้นแนวนอนที่สว่างขึ้นเรื่อย ๆ = ยอดที่โตขึ้น`;
   $('#faSide').innerHTML='';
 }
 // Bump test: natural frequencies from a capture taken while the machine was stopped and struck
@@ -295,10 +296,10 @@ function faMotion(decA,decB,recA,recB,list,f1,c){
     <p class="muted fa-note">เฟสต่างกันเกือบ 0° หรือ 180° = สั่นเป็นเส้นตรงทิศเดียว · ใกล้ ±90° = สั่นเป็นวง (เช่น unbalance มักเป็นวงรี)</p></div>`;
   $('#mF').onchange=e=>{FA.motionF=+e.target.value||null;renderFFTPage()};
   const cv_=$('#m3d'),W=cv_.clientWidth||400,H=260,dpr=devicePixelRatio||1;cv_.width=W*dpr;cv_.height=H*dpr;const g=cv_.getContext('2d');g.scale(dpr,dpr);
-  const mxA=Math.max(...[X,Y,Z].flatMap(v=>v.s.map(Math.abs)))||1,S=Math.min(W,H)*0.32/mxA,cx=W/2,cy=H/2;
+  const mxA=vmax([X,Y,Z].flatMap(v=>v.s.map(Math.abs)))||1,S=Math.min(W,H)*0.32/mxA,cx=W/2,cy=H/2;
   const proj=(x,y,z)=>[cx+(z-y)*0.866*S,cy-(x)*S+(z+y)*0.5*S*0.6];
   cancelAnimationFrame(motionAnim);let t=0;
-  const draw=()=>{if(!document.body.contains(cv_))return;g.clearRect(0,0,W,H);g.lineWidth=1;
+  const draw=()=>{if(!document.body.contains(cv_)||cv_.offsetParent===null||FA.mode!=='motion'||S.view!=='fft')return;g.clearRect(0,0,W,H);g.lineWidth=1;
     [[1,0,0,'X',k.x],[0,1,0,'Y',k.y],[0,0,1,'Z',k.z]].forEach(([a,b,cc,l,col])=>{const[x0,y0]=proj(0,0,0),[x1,y1]=proj(a*mxA,b*mxA,cc*mxA);g.strokeStyle=col;g.globalAlpha=.5;g.beginPath();g.moveTo(x0,y0);g.lineTo(x1,y1);g.stroke();g.globalAlpha=1;g.fillStyle=col;g.fillText(l,x1+3,y1)});
     g.strokeStyle=k.muted;g.globalAlpha=.35;g.beginPath();X.s.forEach((_,i)=>{const[px,py]=proj(X.s[i],Y.s[i],Z.s[i]);i?g.lineTo(px,py):g.moveTo(px,py)});g.stroke();g.globalAlpha=1;
     const i=t%X.s.length,[px,py]=proj(X.s[i],Y.s[i],Z.s[i]);g.fillStyle=k.zd;g.beginPath();g.arc(px,py,6,0,7);g.fill();
@@ -353,13 +354,15 @@ function faBands(decA,decB,recA,recB,list,f1,c){
   faCharts.push(new Chart($('#faChart'),{type:'line',data:{datasets:ds},options:o}));
   $('#faNote').textContent=`แนวโน้มค่าแต่ละแถบความถี่ข้าม FFT ${rows.length} ชุด (ค่ารวมแบบ RMS ในแถบ ของแกนที่สูงสุด)${c.vfd?' · เครื่อง VFD: ใช้รอบของแต่ละชุด':''}`;
   const cur=faDecode(recA),fCur=speedOf(recA,cur,c)||f1,fi=faultIndices(cur,c,fCur);
+  // change vs the capture just before the selected one (not always the second newest)
+  const rowsByT=rows.slice().sort((x,y)=>x.r.ts-y.r.ts),ai_=rowsByT.findIndex(x=>x.r.key===recA.key),prevRow=ai_>0?rowsByT[ai_-1]:null;
   const cell=v=>v==null?'':v;
   $('#faSide').innerHTML=`
     <div class="panel" style="grid-column:1/-1"><div class="ph"><h3>Bands report · ${dFull(recA.ts*1000)}</h3>
       <div class="row"><button class="btn sm" id="bdAuto" title="ใช้ชุดอ้างอิง (หรือชุดที่เลือก) × 2 = เตือน, × 4 = อันตราย">ตั้งเกณฑ์อัตโนมัติจากชุดอ้างอิง</button>
       ${c.bearing&&bearingFreqs(1,c.bearing)?'<button class="btn sm" id="bdBrg">+ แถบ bearing</button>':''}<button class="btn sm" id="bdAdd">+ เพิ่มแถบ</button><button class="btn sm" id="bdReset">คืนค่าเริ่มต้น</button></div></div>
       <div class="tablewrap" style="max-height:none"><table class="bands-t"><thead><tr><th>ชื่อแถบ</th><th>จาก</th><th>ถึง</th><th>หน่วยช่วง</th><th>ปริมาณ</th><th>ค่าล่าสุด</th><th>เตือน</th><th>อันตราย</th><th>สถานะ</th><th>เทียบชุดก่อน</th><th></th></tr></thead><tbody>
-      ${B.map((b,i)=>{const v=bandValue(cur,b,fCur),z=bandZone(b,v&&v.v),prev=rows.length>1?rows[rows.length-2].vals[i]:null,ch=v&&prev?((v.v-prev)/prev*100):null;
+      ${B.map((b,i)=>{const v=bandValue(cur,b,fCur),z=bandZone(b,v&&v.v),prev=prevRow?prevRow.vals[i]:null,ch=v&&prev?((v.v-prev)/prev*100):null;
         return`<tr data-i="${i}"><td><input class="bN" value="${esc(b.name)}"></td><td><input type="number" step="any" class="bLo" value="${b.lo}"></td><td><input type="number" step="any" class="bHi" value="${b.hi}"></td>
           <td><select class="bU"><option value="X" ${b.unit==='X'?'selected':''}>× รอบ</option><option value="Hz" ${b.unit==='Hz'?'selected':''}>Hz</option></select></td>
           <td><select class="bQ"><option value="vel" ${b.qty==='vel'?'selected':''}>Velocity</option><option value="acc" ${b.qty==='acc'?'selected':''}>Acc (g)</option></select></td>

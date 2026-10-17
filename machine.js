@@ -14,13 +14,16 @@ bearingGeom=function(code){
 function brgDbImport(file){
   return file.text().then(t=>{
     const rows=parseCSV(t);if(rows.length<2)throw new Error('ไฟล์ว่าง');
-    const h=rows[0].map(x=>x.toLowerCase().replace(/[^a-z0-9]/g,'')),ix=n=>h.findIndex(x=>x===n||x.startsWith(n));
-    const iC=ix('code')>=0?ix('code'):ix('bearing')>=0?ix('bearing'):0;
-    const iBPFO=ix('bpfo'),iBPFI=ix('bpfi'),iBSF=ix('bsf'),iFTF=ix('ftf'),iN=ix('n')>=0?ix('n'):ix('balls'),iD=h.findIndex(x=>/^(d|balld|balldia)/.test(x)&&!/pitch/.test(x)),iP=h.findIndex(x=>/pitch|^dp|^bigd/.test(x)),iA=ix('ang')>=0?ix('ang'):ix('contact');
+    // headers matched exactly against a few accepted spellings (prefix matching took "name" as the ball count)
+    const h=rows[0].map(x=>x.toLowerCase().replace(/[^a-z0-9]/g,'')),col=(...al)=>h.findIndex(x=>al.includes(x));
+    const iC0=col('code','bearing','bearingcode','part','partno','designation');const iC=iC0>=0?iC0:0;
+    const iBPFO=col('bpfo'),iBPFI=col('bpfi'),iBSF=col('bsf'),iFTF=col('ftf'),iN=col('n','balls','nballs','z','rollers','nb'),
+      iD=col('d','balld','balldia','balldiameter','bd','rollerd','rollerdia'),iP=col('pitch','pitchd','pitchdia','pitchdiameter','dp','bigd','pd'),iA=col('angle','ang','contact','contactangle','alpha');
     const db=S.brgDb||(S.brgDb={});let n=0;const num=(r,i)=>i>=0?parseFloat(String(r[i]).replace(',','.')):NaN;
     for(const r of rows.slice(1)){const code=String(r[iC]||'').trim().toUpperCase();if(!code)continue;
-      if(iBPFO>=0&&num(r,iBPFO)>0){db[code]={fac:{BPFO:num(r,iBPFO),BPFI:num(r,iBPFI),BSF:num(r,iBSF),FTF:num(r,iFTF)},src:'ตัวคูณจาก '+file.name};n++}
-      else if(num(r,iN)>0&&num(r,iD)>0&&num(r,iP)>0){db[code]={n:num(r,iN),d:num(r,iD),D:num(r,iP),ang:num(r,iA)||0,src:'ขนาดจาก '+file.name};n++}}
+      const fac=[iBPFO,iBPFI,iBSF,iFTF].map(i=>num(r,i));
+      if(fac.every(v=>Number.isFinite(v)&&v>0)){db[code]={fac:{BPFO:num(r,iBPFO),BPFI:num(r,iBPFI),BSF:num(r,iBSF),FTF:num(r,iFTF)},src:'ตัวคูณจาก '+file.name};n++}
+      else if(num(r,iN)>0&&num(r,iD)>0&&num(r,iP)>num(r,iD)){db[code]={n:num(r,iN),d:num(r,iD),D:num(r,iP),ang:num(r,iA)||0,src:'ขนาดจาก '+file.name};n++}}
     save();return n;
   });
 }
@@ -39,14 +42,30 @@ function worstZone(list){let w=null;for(const a of list){const z=status(lastOf(a
 function pointsStripHtml(a){
   const m=machineOf(a),pts=pointsOf(m);if(pts.length<2)return'';
   return`<div class="pstrip"><span class="muted" style="font-size:12.5px;align-self:center">จุดวัดของ <b>${esc(m)}</b>:</span>${pts.map(p=>{const z=status(lastOf(p),cfg(p));
-    return`<button class="tag ${z?'z'+z:''}" style="cursor:pointer;${p===a?'outline:2px solid var(--accent)':''}" onclick="S.sel='${esc(p).replace(/'/g,"\\'")}';save();render()"><span class="dot z${z||''}"></span>${esc(pointLabel(p))} ${fv(overall(lastOf(p)))}</button>`}).join('')}
+    return`<button class="tag ${z?'z'+z:''}" style="cursor:pointer;${p===a?'outline:2px solid var(--accent)':''}" data-act="sel" data-v="${esc(p)}"><span class="dot z${z||''}"></span>${esc(pointLabel(p))} ${fv(overall(lastOf(p)))}</button>`}).join('')}
     <button class="btn sm" onclick="S.cmp={assets:${esc(JSON.stringify(pts))},mode:'assets'};setView('stats')">เปรียบเทียบจุดวัด</button></div>`;
 }
 
+// ---------- buttons that act on a machine name or record id ----------
+// The value travels in data-v (HTML-escaped) and is read back as plain text, never placed inside inline
+// JavaScript, so a name containing quotes cannot break out into script (or simply break the button).
+document.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('[data-act]');if(!b)return;
+  const v=b.dataset.v,act=b.dataset.act;
+  if(act==='fav'){e.stopPropagation();e.preventDefault();toggleFav(v)}
+  else if(act==='sel'){S.sel=v;save();render()}
+  else if(act==='newfail')editFailure(null,v);
+  else if(act==='editfail')editFailure(v);
+  else if(act==='printfail')printFailure(v);
+  else if(act==='wizard')openWizard(v);
+  else if(act==='connect')connectAsset(v);
+},true);
+
 // ---------- favourites (B5) ----------
 const isFav=a=>(S.fav||[]).includes(a);
-function toggleFav(a){S.fav=S.fav||[];S.fav=isFav(a)?S.fav.filter(x=>x!==a):[...S.fav,a];save();render()}
-const favBtn=a=>`<button class="star ${isFav(a)?'on':''}" title="ปักหมุด" onclick="event.stopPropagation();toggleFav('${esc(a).replace(/'/g,"\\'")}')">${isFav(a)?'★':'☆'}</button>`;
+// S.favT = {name: time of the last star/unstar}, so an unstar on one device is not undone by another's star
+function toggleFav(a){S.fav=S.fav||[];S.fav=isFav(a)?S.fav.filter(x=>x!==a):[...S.fav,a];(S.favT||(S.favT={}))[a]=Date.now();save();render()}
+const favBtn=a=>`<button class="star ${isFav(a)?'on':''}" title="ปักหมุด" data-act="fav" data-v="${esc(a)}">${isFav(a)?'★':'☆'}</button>`;
 
 // ---------- copy settings to other machines (template, B1) ----------
 const COPY_PARTS={thr:'เกณฑ์ (ISO/แหล่งเกณฑ์/อุณหภูมิ)',bands:'แถบความถี่และเกณฑ์',drive:'มอเตอร์/เกียร์/สายพาน + RPM + ใบพัด',bearing:'bearing',run:'เกณฑ์เครื่องหยุด',profile:'ประเภท/kW/ฐาน/พื้นที่'};
@@ -85,11 +104,11 @@ const FR_ST={open:'เปิด',progress:'กำลังแก้',closed:'ป
 function openFailures(a){return(S.failures||[]).filter(f=>(!a||f.asset===a)&&f.status!=='closed')}
 function failuresHtml(a){
   const list=(S.failures||[]).filter(f=>f.asset===a).sort((x,y)=>(x.status==='closed')-(y.status==='closed')||y.t-x.t);
-  return`<div class="panel span"><div class="ph"><h3>รายงานความผิดปกติ (${openFailures(a).length} เรื่องที่ยังไม่ปิด)</h3><button class="btn sm primary" onclick="editFailure(null,'${esc(a).replace(/'/g,"\\'")}')">+ สร้างรายงาน</button></div>
+  return`<div class="panel span"><div class="ph"><h3>รายงานความผิดปกติ (${openFailures(a).length} เรื่องที่ยังไม่ปิด)</h3><button class="btn sm primary" data-act="newfail" data-v="${esc(a)}">+ สร้างรายงาน</button></div>
     <div class="tablewrap"><table><thead><tr><th>วันที่</th><th>เรื่อง</th><th>ความเร่งด่วน</th><th>ผู้รับผิดชอบ</th><th>กำหนดเสร็จ</th><th>สถานะ</th><th></th></tr></thead><tbody>
     ${list.map(f=>`<tr><td>${dFull(f.t)}</td><td style="white-space:normal;text-align:left">${esc(f.title)}</td><td>${FR_PRIO[f.priority]||''}</td><td>${esc(f.owner||'')}</td>
       <td class="${f.status!=='closed'&&f.due&&new Date(f.due)<new Date()?'up':''}">${f.due?new Date(f.due).toLocaleDateString('th-TH'):''}</td><td><span class="fr-st ${f.status}">${FR_ST[f.status]}</span></td>
-      <td><button class="btn sm" onclick="editFailure('${f.id}')">แก้ไข</button> <button class="btn sm" onclick="printFailure('${f.id}')">พิมพ์</button></td></tr>`).join('')||'<tr><td colspan="7" class="muted">ยังไม่มี</td></tr>'}</tbody></table></div>
+      <td><button class="btn sm" data-act="editfail" data-v="${esc(f.id)}">แก้ไข</button> <button class="btn sm" data-act="printfail" data-v="${esc(f.id)}">พิมพ์</button></td></tr>`).join('')||'<tr><td colspan="7" class="muted">ยังไม่มี</td></tr>'}</tbody></table></div>
     <p class="muted live-note">ใช้บันทึกปัญหาที่พบ หลักฐาน สาเหตุ และสิ่งที่ต้องทำ แล้วติดตามจนปิดงาน · สร้างจากผลวิเคราะห์ AI ได้ในเมนู "วิเคราะห์ด้วย AI"</p></div>`;
 }
 async function chartSnapshot(){ // the overview velocity chart or the FFT chart, whichever is on screen
@@ -111,7 +130,7 @@ function editFailure(id,asset,prefill){
     <label>กำหนดเสร็จ<input type="date" name="due" value="${v('due')}"></label>
     <label class="full check"><input type="checkbox" name="snap" ${f.chart?'checked':''}> แนบภาพกราฟที่เปิดอยู่ตอนนี้</label>
     <label class="full">รูปถ่าย<input type="file" accept="image/*" capture="environment" name="photo"></label>
-    ${f.photo?`<img src="${f.photo}" class="full" style="max-height:160px;object-fit:contain">`:''}
+    ${f.photo?`<img src="${imgSrc(f.photo)}" class="full" style="max-height:160px;object-fit:contain">`:''}
     <div class="full row" style="justify-content:space-between">${id?'<button class="btn danger" id="frDel">ลบ</button>':'<span></span>'}<button class="btn primary" id="frSave">บันทึก</button></div></form>`);
   const fm=$('#frForm');
   $('#frSave').onclick=async()=>{
@@ -129,7 +148,7 @@ function failureHtml(f){
   return`<div class="rp-head"><div><h1>รายงานความผิดปกติของเครื่องจักร</h1><p>${esc((S.rep&&S.rep.org)||'')}</p></div><div class="rp-meta">เลขที่ ${f.id}<br>วันที่ ${new Date(f.t).toLocaleString('th-TH')}</div></div>
     <table class="rp">${row('เครื่องจักร',f.asset)}${row('หัวข้อ',f.title)}${row('อาการที่พบ',f.symptom)}${row('หลักฐาน',f.evidence)}${row('สาเหตุที่คาด',f.cause)}${row('สิ่งที่ต้องทำ',f.action)}
     ${row('ความเร่งด่วน',FR_PRIO[f.priority])}${row('ผู้รับผิดชอบ',f.owner)}${row('กำหนดเสร็จ',f.due?new Date(f.due).toLocaleDateString('th-TH'):'')}${row('สถานะ',FR_ST[f.status]+(f.closedAt?' ('+new Date(f.closedAt).toLocaleDateString('th-TH')+')':''))}</table>
-    ${f.chart?`<img class="rp-chart" src="${f.chart}" style="background:#fff">`:''}${f.photo?`<img src="${f.photo}" style="max-width:60%;margin-top:8px">`:''}
+    ${f.chart?`<img class="rp-chart" src="${imgSrc(f.chart)}" style="background:#fff">`:''}${f.photo?`<img src="${imgSrc(f.photo)}" style="max-width:60%;margin-top:8px">`:''}
     <div class="rp-sign"><div>ผู้รายงาน<br><br>.............................................<br>(.............................................)</div><div>ผู้อนุมัติ<br><br>.............................................<br>(.............................................)</div></div>`;
 }
 function printFailure(id){const f=(S.failures||[]).find(x=>x.id===id);if(f)printHtml(failureHtml(f))}
@@ -155,7 +174,7 @@ function openWizard(asset){
       <label>จำนวนขั้วมอเตอร์<select id="wPoles"><option value="">ไม่ทราบ/ไม่ใช่มอเตอร์</option>${[2,4,6,8].map(n=>`<option ${+dr.poles===n?'selected':''}>${n}</option>`).join('')}</select></label>
       <label>ความถี่ไฟ (Hz)<input type="number" id="wLf" value="${dr.lineHz||50}"></label><label>จำนวน rotor bar (ถ้าทราบ)<input type="number" id="wBars" value="${dr.bars??''}"></label>
       <label>ฟันเฟืองบนเพลานี้ (ถ้ามีเกียร์)<input type="number" id="wTeeth" value="${dr.teeth??''}"></label><label>อัตราทดสายพาน/เกียร์ (รอบตัวตาม ÷ รอบเพลานี้)<input type="number" step="any" id="wBelt" value="${dr.beltRatio??''}"></label>`;
-    if(W.step===3)body=`<label>เบอร์ bearing (DE)<input id="wBrg" list="brgList2" value="${esc((p.brg&&p.brg.de&&p.brg.de.code)||'')}"><datalist id="brgList2">${BRG_LIST.concat(Object.keys(S.brgDb||{})).map(x=>`<option value="${x}">`).join('')}</datalist></label>
+    if(W.step===3)body=`<label>เบอร์ bearing (DE)<input id="wBrg" list="brgList2" value="${esc((p.brg&&p.brg.de&&p.brg.de.code)||'')}"><datalist id="brgList2">${BRG_LIST.concat(Object.keys(S.brgDb||{})).map(x=>`<option value="${esc(x)}">`).join('')}</datalist></label>
       <label>จำนวนใบพัด<input type="number" id="wVanes" value="${d.vanes??''}"></label>`;
     if(W.step===4){const k=isoClassFor(p);body=`<label class="full">เกณฑ์ ISO<select id="wCls">${Object.entries(CLASSES).filter(([x])=>x!=='custom').map(([x,v])=>`<option value="${x}" ${(d.cls||k)===x?'selected':''}>${v.n}${x===k?' (แนะนำ)':''}</option>`).join('')}</select></label>
       <label class="full check"><input type="checkbox" id="wBands" checked> สร้างแถบความถี่มาตรฐาน (1X, 2X, 3–10X, HF …)</label>`}
@@ -177,7 +196,7 @@ function openWizard(asset){
     if(W.step===2){d.rpm=nz(val('wRpm'));d.vfd=val('wVfd');dr.poles=nz(val('wPoles'));dr.lineHz=nz(val('wLf'))||50;dr.bars=nz(val('wBars'));dr.teeth=nz(val('wTeeth'));dr.beltRatio=nz(val('wBelt'))}
     if(W.step===3){const code=val('wBrg'),g=code&&bearingGeom(code);p.brg=p.brg||{};if(code)p.brg.de={code,...(g||{})};p.brgUse='de';d.vanes=nz(val('wVanes'))}
     if(W.step===4){d.cls=val('wCls');d._bands=val('wBands')}};
-  const finish=()=>{const d=W.d,c=cfg(d.name);
+  const finish=()=>{const d=W.d;if(d.name!==asset)cancelRename(d.name);const c=cfg(d.name);
     Object.assign(c,{machine:d.machine||'',point:d.point||'',profile:d.profile,drive:d.drive,rpm:d.rpm,vfd:!!d.vfd,vanes:d.vanes});
     if(d.cls&&CLASSES[d.cls]&&CLASSES[d.cls].z){c.cls=d.cls;c.z=[...CLASSES[d.cls].z]}
     const b=d.profile.brg&&d.profile.brg.de;if(b&&(b.fac||(b.n&&b.d&&b.D)))c.bearing=b.fac?{fac:b.fac}:{n:b.n,d:b.d,D:b.D,ang:b.ang||0};
@@ -255,7 +274,14 @@ function playVideoOut(){
 // A sensor ends up under two machine names when it is renamed, or seen again under a new browser id.
 // Evidence used: the sensor's own name history, the same MAC, and identical readings at the same times.
 function noteSensorName(sv,name){if(!sv||!name)return;sv.names=sv.names||[];if(!sv.names.includes(name))sv.names.push(name)}
+// cached per data version: it compares every pair of machines, and runs for the sidebar on every render
+let dupMemo={k:null,v:null};
 function findDuplicateAssets(){
+  const k=dataVer+'|'+S.readings.length+'|'+(S.dupIgnore||[]).length+'|'+Object.keys(S.sensors||{}).length;
+  if(dupMemo.k!==k)dupMemo={k,v:findDuplicateAssetsNow()};
+  return dupMemo.v;
+}
+function findDuplicateAssetsNow(){
   const ns=names(),groups=[],seen=new Set(),dismissed=S.dupIgnore||[];
   const add=(list,why,mac)=>{list=[...new Set(list)].filter(a=>ns.includes(a));if(list.length<2)return;
     const key=list.slice().sort().join('|');if(seen.has(key)||dismissed.includes(key))return;seen.add(key);groups.push({assets:list,why,mac})};

@@ -106,7 +106,7 @@ async function renderFFTPage(){
   const hasHigh=!!(decA.high&&decA.high.startBin!=null);
   if(decA.single||(!hasHigh&&FA.band!=='low'))FA.band='low';
   const c=cfg(S.sel),{f1,src}=faRunSpeed(decA,c,recA),range=faFreqRange(decA);
-  const opt=(v,l,cur)=>`<option value="${v}" ${v===cur?'selected':''}>${l}</option>`;
+  const opt=(v,l,cur)=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(l)}</option>`;
   const seg=(id,items,cur)=>`<div class="seg" id="${id}">${items.map(([v,l])=>`<button data-v="${v}" class="${v===cur?'on':''}">${l}</button>`).join('')}</div>`;
   const recLabel=(r,i)=>`${r.key===c.refFft?'★ ':''}${KIND_LABEL[r.kind||'alarm']||r.kind}${r.tag==='bump'?' (bump test)':''}${r.src?' '+r.src:''} · ${dFull(r.ts*1000)}${i===0?' (ล่าสุด)':''}`;
   const b=c.bearing||{};
@@ -191,7 +191,7 @@ function faSpectrum(decA,decB,recA,recB,list,f1,c,range){
     if(ex.length)ds.push({label:'เกินเส้นอ้างอิง',type:'scatter',data:ex.map(e=>({x:e.x,y:cv(e.y)})),borderColor:k.zd,backgroundColor:k.zd,pointRadius:5,pointStyle:'triangle'})}
   const o=faChartOpts(faUnit(),range);o.plugins.faVlines={lines:faMarkers(f1,c,range.max)};
   faCharts.push(new Chart($('#faChart'),{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}));
-  $('#faNote').textContent=(mask?`เทียบกับชุดอ้างอิง ${dFull(refRec.ts*1000)}: ${ex.length?'เกิน '+ex.length+' ยอด':'ไม่มียอดเกิน'} · `:'')+(decB?`A = ${dFull(recA.ts*1000)} (เส้นทึบ) · B = ${dFull(recB.ts*1000)} (เส้นประ) · `:'')+'ซูมด้วยช่อง "ซูมความถี่" หรือปุ่มลัด · ชี้เมาส์บนกราฟเพื่อดูค่า'+(FA.qty==='vel'?` · velocity แสดงตั้งแต่ ${VEL_MIN_HZ} Hz ขึ้นไป (ต่ำกว่านั้นเป็น noise ที่ถูกขยายจากการแปลงหน่วย)`:'');
+  $('#faNote').textContent=(mask?`เทียบกับชุดอ้างอิง ${dFull(refRec.ts*1000)}: ${ex.length?'เกิน '+ex.length+' ยอด':'ไม่มียอดเกิน'} · `:'')+(decB?`A = ${dFull(recA.ts*1000)} (เส้นทึบ) · B = ${dFull(recB.ts*1000)} (เส้นประ) · `:'')+'ซูมด้วยช่อง "ซูมความถี่" หรือปุ่มลัด · ชี้หรือแตะบนกราฟเพื่อดูค่า'+(FA.qty==='vel'?` · velocity แสดงตั้งแต่ ${VEL_MIN_HZ} Hz ขึ้นไป (ต่ำกว่านั้นเป็น noise ที่ถูกขยายจากการแปลงหน่วย)`:'');
 
   const env=faEnvelope(decA,axes).filter(p=>p.x>=range.min&&p.x<=range.max);
   const marks=faMarkers(f1,c,range.max*1.1);

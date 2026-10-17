@@ -12,16 +12,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.9.2"></script>
-<script src="fft-analysis.js?v=2.9.2"></script>
-<script src="store.js?v=2.9.2"></script>
-<script src="insights.js?v=2.9.2"></script>
-<script src="pages.js?v=2.9.2"></script>
-<script src="ai.js?v=2.9.2"></script>
-<script src="tools.js?v=2.9.2"></script>
-<script src="machine.js?v=2.9.2"></script>
-<script src="site-config.js?v=2.9.2"></script>
-<script src="gdrive.js?v=2.9.2"></script>
+<script src="ia3-fft.js?v=2.10.0"></script>
+<script src="fft-analysis.js?v=2.10.0"></script>
+<script src="store.js?v=2.10.0"></script>
+<script src="insights.js?v=2.10.0"></script>
+<script src="pages.js?v=2.10.0"></script>
+<script src="ai.js?v=2.10.0"></script>
+<script src="tools.js?v=2.10.0"></script>
+<script src="machine.js?v=2.10.0"></script>
+<script src="site-config.js?v=2.10.0"></script>
+<script src="gdrive.js?v=2.10.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -293,6 +293,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
 .rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
 .plabel svg{width:38mm;height:38mm}
+@media (pointer:coarse){.btn,.btn.sm,.seg button,select{min-height:36px}.star{min-width:36px;min-height:36px}}
 .side-dup{display:block;width:calc(100% - 12px);margin:2px 6px 6px;text-align:left;white-space:normal;line-height:1.35;border-color:var(--warn,#d9a400);color:inherit;background:color-mix(in srgb,var(--warn,#d9a400) 14%,transparent)}
 .batt-row{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:12px;align-items:center;margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
 .batt-fc{font-size:13px}.batt-fc b{display:block;font-size:18px;font-weight:600;margin:2px 0}
@@ -456,7 +457,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.9.2',APP_BUILD='2026-10-17T13:57:38+07:00';
+const APP_VERSION='2.10.0',APP_BUILD='2026-10-17T14:32:11+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -480,6 +481,10 @@ let charts=[];
 // Persistence lives in store.js: settings in localStorage, readings/maintenance/health in IndexedDB
 function save(){saveState()}
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),3500)}
+// pictures stored in records (photos, chart snapshots) must be inline images; anything else is dropped
+// max/min of long arrays: Math.max(...a) overflows the call stack above ~120k values; empty -> null
+const vmax=a=>{let m=null;for(const v of a)if(v!=null&&(m===null||v>m))m=v;return m},vmin=a=>{let m=null;for(const v of a)if(v!=null&&(m===null||v<m))m=v;return m};
+const imgSrc=s=>/^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(s||'')?s:'';
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 // ---- units ----
@@ -496,8 +501,19 @@ function ago(t){const m=(Date.now()-t)/6e4;if(m<60)return Math.max(1,Math.round(
 
 // ---- model ----
 function cfg(a){if(!S.assets[a])S.assets[a]={cls:'g2f',z:[...CLASSES.g2f.z],tw:70,ta:85};return S.assets[a]}
-const names=()=>[...new Set(S.readings.map(r=>r.asset))].sort((a,b)=>a.localeCompare(b,'th'));
-const series=a=>S.readings.filter(r=>r.asset===a).sort((x,y)=>x.t-y.t);
+// Readings grouped per machine and sorted once, rebuilt only when the data changes (every save, merge, or a
+// change in length), instead of filtering and sorting all readings on every call
+let dataVer=0;const SER={v:-1,ref:null,len:-1,map:new Map()};
+function idxDirty(){dataVer++}
+function serIndex(){
+  if(SER.ref!==S.readings||SER.len!==S.readings.length||SER.v!==dataVer){
+    const m=new Map();for(const r of S.readings){let l=m.get(r.asset);if(!l)m.set(r.asset,l=[]);l.push(r)}
+    for(const l of m.values())l.sort((x,y)=>x.t-y.t);
+    Object.assign(SER,{v:dataVer,ref:S.readings,len:S.readings.length,map:m})}
+  return SER.map;
+}
+const names=()=>[...serIndex().keys()].sort((a,b)=>a.localeCompare(b,'th'));
+const series=a=>(serIndex().get(a)||[]).slice();
 function overall(r){const v=[r.vx,r.vy,r.vz].filter(x=>x!=null);return v.length?Math.max(...v):(r.vo??null)}
 function accMax(r){const v=[r.ax,r.ay,r.az].filter(x=>x!=null);return v.length?Math.max(...v):(r.ao??null)}
 function zone(v,z){if(v==null)return null;return v<z[0]?'A':v<z[1]?'B':v<z[2]?'C':'D'}
@@ -736,11 +752,11 @@ function renderMain(ns){
   if(prev&&overall(prev)){const p=(ov-overall(prev))/overall(prev)*100;delta=`<span class="${p>10?'up':p<-10?'down':''}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(0)}%</span> เทียบ 7 วันก่อน`}
   const stale=Date.now()-last.t>2*DAY;
   const alarms=rs.filter(r=>{const s=status(r,c);return s==='C'||s==='D'}).reverse();
-  const maxOv=Math.max(...rs.map(overall).filter(v=>v!=null));
+  const maxOv=vmax(rs.map(overall).filter(v=>v!=null));
   const fc=forecast(all,c,'ov'),ri=runInfo(all,c,last.t-7*DAY),gaps=findGaps(rs,a,c),bd=c.useBaseline?baselineDelta(last,c):null;
   const fcText=fc.ok?(fc.dAlarm!=null?'ถึงอันตราย '+fmtDays(fc.dAlarm):fc.dWarn!=null?'ถึงเฝ้าระวัง '+fmtDays(fc.dWarn):fc.perWeek<=0?'ทรงตัวหรือลดลง':'ยังไม่ถึงเกณฑ์ใน 1 ปี'):'';
   const banners=[dupBannerHtml(),
-    S._qrAsset===a?`<div class="panel banner"><span>เปิดจาก QR ของ <b>${esc(a)}</b></span><button class="btn primary" onclick="connectAsset('${esc(a).replace(/'/g,"\\'")}')">เชื่อมต่อเซนเซอร์และดึงข้อมูล</button></div>`:'',
+    S._qrAsset===a?`<div class="panel banner"><span>เปิดจาก QR ของ <b>${esc(a)}</b></span><button class="btn primary" data-act="connect" data-v="${esc(a)}">เชื่อมต่อเซนเซอร์และดึงข้อมูล</button></div>`:'',
     backupDue()?`<div class="panel banner warn"><span>ยังไม่ได้สำรองข้อมูล${S.lastBackup?' ตั้งแต่ '+dFull(S.lastBackup):''} — ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น</span><button class="btn" onclick="exportBackup()">สำรองตอนนี้</button></div>`:''].join('');
 
   m.innerHTML=`${banners}
@@ -884,7 +900,7 @@ function renderSettings(ns){
     <div class="panel span"><div class="ph"><h3>เซนเซอร์ที่จำไว้ (${sens.length})</h3></div>
       <div class="pbody">${sens.length?`<ul class="klist">${sens.map(([id,s])=>`<li data-id="${esc(id)}">
           <div class="form" style="padding:0;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)">
-            <label>ชื่อเครื่องจักร${s.mac?` <span class="mono">· MAC ${s.mac}</span>`:''}<input type="text" class="kAsset" value="${esc(s.asset||'')}" list="assetList"></label>
+            <label>ชื่อเครื่องจักร${s.mac?` <span class="mono">· MAC ${esc(s.mac)}</span>`:''}<input type="text" class="kAsset" value="${esc(s.asset||'')}" list="assetList"></label>
             <label>รุ่น<select class="kScale"><option value="816" ${+s.scale!==1289?'selected':''}>มาตรฐาน</option><option value="1289" ${+s.scale===1289?'selected':''}>Digital Accel.</option></select></label></div>
           <div class="row"><button class="btn sm kSave">บันทึก</button><button class="btn sm danger kDel">ลืม</button></div></li>`).join('')}</ul>
         <p class="muted" style="margin:8px 0 0;font-size:12px">เปลี่ยนชื่อแล้ว ค่าที่ดึงครั้งต่อไปจะเก็บในชื่อใหม่ (ค่าเดิมยังอยู่ในชื่อเก่า) · "ลืม" ลบเฉพาะชื่อที่จำไว้ ไม่ลบข้อมูลที่วัดแล้ว</p>`
@@ -921,7 +937,7 @@ function renderSettings(ns){
     const id=li.dataset.id,s=S.sensors[id];
     li.querySelector('.kSave').onclick=()=>{
       const nm=li.querySelector('.kAsset').value.trim();if(!nm)return toast('ใส่ชื่อเครื่องจักรก่อน');
-      const old=s.asset,n0=old!==nm?series(old).length:0;s.scale=+li.querySelector('.kScale').value;
+      const old=s.asset,n0=old!==nm?series(old).length:0;if(old!==nm)cancelRename(nm);s.scale=+li.querySelector('.kScale').value;
       noteSensorName(s,old);
       if(n0&&confirm(`เปลี่ยนชื่อ "${old}" เป็น "${nm}"\n\nย้ายข้อมูลเดิม ${n0} ค่า (และ FFT, บันทึกซ่อม ฯลฯ) ไปอยู่ในชื่อใหม่ด้วยไหม?\n• OK = ย้าย ให้เป็นเครื่องเดียวกัน (แนะนำ)\n• Cancel = ข้อมูลเดิมอยู่ชื่อเก่า ค่าใหม่ไปชื่อใหม่`)){
         mergeAssets([old],nm).then(n=>{render();toast(`ย้ายข้อมูลไป "${nm}" แล้ว (${n} ค่า)`)});
@@ -929,7 +945,7 @@ function renderSettings(ns){
       if(ble.device&&ble.device.id===id&&ble.cfg)Object.assign(ble.cfg,{asset:nm,scale:s.scale});
       save();render();toast('บันทึกแล้ว');
     };
-    li.querySelector('.kDel').onclick=()=>{if(!confirm(`ลืมเซนเซอร์ "${s.asset}"? (ข้อมูลที่วัดแล้วยังอยู่)`))return;delete S.sensors[id];save();render()};
+    li.querySelector('.kDel').onclick=()=>{if(!confirm(`ลืมเซนเซอร์ "${s.asset}"? (ข้อมูลที่วัดแล้วยังอยู่)`))return;delete S.sensors[id];tombList('sensors').push(id);save();render()};
   });
   if(!has)return;
   $('#setAsset').onchange=e=>{S.sel=e.target.value;save();render()};
@@ -960,11 +976,14 @@ function renderSettings(ns){
     const k=S.unit==='in'?25.4:1,toC=v=>S.tunit==='F'?(v-32)*5/9:v;
     const zz=['z0','z1','z2'].map(id=>parseFloat($('#'+id).value)*k);
     if(zz.some(isNaN)||!(zz[0]<zz[1]&&zz[1]<zz[2]))return toast('ค่าเกณฑ์ต้องเป็นตัวเลขและเรียงจากน้อยไปมาก');
-    Object.assign(c,{cls:$('#cCls').value,z:zz,tw:toC(parseFloat($('#tw').value)),ta:toC(parseFloat($('#ta').value))});
+    // an empty temperature box would store NaN, which silently switches the temperature alarm off
+    const tw=toC(parseFloat($('#tw').value)),ta=toC(parseFloat($('#ta').value));
+    if(!Number.isFinite(tw)||!Number.isFinite(ta)||!(tw<ta))return toast('เกณฑ์อุณหภูมิต้องเป็นตัวเลข และค่าเฝ้าระวังต้องน้อยกว่าค่าอันตราย');
+    Object.assign(c,{cls:$('#cCls').value,z:zz,tw,ta});
     save();render();toast('บันทึกเกณฑ์แล้ว');
   };
   $('#bDel').onclick=()=>{const n=series(a).length;if(!confirm(`ลบข้อมูลทั้งหมดของ "${a}" (${n} ค่า)? กู้คืนไม่ได้`))return;
-    S.readings=S.readings.filter(r=>r.asset!==a);delete S.assets[a];tomb().assets[a]=Date.now();S.sel=null;save();render()};
+    tomb().assets[a]=Date.now();purgeAsset(a);S.sel=null;save();render()};
 }
 
 function css(){const g=getComputedStyle(document.documentElement),v=n=>g.getPropertyValue(n).trim();
@@ -1010,7 +1029,7 @@ function drawCharts(rsAll,cf,ex={}){
   const lines=mlist.map(m=>({x:m.t,color:MC[m.type]||c.r,label:m.type,id:m.id}));
   const ov={tBands:{bands,lines}};
   const onClick=(e,el,chart)=>{
-    const px=e.x,hit=lines.find(l=>Math.abs(chart.scales.x.getPixelForValue(l.x)-px)<10);
+    const px=e.x,tol=e.native&&e.native.pointerType==='touch'||matchMedia('(pointer:coarse)').matches?24:10,hit=lines.find(l=>Math.abs(chart.scales.x.getPixelForValue(l.x)-px)<tol);
     if(hit)showMaint(hit.id);
   };
   const withOv=o=>{Object.assign(o.plugins,ov);o.onClick=onClick;return o};
@@ -1147,6 +1166,9 @@ function parseTrend(buf,scale){
 // opcode 1 = trends (header: count, bytes; payload = count x 28-byte records)
 // opcode 2 = last manual FFT/TWF (header: bytes; payload = one record, same layout as alarm FFT)
 // opcode 3 = alarm FFT/TWF (header: records remaining, bytes per record; payload = ONE record)
+// A GATT call that never settles (link half-open) would otherwise leave ble.busy set until a reload
+function gattTimeout(p,ms,what){let tm;return Promise.race([p,new Promise((_,rej)=>{tm=setTimeout(()=>rej(new Error(what+' (ไม่ตอบเกิน '+Math.round(ms/1000)+' วินาที)')),ms)})]).finally(()=>clearTimeout(tm))}
+const rd=c=>gattTimeout(c.readValue(),10000,'เซนเซอร์ไม่ตอบตอนอ่านค่า');
 function bulkRequest(ch,from,opcode=1){
   return new Promise((resolve,reject)=>{
     const chunks=[];let got=0,expected=null,idle,lastPct=0;
@@ -1155,6 +1177,9 @@ function bulkRequest(ch,from,opcode=1){
       const b=new Uint8Array(got);let o=0;for(const c of chunks){b.set(c,o);o+=c.length}resolve(b)};
     const arm=ms=>{clearTimeout(idle);idle=setTimeout(()=>{
       if(expected==null)return finish('เซนเซอร์ไม่ตอบ (อาจกำลังวัดค่าอยู่) รอสักครู่แล้วลองใหม่');
+      // B9: only trends can be kept partially (whole records); a cut FFT record would be saved broken
+      // and then block the complete copy, so it is rejected and downloaded again
+      if(opcode!==1)return finish(`เซนเซอร์หยุดส่ง FFT นานเกิน ${IDLE_MS/1000} วินาที (ได้ ${Math.round((got-HDR)/(expected-HDR)*100)}%) ลองดึงใหม่`);
       bleLog(`เซนเซอร์หยุดส่งข้อมูลนานเกิน ${IDLE_MS/1000} วินาที เก็บส่วนที่ได้ไว้ก่อน`);finish()},ms)};
     const on=e=>{
       const v=e.target.value,bytes=new Uint8Array(v.buffer,v.byteOffset,v.byteLength).slice();
@@ -1190,6 +1215,7 @@ function bulkRequest(ch,from,opcode=1){
     (async()=>{
       try{
         ch.addEventListener('characteristicvaluechanged',on);
+        arm(15000); // armed before subscribing, so a startNotifications() that never answers still times out
         await ch.startNotifications();
         const cmd=new Uint8Array([opcode,0,from&255,(from>>>8)&255,(from>>>16)&255,(from>>>24)&255]);
         arm(15000);
@@ -1208,18 +1234,14 @@ async function bleConnect(dev,tries=4){
     bleLog(`กำลังเชื่อมต่อเซนเซอร์ (ครั้งที่ ${i}/${tries}) …`);
     setBle('connecting',`(ครั้งที่ ${i}/${tries})`);
     try{
-      const server=dev.gatt.connected?dev.gatt:await dev.gatt.connect();
-      const svc=await server.getPrimaryService(IA3.svc);
-      const ch=await svc.getCharacteristic(IA3.bulk);
+      const server=dev.gatt.connected?dev.gatt:await gattTimeout(dev.gatt.connect(),30000,'เชื่อมต่อ');
+      const svc=await gattTimeout(server.getPrimaryService(IA3.svc),20000,'หา service');
+      const ch=await gattTimeout(svc.getCharacteristic(IA3.bulk),10000,'หาช่องรับข้อมูล');
       bleLog('เชื่อมต่อแล้ว พบช่องรับข้อมูลของ i-ALERT3');
       setBle('connected');
       ch.sys=await svc.getCharacteristic(IA3.sys).catch(()=>null);
-      ch.cmd=await svc.getCharacteristic(IA3.cmd).catch(()=>null);
       ch.sync=await svc.getCharacteristic(IA3.sync).catch(()=>null);
       ble.ch=ch;ble.chDev=dev;
-      if(S.streamOpen&&ch.cmd){ // an earlier live stream was cut off before its stop command
-        try{await sendStreamCmd(ch,STREAM_STOP);S.streamOpen=false;save();bleLog('ส่งคำสั่งหยุด stream ที่ค้างจากรอบก่อนแล้ว')}catch(e){}
-      }
       return ch;
     }catch(e){
       if(e.name==='NotFoundError'&&dev.gatt.connected)throw new Error('เซนเซอร์ตัวนี้ไม่มี service ของ i-ALERT3 ('+e.message+')');
@@ -1242,18 +1264,25 @@ async function syncSensorTime(ch,how){
   bleLog(`${how==='auto'?'ตั้งเวลาอัตโนมัติ (เซนเซอร์แจ้งว่ายังไม่ได้ตั้งเวลา แบบเดียวกับแอป i-ALERT)':'ตั้งเวลาเซนเซอร์'}: เขียนช่อง Sync Timestamp 4 ไบต์ ${[...b].map(hex2).join(' ')} = ${dFull(now*1000)} (ไม่แตะค่าตั้งค่าอื่น)`);
   if(ch.sync.properties.write)await ch.sync.writeValueWithResponse(b);else await ch.sync.writeValueWithoutResponse(b);
   await sleep(800);
-  const s=parseSys(await ch.sys.readValue(),ble.cfg.scale);
+  const s=parseSys(await rd(ch.sys),ble.cfg.scale);
   const ok=s&&Math.abs(s.clock-Date.now()/1000)<=120;
   bleLog(ok?`ตั้งเวลาแล้ว ✓ นาฬิกาเซนเซอร์: ${dFull(s.clock*1000)}${s.status&0x10?'':' (สถานะ time sync ยังไม่ขึ้น)'}`:`⚠ เขียนเวลาแล้ว แต่นาฬิกายังไม่ตรง (${s?dFull(s.clock*1000):'อ่านไม่ได้'})`);
   if(s)s.wasReset=true;
   return s;
+}
+const AUTO_TS_GAP=6*3600e3;
+async function autoSyncTime(ch,dev){
+  const sv=S.sensors[dev.id]||{},last=sv.tsAuto||0;
+  if(Date.now()-last<AUTO_TS_GAP){bleLog(`ข้ามการตั้งเวลาอัตโนมัติ (ตั้งไปแล้วเมื่อ ${dFull(last)} ทำได้ไม่เกิน 1 ครั้งต่อ 6 ชั่วโมง) กด "ตั้งเวลาเซนเซอร์" เองได้`);return null}
+  sv.tsAuto=Date.now();if(S.sensors[dev.id])save();
+  return syncSensorTime(ch,'auto');
 }
 async function bleSyncTime(){
   if(ble.busy||!ble.device)return;
   if(!confirm('ตั้งเวลาเซนเซอร์ตอนนี้?\n\nหน้าเว็บจะเขียนเวลาปัจจุบันลงช่อง Sync Timestamp ของเซนเซอร์ (4 ไบต์) แบบเดียวกับที่แอป i-ALERT ทำตอนเชื่อมต่อ\n• ไม่แตะค่าตั้งค่าอื่น (เกณฑ์ alarm ฯลฯ)\n• ทำเฉพาะเมื่อเซนเซอร์แจ้งว่ายังไม่ได้ตั้งเวลา\n• ค่า trend ที่บันทึกระหว่างที่นาฬิกาไม่ตรงจะยังกู้คืนไม่ได้'))return;
   ble.busy=true;updateBleButton();fillLive();const dev=ble.device;let err=null;
   try{
-    const ch=await bleConnect(dev),s=parseSys(await ch.sys.readValue(),ble.cfg.scale);
+    const ch=await bleConnect(dev),s=parseSys(await rd(ch.sys),ble.cfg.scale);
     if(!timeSyncNeeded(s))throw new Error(clockOk(s)?'นาฬิกาเซนเซอร์ตรงอยู่แล้ว ไม่ได้เขียนอะไร':'เซนเซอร์แจ้งว่าตั้งเวลาแล้วแต่เวลาไม่ตรง หน้าเว็บจึงไม่เขียนทับ (ใช้แอป i-ALERT แทน)');
     const s2=await syncSensorTime(ch,'manual');if(s2)applySys(s2);toast('ตั้งเวลาเซนเซอร์แล้ว');
   }catch(e){err=e;bleLog('ตั้งเวลาไม่สำเร็จ: '+e.message);toast(e.message)}
@@ -1270,14 +1299,14 @@ async function bleFetch(){
     const ch=await bleConnect(dev);
     if(ch.sys){
       try{
-        const s=parseSys(await ch.sys.readValue(),ble.cfg.scale);
+        const s=parseSys(await rd(ch.sys),ble.cfg.scale);
         if(s){
           sysRead=s;
           if(s.mac)bleLog('MAC เซนเซอร์: '+s.mac);
           sensorIdentity(dev,s); // may rename the machine so two sensors never share one name
           bleLog(`นาฬิกาเซนเซอร์: ${dFull(s.clock*1000)} (${fmtDrift(s.clock-Math.floor(Date.now()/1000))})`);
           if(timeSyncNeeded(s)){bleLog('⚠ นาฬิกาเซนเซอร์ยังไม่ได้ตั้งเวลา (มักเกิดหลังเซนเซอร์รีสตาร์ท)');
-            try{const s2=await syncSensorTime(ch,'auto');if(s2){Object.assign(s,s2);sysRead=s}}catch(e){bleLog('ตั้งเวลาอัตโนมัติไม่สำเร็จ: '+e.message)}}
+            try{const s2=await autoSyncTime(ch,dev);if(s2){Object.assign(s,s2);sysRead=s}}catch(e){bleLog('ตั้งเวลาอัตโนมัติไม่สำเร็จ: '+e.message)}}
           if(!clockOk(s))bleLog('⚠ นาฬิกาเซนเซอร์ยังไม่ตรง trend ใหม่จะมีเวลาผิดและถูกข้าม'+(timeSyncNeeded(s)?' ลองกด "ตั้งเวลาเซนเซอร์" ในแผงค่าสด':' ให้ใช้แอป i-ALERT ตั้งเวลา'));
           bleLog(`trend ล่าสุดในเซนเซอร์: ${s.lastTrend?dFull(s.lastTrend*1000):'-'}`);
           applySys(s);
@@ -1294,7 +1323,7 @@ async function bleFetch(){
     bleLog(from?'ขอเฉพาะค่าหลัง '+dFull(last.t):'ขอข้อมูลทั้งหมดในเซนเซอร์');
     const recs=parseTrend(await bulkRequest(ch,from),scale);
     if(recs.length){
-      const ts=recs.map(r=>r.t),lo=Math.min(...ts),hi=Math.max(...ts);
+      const ts=recs.map(r=>r.t),lo=vmin(ts),hi=vmax(ts);
       let unordered=0;for(let i=1;i<ts.length;i++)if(ts[i]<ts[i-1])unordered++;
       bleLog(`ข้อมูลที่ได้: ${recs.length} ค่า ตั้งแต่ ${dFull(lo)} ถึง ${dFull(hi)}`+(unordered?` · เรียงไม่ตามเวลา ${unordered} จุด`:''));
     }
@@ -1353,25 +1382,28 @@ const FFTDB={
     q.onupgradeneeded=()=>q.result.createObjectStore('rec',{keyPath:'key'});
     q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)}))},
   async put(r){const db=await this.open();return new Promise((res,rej)=>{
-    const t=db.transaction('rec','readwrite');t.objectStore('rec').put(r);t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})},
+    const t=db.transaction('rec','readwrite');t.objectStore('rec').put(r);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error||new Error('บันทึก FFT ไม่สำเร็จ (พื้นที่เก็บข้อมูลอาจเต็ม)'))})},
   async list(asset){const db=await this.open();return new Promise((res,rej)=>{
     const q=db.transaction('rec').objectStore('rec').getAll();
     q.onsuccess=()=>res(q.result.filter(r=>r.asset===asset).sort((a,b)=>b.ts-a.ts));q.onerror=()=>rej(q.error)})},
   async all(){const db=await this.open();return new Promise((res,rej)=>{
     const q=db.transaction('rec').objectStore('rec').getAll();q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})},
   async clear(){const db=await this.open();return new Promise((res,rej)=>{
-    const t=db.transaction('rec','readwrite');t.objectStore('rec').clear();t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})},
+    const t=db.transaction('rec','readwrite');t.objectStore('rec').clear();t.oncomplete=()=>res();t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error||new Error('บันทึก FFT ไม่สำเร็จ (พื้นที่เก็บข้อมูลอาจเต็ม)'))})},
   async remove(asset){const all=await this.list(asset),db=await this.open();return new Promise((res,rej)=>{
-    const t=db.transaction('rec','readwrite');all.forEach(r=>t.objectStore('rec').delete(r.key));t.oncomplete=()=>res();t.onerror=()=>rej(t.error)})}
+    const t=db.transaction('rec','readwrite');all.forEach(r=>t.objectStore('rec').delete(r.key));t.oncomplete=()=>res();t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error||new Error('บันทึก FFT ไม่สำเร็จ (พื้นที่เก็บข้อมูลอาจเต็ม)'))})},
+  async del(keys){const db=await this.open();return new Promise((res,rej)=>{
+    const t=db.transaction('rec','readwrite');keys.forEach(k=>t.objectStore('rec').delete(k));t.oncomplete=()=>res();t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error||new Error('บันทึก FFT ไม่สำเร็จ (พื้นที่เก็บข้อมูลอาจเต็ม)'))})}
 };
 // opcode 2: the sensor keeps only its most recent manual FFT; read-only request
 async function downloadManualFFT(ch,keep,tries=3){
+  const dev=ble.device;
   for(let i=1;;i++){
     try{return await downloadManualFFTOnce(ch,keep)}
     catch(e){
       if(i>=tries||/ยังไม่มี FFT|เวลาไม่ถูกต้อง/.test(e.message))throw e;
       bleLog(`ดาวน์โหลด FFT หลุด (${e.message}) จะเชื่อมต่อใหม่แล้วดึงอีกครั้ง (ครั้งที่ ${i+1}/${tries}) — FFT ยังเก็บอยู่ในเซนเซอร์`);
-      await sleep(4000);ble.ch=null;ch=await bleConnect(ble.device,3);
+      await sleep(4000);ble.ch=null;ch=await bleConnect(dev,3);
     }
   }
 }
@@ -1394,7 +1426,7 @@ async function bleFetchFFT(mode){
   const dev=ble.device,asset=ble.cfg.asset;let err=null;
   try{
     const ch=await bleConnect(dev);
-    if(ch.sys&&!ble.live)applySys(parseSys(await ch.sys.readValue(),ble.cfg.scale));
+    if(ch.sys&&!ble.live)applySys(parseSys(await rd(ch.sys),ble.cfg.scale));
     const s=ble.live&&ble.live.sys,have=await FFTDB.list(asset);
     const keep=async(kind,bytes,ts)=>{
       const key=asset+'|'+(kind==='alarm'?'':kind[0]+'|')+ts;
@@ -1485,9 +1517,9 @@ async function bleMeasureFFT(opt={}){
   try{
     const ch=await bleConnect(dev);
     if(!ch.sys||!(ch.sys.properties.write||ch.sys.properties.writeWithoutResponse))throw new Error('ช่องค่าตั้งค่าของเซนเซอร์เขียนไม่ได้');
-    let read=sysBytes(await ch.sys.readValue());
+    let read=sysBytes(await rd(ch.sys));
     if(timeSyncNeeded(parseSys(new DataView(read.buffer),ble.cfg.scale))){ // same as the app: set the clock first
-      try{await syncSensorTime(ch,'auto');read=sysBytes(await ch.sys.readValue())}catch(e){bleLog('ตั้งเวลาอัตโนมัติไม่สำเร็จ: '+e.message)}}
+      try{if(await autoSyncTime(ch,dev))read=sysBytes(await rd(ch.sys))}catch(e){bleLog('ตั้งเวลาอัตโนมัติไม่สำเร็จ: '+e.message)}}
     const why=measurePreflight(read);
     if(why.length)throw new Error('ไม่ได้สั่งวัด: '+why.join(' · '));
     const s=parseSys(new DataView(read.buffer),ble.cfg.scale);applySys(s);
@@ -1505,13 +1537,14 @@ async function bleMeasureFFT(opt={}){
     // Done = the sensor showed it was busy (or flagged "manual FFT complete") and is idle again.
     // If it never shows either within START_GRACE_MS, it did not take the command.
     const START_GRACE_MS=12000,t0=Date.now();let after=null,sawBusy=false,last=read;
+    const flag0=new DataView(read.buffer).getUint16(8,true)&Q_MANUAL_FFT; // a flag left from the previous measurement is not "done"
     while(Date.now()-t0<MEASURE_WAIT_MS){
       await sleep(1500);
       if(!dev.gatt.connected)throw new Error('การเชื่อมต่อหลุดระหว่างวัด เซนเซอร์จะวัดต่อเองจนเสร็จ รอสักครู่แล้วกด "ดึง FFT manual ล่าสุด"');
-      const b=sysBytes(await ch.sys.readValue()),bdv=new DataView(b.buffer);last=b;
+      const b=sysBytes(await rd(ch.sys)),bdv=new DataView(b.buffer);last=b;
       setBle('transfer',`เซนเซอร์กำลังวัด FFT (${Math.round((Date.now()-t0)/1000)} วินาที)`);
       if(bdv.getUint32(0,true)&BUSY_BITS){if(!sawBusy)bleLog('เซนเซอร์เริ่มวัดแล้ว (busy)');sawBusy=true;continue}
-      if(sawBusy||(bdv.getUint16(8,true)&Q_MANUAL_FFT)){after=b;break}
+      if(sawBusy||(!flag0&&(bdv.getUint16(8,true)&Q_MANUAL_FFT))){after=b;break}
       if(Date.now()-t0>START_GRACE_MS)break;
     }
     const cfgCheck=b=>{const d=diffBytes(read,b,CONFIG_RANGES);
@@ -1534,6 +1567,7 @@ async function bleMeasureFFT(opt={}){
     const r=await downloadManualFFT(ch,keep);
     if(r.ts<=prev)bleLog('⚠ ได้ FFT ชุดเดิม (เวลาไม่ใหม่กว่าเดิม) เซนเซอร์อาจไม่ได้วัดใหม่');
     toast(r.ts>prev?'วัด FFT ใหม่เสร็จแล้ว':'ได้ FFT ชุดเดิม เซนเซอร์อาจไม่ได้วัดใหม่');
+    if(auto&&r.ts>prev){const sv=S.sensors[dev.id];if(sv&&sv.schedFail){sv.schedFail=0;save()}}
     await renderFFT();
   }catch(e){err=e;bleLog('สั่งวัด FFT ไม่สำเร็จ: '+e.message);toast(e.message);
     if(auto){const sv=S.sensors[dev.id];if(sv){sv.schedFail=(sv.schedFail||0)+1;save()}}}
@@ -1544,15 +1578,6 @@ async function bleMeasureFFT(opt={}){
   }
 }
 
-// ---- leftover live-stream cleanup ----
-// An earlier version could start the sensor's acceleration stream. If that was cut off before its stop
-// command, send stop once on the next connection so the sensor does not keep streaming (battery).
-// Nothing else is ever written to the sensor.
-const STREAM_STOP=0x02000000;
-async function sendStreamCmd(ch,v){
-  const b=new Uint8Array([v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255]);
-  if(ch.cmd.properties.write)await ch.cmd.writeValueWithResponse(b);else await ch.cmd.writeValueWithoutResponse(b);
-}
 // ---- FFT / waveform panel (decoding in ia3-fft.js, ported from the app) ----
 const FUI={key:null,band:'low',qty:'vel'}; // low band first: 1X/2X peaks are unreadable on the 0-5 kHz axis
 let fftCharts=[];
@@ -1643,14 +1668,16 @@ function diagnose(dec,rpm,kurt,c){
   const B=dec.single||dec.low;
   if(!B||!B.vfft)return{items:[],note:'ข้อมูลไม่พอสำหรับวิเคราะห์'};
   const bin=B.hzPerBin,s=Math.max(1,B.startBin||1),e=B.endBin||B.freq.length-1,V=B.vfft;
-  const amp=(a,hz,tol=2)=>{if(!(hz>0))return 0;const k=Math.round(hz/bin);let m=0;
+  // bin index from the frequency axis itself: imported spectra may not start at 0 Hz
+  const f0=B.freq&&Number.isFinite(B.freq[0])?B.freq[0]:0,idx=hz=>Math.round((hz-f0)/bin),hzAt=i=>B.freq?B.freq[i]:i*bin;
+  const amp=(a,hz,tol=2)=>{if(!(hz>0))return 0;const k=idx(hz);let m=0;
     for(let i=Math.max(s,k-tol);i<=Math.min(e,k+tol);i++)if(Number.isFinite(V[a][i]))m=Math.max(m,V[a][i]);return m};
   let f1=rpm?rpm/60:(c.rpm?c.rpm/60:null),f1Src=rpm?'RPM จากเซนเซอร์':c.rpm?'RPM ที่ตั้งไว้':'';
   if(!f1){ // no speed known: take the largest radial peak between 8 and 60 Hz as 1X
     let best=0,bk=0;
-    for(let i=Math.max(s,Math.round(8/bin));i<=Math.min(e,Math.round(60/bin));i++){
+    for(let i=Math.max(s,idx(8));i<=Math.min(e,idx(60));i++){
       const v=Math.max(V.x[i]||0,V.z[i]||0);if(v>best){best=v;bk=i}}
-    f1=bk?bk*bin:null;f1Src='ประมาณจากยอดสูงสุด (ไม่ทราบ RPM)';
+    f1=bk?hzAt(bk):null;f1Src='ประมาณจากยอดสูงสุด (ไม่ทราบ RPM)';
   }
   if(!f1)return{items:[],note:'หาความเร็วรอบไม่ได้'};
   const H=n=>({x:amp('x',n*f1),y:amp('y',n*f1),z:amp('z',n*f1)}),rad=h=>Math.max(h.x,h.z);
@@ -1727,26 +1754,32 @@ async function bleLiveRead(){
     const ch=await bleConnect(dev,ble.liveTimer?2:4);
     if(!ch.sys)throw new Error('ไม่พบช่องสถานะของเซนเซอร์');
     const before=ble.live&&ble.live.sys.lastTrend;
-    applySys(parseSys(await ch.sys.readValue(),ble.cfg.scale));
+    applySys(parseSys(await rd(ch.sys),ble.cfg.scale));
     if(ble.live&&ble.live.sys.lastTrend!==before&&before)bleLog('เซนเซอร์วัดค่าใหม่แล้ว');
+    ble.liveFails=0;
   }catch(e){
     err=e;bleLog('อ่านค่าสดไม่ได้: '+e.message);
     if(!ble.liveTimer)toast('อ่านค่าสดไม่ได้: '+e.message);
+    else if(++ble.liveFails>=LIVE_MAX_FAILS){bleLog(`อ่านค่าสดไม่ได้ ${LIVE_MAX_FAILS} ครั้งติด หยุดโหมดค่าสดเพื่อถนอมแบตเซนเซอร์`);toast('หยุดอ่านค่าสดแล้ว (ต่อเซนเซอร์ไม่ได้หลายครั้ง)');setTimeout(()=>{if(ble.liveTimer)toggleLive()},0)}
   }finally{
     ble.busy=false;
     if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
     bleFinish(dev,err);
-    if(S.sel===ble.cfg.asset&&!$('#livePanel'))render();else fillLive();
+    // U4: rebuild the page only on the overview (elsewhere it would wipe what the user is typing)
+    if(S.view==='overview'&&S.sel===ble.cfg.asset&&!$('#livePanel'))render();else fillLive();
   }
 }
+const LIVE_MAX_MS=30*60000,LIVE_MAX_FAILS=4;
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&ble.liveTimer){bleLog('ซ่อนหน้าเว็บ: หยุดอ่านค่าสดต่อเนื่อง (ถนอมแบตเซนเซอร์)');toggleLive()}});
 function toggleLive(){
   if(ble.liveTimer){
     clearInterval(ble.liveTimer);ble.liveTimer=null;
     try{if(ble.device&&ble.device.gatt.connected&&!ble.busy)ble.device.gatt.disconnect()}catch(e){}
     bleLog('หยุดอ่านค่าสดต่อเนื่อง');if(!ble.busy)setBle('ready');fillLive();return;
   }
-  ble.liveTimer=setInterval(bleLiveRead,LIVE_MS);
-  bleLog(`อ่านค่าสดต่อเนื่องทุก ${LIVE_MS/1000} วินาที (ค้างการเชื่อมต่อไว้)`);
+  ble.liveFails=0;const until=Date.now()+LIVE_MAX_MS;
+  ble.liveTimer=setInterval(()=>{if(Date.now()>until){bleLog('อ่านค่าสดครบ 30 นาที หยุดเองเพื่อถนอมแบตเซนเซอร์ (กดเริ่มใหม่ได้)');toggleLive();return}bleLiveRead()},LIVE_MS);
+  bleLog(`อ่านค่าสดต่อเนื่องทุก ${LIVE_MS/1000} วินาที นานสุด 30 นาที (ค้างการเชื่อมต่อไว้)`);
   bleLiveRead();
 }
 function liveTile(label,value,unit,sub,cls=''){
@@ -2033,6 +2066,7 @@ async function connectRow(id){
   pickAndUse(r&&r.name);
 }
 async function pickAndUse(name){
+  if(ble.busy)return toast('รอให้งานกับเซนเซอร์ตัวนี้เสร็จก่อน แล้วค่อยเปลี่ยนเซนเซอร์');
   const f=$('#bleForm');
   let dev;
   const before=ble.state;
@@ -2061,6 +2095,7 @@ async function pickAndUse(name){
   return useDevice(dev);
 }
 async function useDevice(dev){
+  if(ble.busy&&ble.device!==dev)return toast('รอให้งานกับเซนเซอร์ตัวนี้เสร็จก่อน แล้วค่อยเปลี่ยนเซนเซอร์');
   const f=$('#bleForm');
   rememberDevice(dev);
   if(!dev._ia3Watch){
@@ -2094,6 +2129,7 @@ async function useDevice(dev){
     if(owner&&!confirm(`ชื่อ "${typed}" ใช้กับเซนเซอร์อีกตัวอยู่แล้ว ข้อมูลของทั้งสองตัวจะรวมอยู่ในเครื่องเดียวกัน\n\nใช้ชื่อนี้ต่อไหม?`))return;
   }
   const asset=typed||saved.asset;
+  if(typed)cancelRename(typed);
   const scale=+f.scale.value||(saved&&saved.scale)||816;
   S.sensors[dev.id]=Object.assign(saved||{},{asset,scale},typed?{auto}:{});save();
   f.asset.value=''; // the typed name belongs to this sensor only

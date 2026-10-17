@@ -1,7 +1,7 @@
 // Offline support + notification clicks.
 // Own files: network first (updates arrive as soon as they are online), cached copy when offline.
 // Libraries and fonts from CDNs: cache first (versioned URLs never change).
-const CACHE='vibmon-v4';
+const CACHE='vibmon-2.10.0'; // stamped by deploy.sh: every release installs fresh and drops the old cache
 const CORE=['./','./index.html','./ia3-fft.js','./fft-analysis.js','./store.js','./insights.js','./pages.js','./ai.js','./tools.js','./machine.js','./gdrive.js','./site-config.js','./manifest.json','./icon-192.png','./icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js','https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'];
 
@@ -19,7 +19,13 @@ self.addEventListener('fetch',e=>{
     e.respondWith(fetch(req.url,{cache:'no-cache',credentials:'same-origin'}).then(res=>{
       if(res.ok){const copy=res.clone();caches.open(CACHE).then(c=>c.put(req,copy))}
       return res;
-    }).catch(()=>caches.match(req,{ignoreSearch:true}).then(r=>r||caches.match('./index.html'))));
+    }).catch(async()=>{
+      // offline: the exact file first (same ?v= as the page), then any copy of it; the page itself only for navigations
+      const hit=await caches.match(req)||await caches.match(req,{ignoreSearch:true});
+      if(hit)return hit;
+      if(req.mode==='navigate')return caches.match('./index.html');
+      return new Response('',{status:504,statusText:'offline'});
+    }));
   }else if(/cdnjs\.cloudflare\.com|fonts\.(googleapis|gstatic)\.com/.test(url.host)){
     e.respondWith(caches.match(req).then(hit=>hit||fetch(req).then(res=>{
       const copy=res.clone();caches.open(CACHE).then(c=>c.put(req,copy));return res})));

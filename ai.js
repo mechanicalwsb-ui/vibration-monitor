@@ -73,17 +73,17 @@ const r2=v=>v==null||!isFinite(v)?null:Math.round(v*100)/100;
 const r3=v=>v==null||!isFinite(v)?null:Math.round(v*1000)/1000;
 function statsOf(rs,c){
   const run=rs.filter(r=>isRunning(r,c)!==false),pick=k=>run.map(r=>r[k]).filter(v=>v!=null);
-  const s=a=>a.length?{mean:r2(mean(a)),max:r2(Math.max(...a)),p95:r2(quantile(a,.95))}:null;
+  const s=a=>a.length?{mean:r2(mean(a)),max:r2(vmax(a)),p95:r2(quantile(a,.95))}:null;
   const t=rs.map(r=>r.temp).filter(v=>v!=null);
   return{n:rs.length,running:run.length,vx:s(pick('vx')),vy:s(pick('vy')),vz:s(pick('vz')),
-    accMax:r3(Math.max(0,...run.map(accMax).filter(v=>v!=null))),temp:t.length?{mean:r2(mean(t)),max:r2(Math.max(...t))}:null};
+    accMax:r3(Math.max(0,vmax(run.map(accMax).filter(v=>v!=null))||0)),temp:t.length?{mean:r2(mean(t)),max:r2(vmax(t))}:null};
 }
 // Peaks over all axes of one FFT capture (velocity, low band, from 2 Hz)
 function aiFftSummary(rec,c){
   const dec=faDecode(rec);if(!dec)return null;
-  const per={x:[],y:[],z:[]};for(const a of['x','y','z'])per[a]=specPoints(dec,'low','vel',a).filter(p=>p.x>=2);
-  const env=per.x.map((p,i)=>{let y=-1,ax='x';for(const a of['x','y','z']){const v=per[a][i]&&per[a][i].y;if(Number.isFinite(v)&&v>y){y=v;ax=a}}return{x:p.x,y,ax}});
-  const rs=faRunSpeed(dec,c),f1=rs.f1;
+  const per={x:[],y:[],z:[]};for(const a of['x','y','z'])per[a]=rawSpec(dec,'low','vel',a).filter(p=>p.x>=2); // always mm/s, whatever the display unit
+  const env=per.x.map((p,i)=>{let y=-1,ax='x';for(const a of['x','y','z']){const v=per[a][i]&&per[a][i].x===p.x&&per[a][i].y;if(Number.isFinite(v)&&v>y){y=v;ax=a}}return{x:p.x,y,ax}});
+  const rs=faRunSpeed(dec,c,rec),f1=rs.f1; // same speed source as the FFT page (VFD: speed of this capture)
   const peaks=faPeaks(env,10).map(p=>({hz:r2(p.x),mm_s:r3(p.y),axis:p.ax.toUpperCase(),order:f1?r2(p.x/f1):null}));
   const B=dec.low||dec.single,wave={};
   if(B&&B.twf)for(const a of['x','y','z']){const w=faWaveStats(B.twf[a]);if(w)wave[a.toUpperCase()]={peak_g:r3(w.peak),rms_g:r3(w.rms),crest:r2(w.crest),kurtosis:r2(w.kurt)}}
@@ -108,6 +108,9 @@ function aiFftSummary(rec,c){
 async function buildAIContext(asset,opt={}){
   const c=cfg(asset),all=series(asset),last=all.at(-1),cf=aiCfg();
   const name=cf.anon?'เครื่อง A':asset,pr=c.profile||{},end=last.t;
+  // anonymous mode: names also hide inside notes and report titles, so they are blanked there too
+  const hide=[asset,c.machine,c.point].filter(x=>x&&String(x).trim().length>1).sort((a,b)=>b.length-a.length);
+  const scrub=s=>{if(!cf.anon||s==null)return s;let o=String(s);for(const h of hide)o=o.split(h).join('[ชื่อเครื่อง]');return o};
   const win=d=>all.filter(r=>r.t>end-d*DAY);
   const lim=effLimits(c,'ov'),fc=forecast(all,c,'ov'),ri=runInfo(win(7),c),gaps=findGaps(win(90),asset,c).slice(-5);
   const daily=aggregate(win(30),c,'day').map(g=>[g.k.slice(5),r2(g.avg),r2(g.max)]);
@@ -126,9 +129,9 @@ async function buildAIContext(asset,opt={}){
     baseline:c.baseline?{mean_mm_s:c.baseline.mean.map(r2),changePct:r2(baselineDelta(last,c)),used:!!c.useBaseline}:null,
   };
   if(cf.maint){const ml=(S.maint||[]).filter(m=>m.asset===asset).sort((a,b)=>b.t-a.t).slice(0,10);
-    if(ml.length)ctx.maintenance=ml.map(m=>({date:new Date(m.t).toLocaleDateString('th-TH'),type:m.type,detail:m.text||''}))}
-  const fl=openFailures(asset);if(fl.length)ctx.openFailureReports=fl.map(f=>({title:f.title,status:f.status,action:f.action}));
-  if(c.machine)ctx.machine.group=c.machine,ctx.machine.point=c.point||null;
+    if(ml.length)ctx.maintenance=ml.map(m=>({date:new Date(m.t).toLocaleDateString('th-TH'),type:m.type,detail:scrub(m.text||'')}))}
+  const fl=openFailures(asset);if(fl.length)ctx.openFailureReports=fl.map(f=>({title:scrub(f.title),status:f.status,action:scrub(f.action)}));
+  if(c.machine&&!cf.anon)ctx.machine.group=c.machine,ctx.machine.point=c.point||null;
   const sid=Object.keys(S.sensors).find(id=>S.sensors[id].asset===asset);
   if(sid){const h=healthSummary(sid);if(h.score!=='none')ctx.sensorHealth={battery_V:h.last&&h.last.batt||null,issues:h.issues.map(i=>i[1])}}
   if(opt.fft!==false){let list=[];try{list=await FFTDB.list(asset)}catch(e){}
@@ -224,24 +227,31 @@ function renderAIPage(){
   if($('#aiClear'))$('#aiClear').onclick=()=>{AI.chat[a]=[];renderAIPage()};
   p.querySelectorAll('[data-hview]').forEach(b=>b.onclick=()=>{const h=hist.find(x=>x.id===b.dataset.hview);
     infoDialog(esc(h.title)+' · '+dFull(h.t),`<div class="ai-a">${mdToHtml(h.text)}</div><p class="muted" style="font-size:12px">${esc(h.model)}</p>`)});
-  p.querySelectorAll('[data-hdel]').forEach(b=>b.onclick=()=>{if(!confirm('ลบผลวิเคราะห์นี้?'))return;S.ai=S.ai||{};S.ai[a]=hist.filter(x=>x.id!==b.dataset.hdel);save();renderAIPage()});
+  p.querySelectorAll('[data-hdel]').forEach(b=>b.onclick=()=>{if(!confirm('ลบผลวิเคราะห์นี้?'))return;tombList('ai').push(b.dataset.hdel);S.ai=S.ai||{};S.ai[a]=hist.filter(x=>x.id!==b.dataset.hdel);save();renderAIPage()});
   const box=$('#aiChat');box.scrollTop=box.scrollHeight;
 }
 async function aiRunTask(asset,task){
-  const ctx=await buildAIContext(asset,{fft:true});
+  // one task at a time from the first tap (building the data takes a while); errors are shown
+  if(AI.busy||AI.preparing)return toast('กำลังวิเคราะห์อยู่ รอให้เสร็จก่อน');
+  AI.preparing=true;let ctx;
+  try{ctx=await buildAIContext(asset,{fft:true})}
+  catch(e){console.error(e);return toast('เตรียมข้อมูลให้ AI ไม่สำเร็จ: '+e.message)}
+  finally{AI.preparing=false}
   const t=AI_TASKS[task];
   AI.chat[asset]=[]; // a task starts a fresh conversation with the data attached
   aiAsk(asset,`${t.prompt}\n\nข้อมูล (JSON):\n${JSON.stringify(ctx)}`,t.label,t.label);
 }
 async function aiRunFleet(asset){
+  if(AI.busy||AI.preparing)return toast('กำลังวิเคราะห์อยู่ รอให้เสร็จก่อน');
   AI.chat[asset]=[];
   aiAsk(asset,`${AI_FLEET_PROMPT}\n\nข้อมูล (JSON):\n${JSON.stringify(fleetContext())}`,'สรุปทุกเครื่อง','สรุปทุกเครื่อง');
 }
 // Follow-up questions keep the conversation; a first free question gets the machine data attached
 async function aiAsk(asset,text,show,title){
-  if(AI.busy)return;
+  if(AI.busy||(AI.preparing&&!title))return;
   const chat=AI.chat[asset]||(AI.chat[asset]=[]);
-  if(!chat.length&&!title){const ctx=await buildAIContext(asset);text=`คำถามเกี่ยวกับเครื่องจักรนี้: ${text}\n\nข้อมูล (JSON):\n${JSON.stringify(ctx)}`}
+  if(!chat.length&&!title){let ctx;AI.preparing=true;
+    try{ctx=await buildAIContext(asset)}catch(e){console.error(e);return toast('เตรียมข้อมูลให้ AI ไม่สำเร็จ: '+e.message)}finally{AI.preparing=false}text=`คำถามเกี่ยวกับเครื่องจักรนี้: ${text}\n\nข้อมูล (JSON):\n${JSON.stringify(ctx)}`}
   chat.push({role:'user',text,show});
   const ans={role:'model',text:'',title:title||show.slice(0,60)};chat.push(ans);
   AI.busy=true;AI.ctrl=new AbortController();renderAIPage();

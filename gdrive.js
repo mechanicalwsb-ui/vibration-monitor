@@ -76,10 +76,11 @@ function gdLogout(){
 // ---- Drive files ----
 async function gdFolder(){
   const c=gdCfg();
-  if(c.folderId){try{const r=await gdFetch(`${GD_API}files/${c.folderId}?fields=id,trashed`);const j=await r.json();if(!j.trashed)return c.folderId}catch(e){}}
+  // always the oldest folder of that name, so two devices that both created one converge on the same folder
   const q=encodeURIComponent("name='Vibration Monitor' and mimeType='application/vnd.google-apps.folder' and trashed=false");
-  const j=await (await gdFetch(`${GD_API}files?q=${q}&fields=files(id)&spaces=drive`)).json();
+  const j=await (await gdFetch(`${GD_API}files?q=${q}&fields=files(id)&orderBy=createdTime&spaces=drive`)).json();
   let id=j.files&&j.files[0]&&j.files[0].id;
+  if(!id&&c.folderId){try{const r=await gdFetch(`${GD_API}files/${c.folderId}?fields=id,trashed`);const k=await r.json();if(!k.trashed)id=c.folderId}catch(e){}}
   if(!id)id=(await (await gdFetch(`${GD_API}files?fields=id`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Vibration Monitor',mimeType:'application/vnd.google-apps.folder'})})).json()).id;
   c.folderId=id;gdSave(c);return id;
 }
@@ -90,6 +91,12 @@ async function gdFind(folder,name){
 }
 async function gdUpload(folder,name,obj,file){
   const body=JSON.stringify(obj);
+  if(new Blob([body]).size>4e6){
+    const init=await gdFetch(file?`${GD_UP}files/${file.id}?uploadType=resumable`:`${GD_UP}files?uploadType=resumable`,{method:file?'PATCH':'POST',
+      headers:{'Content-Type':'application/json; charset=UTF-8','X-Upload-Content-Type':'application/json'},body:file?'{}':JSON.stringify({name,parents:[folder],mimeType:'application/json'})});
+    const loc=init.headers.get('Location');if(!loc)throw new Error('Google Drive ไม่ส่งที่อยู่อัปโหลดกลับมา (ไฟล์ '+name+' ใหญ่ '+fmtBytes(body.length)+')');
+    await gdFetch(loc,{method:'PUT',headers:{'Content-Type':'application/json'},body});return;
+  }
   if(file){await gdFetch(`${GD_UP}files/${file.id}?uploadType=media&fields=id,modifiedTime`,{method:'PATCH',headers:{'Content-Type':'application/json'},body});return}
   const b='vibmon'+Date.now(),meta=JSON.stringify({name,parents:[folder],mimeType:'application/json'});
   await gdFetch(`${GD_UP}files?uploadType=multipart&fields=id`,{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+b},
@@ -106,25 +113,36 @@ async function gdSync(interactive){
   }catch(e){GD.err=e.message;renderGdChip();return toast(e.message)}
   GD.busy=true;GD.err='';GD.status='busy';GD.pending=false;GD.pendingDuring=false;clearTimeout(gdDirtyT);gdDirtyT=null;renderGdChip();
   try{
-    const folder=await gdFolder();
-    const [fs,ff]=await Promise.all([gdFind(folder,GD_FILES.state),gdFind(folder,GD_FILES.fft)]);
+    const folder=await gdFolder(),force=GD.forcePush;
+    let [fs,ff]=await Promise.all([gdFind(folder,GD_FILES.state),gdFind(folder,GD_FILES.fft)]);
     let got=0,gotF=0;
-    if(fs){const d=await (await gdFetch(`${GD_API}files/${fs.id}?alt=media`)).json();if(d&&d.state){const r=await mergeState(d.state,null);got=r.nR}}
-    if(ff&&ff.modifiedTime!==c.fftMt){const d=await (await gdFetch(`${GD_API}files/${ff.id}?alt=media`)).json();
+    // force: a "restore (replace)" asked to make this device's data the master copy, so nothing is merged in
+    // Otherwise merge, then check nobody uploaded meanwhile (no ETag support in Drive v3); if they did, merge again
+    for(let i=0;fs&&!force&&i<3;i++){
+      const d=await (await gdFetch(`${GD_API}files/${fs.id}?alt=media`)).json();if(d&&d.state){const r=await mergeState(d.state,null);got+=r.nR}
+      const now=await gdFind(folder,GD_FILES.state);if(!now||now.modifiedTime===fs.modifiedTime)break;fs=now;
+    }
+    if(ff&&!force&&ff.modifiedTime!==c.fftMt){const d=await (await gdFetch(`${GD_API}files/${ff.id}?alt=media`)).json();
       if(d&&d.fft){const r=await mergeState({},d.fft.map(x=>({...x,bytes:unb64(x.bytes)})));gotF=r.nF}}
-    await gdUpload(folder,GD_FILES.state,{format:'vibmon-backup',version:1,exportedAt:new Date().toISOString(),app:APP_VERSION,by:c.email,state:syncState(),fft:[]},fs);
+    // upload only when something changed (each upload is the whole file)
+    const stJson=JSON.stringify(syncState()),stSig=stJson.length+':'+hashStr(stJson);
+    if(force||!fs||got||stSig!==c.stateSig){
+      await gdUpload(folder,GD_FILES.state,{format:'vibmon-backup',version:1,exportedAt:new Date().toISOString(),app:APP_VERSION,by:c.email,state:JSON.parse(stJson),fft:[]},fs);
+      c.stateSig=stSig}
     // FFT captures are large: upload only when this device has captures the cloud copy lacks
     const all=await FFTDB.all(),sig=all.map(r=>r.key).sort().join('|').length+':'+all.length;
-    if(!ff||sig!==c.fftSig||gotF){
+    if(force||!ff||sig!==c.fftSig||gotF){
       await gdUpload(folder,GD_FILES.fft,{format:'vibmon-fft',version:1,exportedAt:new Date().toISOString(),fft:all.map(r=>({...r,bytes:b64(r.bytes||new Uint8Array(0))}))},ff);
       const nf=await gdFind(folder,GD_FILES.fft);c.fftMt=nf&&nf.modifiedTime;c.fftSig=sig}
     else c.fftMt=ff.modifiedTime;
     await gdSyncPrivate(folder);
     c.lastSync=Date.now();gdSave(c);GD.selfSave=true;try{save()}finally{GD.selfSave=false}persistBig(true);
-    GD.status='ok';GD.pending=GD.pendingDuring||false;GD.pendingDuring=false;if(got||gotF){toast(`ซิงก์แล้ว: ได้ข้อมูลจากเครื่องอื่น ${got} ค่า${gotF?` · FFT ${gotF} ชุด`:''}`);render()}
+    GD.forcePush=false;GD.status='ok';GD.pending=GD.pendingDuring||false;GD.pendingDuring=false;if(got||gotF){toast(`ซิงก์แล้ว: ได้ข้อมูลจากเครื่องอื่น ${got} ค่า${gotF?` · FFT ${gotF} ชุด`:''}`);render()}
   }catch(e){GD.err=e.message;GD.status='err';console.warn(e);if(interactive)toast('ซิงก์ไม่สำเร็จ: '+e.message)}
   finally{GD.busy=false;if(GD.pending&&GD.status==='ok'&&gdTokenOk())setTimeout(()=>gdSync(false),500);renderGdChip();if(S.view==='settings'&&$('#gdInfo'))$('#gdInfo').innerHTML=gdInfoHtml()}
 }
+// small non-cryptographic hash, only to notice "nothing changed since the last upload"
+function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return(h>>>0).toString(36)}
 // ---- automatic sync ----
 // Google only issues a new access token in response to a user action on a page without a server,
 // so: while the token is valid (about 1 hour) everything syncs on its own; when it has expired,
@@ -170,6 +188,7 @@ function gdSettingsHtml(){
   const c=gdCfg(),origin=location.origin;
   return`<div class="panel span" id="gdPanel"><div class="ph"><h3>บัญชีและการซิงก์ (Google Drive)</h3></div><div class="form">
     ${siteGate()?'<p class="full" style="margin:0;font-size:13px">🔒 เว็บนี้<b>บังคับล็อกอิน</b>ด้วย Google ก่อนใช้งาน (ตั้งโดยผู้ดูแลใน site-config.js) · เครื่องนี้จะจำการล็อกอินไว้ '+((typeof SITE!=="undefined"&&SITE.rememberDays)||30)+' วัน</p>':''}
+    <p class="full muted" style="margin:0;font-size:12px">ขอบเขตการป้องกัน: ข้อมูลบน Google Drive เปิดได้เฉพาะบัญชีที่ล็อกอิน (Google ตรวจจริง) · หน้าจอล็อกบนเครื่องเป็นการบังหน้าจอในเบราว์เซอร์ กันคนทั่วไปที่หยิบเครื่องไปใช้ แต่ข้อมูลที่เก็บในเครื่องนี้ (รวม Gemini key) ไม่ได้เข้ารหัส คนที่ใช้เครื่องมือนักพัฒนาของเบราว์เซอร์เปิดดูได้ อย่าให้คนอื่นใช้โปรไฟล์เบราว์เซอร์เดียวกัน</p>
     <label class="full" ${siteGate()?'hidden':''}>Google OAuth Client ID<input id="gdCid" value="${esc(c.clientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="off"></label>
     <div class="full row">${c.email?`<button class="btn primary" id="gdSyncBtn">☁ ซิงก์ตอนนี้</button><button class="btn" id="gdOut">ออกจากระบบ</button>`:`<button class="btn primary" id="gdIn">👤 ล็อกอินด้วย Google</button>`}
       <label class="check"><input type="checkbox" id="gdAuto" ${c.auto?'checked':''}> ซิงก์อัตโนมัติทันทีที่มีการเปลี่ยนแปลง (ดึงข้อมูลเซนเซอร์, แก้ค่าตั้ง, บันทึกซ่อม ฯลฯ) + ทุก 5 นาที และตอนกลับมาที่หน้าเว็บ</label></div>
@@ -205,10 +224,14 @@ function gdBindSettings(){
 }
 // ---- screen lock ----
 async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+// The remembered login stores the hash of the email; recheck it against the email itself so an edited
+// localStorage entry with a copied hash does not open the page
+async function verifyAuthHash(){try{const a=JSON.parse(localStorage.getItem(AUTH_KEY)||'null');if(!a)return;
+  if(await sha256(String(a.email).trim().toLowerCase())!==a.h){localStorage.removeItem(AUTH_KEY);checkLock()}}catch(e){}}
 function hideLock(){const o=$('#lockScr');if(o)o.remove()}
 function checkLock(){
   const c=gdCfg();let ok=false;try{ok=sessionStorage.getItem('vibmon-unlocked')==='1'}catch(e){}
-  if(siteGate()){if(authOk())return hideLock();ok=false}
+  if(siteGate()){if(authOk()){verifyAuthHash();return hideLock()}ok=false}
   else{if(c.lock==='none'||ok)return hideLock();
     if(c.lock==='google'&&c.email&&(gdTokenOk()||authOk()))return hideLock()}
   hideLock();const o=document.createElement('div');o.id='lockScr';
@@ -229,14 +252,15 @@ async function gdSyncPrivate(folder){
   const f=await gdFind(folder,GD_FILES.priv),local=aiCfg();
   let remote=null;
   if(f){try{remote=(await (await gdFetch(`${GD_API}files/${f.id}?alt=media`)).json()).gemini||null}catch(e){}}
-  if(remote&&remote.key&&(!local.key||(remote.mt||0)>(local.mt||0))){
+  const lm=local.mt||0,rm=remote?remote.mt||0:-1;
+  if(remote&&rm>lm){
     aiSaveCfg(Object.assign({},local,remote),true);
-    if(!local.key)toast('ได้ Gemini API key จากบัญชี Google แล้ว');
+    if(!local.key&&remote.key)toast('ได้ Gemini API key จากบัญชี Google แล้ว');
     if(S.view==='ai'||S.view==='settings')render();
     return;
   }
-  if(local.key&&(!remote||(local.mt||0)>(remote.mt||0)||remote.key!==local.key&&!(remote.mt>local.mt))){
+  if(remote?lm>rm:!!local.key){
     await gdUpload(folder,GD_FILES.priv,{format:'vibmon-private',version:1,updated:new Date().toISOString(),
-      gemini:{key:local.key,model:local.model,temp:local.temp,anon:local.anon,maint:local.maint,mt:local.mt||Date.now()}},f);
+      gemini:{key:local.key||'',model:local.model,temp:local.temp,anon:local.anon,maint:local.maint,mt:local.mt||Date.now()}},f);
   }
 }

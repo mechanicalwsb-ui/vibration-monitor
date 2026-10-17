@@ -17,6 +17,7 @@ let cfg;
 try { cfg = { ...DEF, ...JSON.parse(fs.readFileSync(cfgPath, 'utf8')) }; }
 catch (e) { if (!MOCK) { console.error(`อ่าน ${cfgPath} ไม่ได้: ${e.message}\nคัดลอก config.example.json เป็น config.json แล้วแก้ค่าก่อน`); process.exit(1); } cfg = { ...DEF }; }
 if (MOCK && !cfg.sensors.length) cfg.sensors = [{ mac: 'AA:BB:CC:DD:EE:01', asset: 'MOCK ปั๊มทดสอบ' }];
+cfg.intervalMin = Math.max(15, +cfg.intervalMin || 60); // each poll wakes the sensor radio: never more often than every 15 min
 const base = path.dirname(cfgPath);
 const dataDir = path.resolve(base, cfg.dataDir), webRoot = path.resolve(__dirname, cfg.webRoot);
 fs.mkdirSync(dataDir, { recursive: true });
@@ -77,20 +78,25 @@ async function findPeripheral(mac) {
   const n = getNoble(); await waitPoweredOn(n);
   const want = mac.toLowerCase();
   return withTimeout(new Promise((resolve, reject) => {
+    let timer = null, over = false;
     const onDisc = p => { if ((p.address || '').toLowerCase() === want || (p.id || '').toLowerCase() === want.replace(/:/g, '')) { cleanup(); resolve(p); } };
-    const cleanup = () => { n.removeListener('discover', onDisc); n.stopScanning(); };
+    const cleanup = () => { if (over) return; over = true; clearTimeout(timer); n.removeListener('discover', onDisc); n.stopScanning(); };
     n.on('discover', onDisc);
     n.startScanning([], true, err => { if (err) { cleanup(); reject(err); } });
-    setTimeout(() => { cleanup(); reject(new Error('ไม่เจอเซนเซอร์ ' + mac + ' (อยู่นอกระยะ หรือมีอุปกรณ์อื่นเชื่อมอยู่)')); }, cfg.scanTimeoutSec * 1000);
+    timer = setTimeout(() => { cleanup(); reject(new Error('ไม่เจอเซนเซอร์ ' + mac + ' (อยู่นอกระยะ หรือมีอุปกรณ์อื่นเชื่อมอยู่)')); }, cfg.scanTimeoutSec * 1000);
   }), cfg.scanTimeoutSec * 1000 + 2000, 'สแกน');
 }
-function bulk(ch, opcode, from) {
+function bulk(ch, opcode, from, p) {
   return new Promise((resolve, reject) => {
-    const col = new P.BulkCollector(opcode); let idle;
-    const done = err => { clearTimeout(idle); ch.removeListener('data', onData); ch.unsubscribe(() => {}); err ? reject(err) : resolve(col.buffer()); };
+    const col = new P.BulkCollector(opcode); let idle, over = false;
+    const done = err => { if (over) return; over = true; clearTimeout(idle); ch.removeListener('data', onData); if (p) p.removeListener('disconnect', onLost);
+      try { ch.unsubscribe(() => {}); } catch (e) {} err ? reject(err) : resolve(col.buffer()); };
     const arm = ms => { clearTimeout(idle); idle = setTimeout(() => col.expected == null ? done(new Error('เซนเซอร์ไม่ตอบ')) : done(), ms); };
     const onData = d => { if (col.push(d)) done(); else arm(45000); };
+    const onLost = () => done(new Error('การเชื่อมต่อหลุดระหว่างรับข้อมูล'));
     ch.on('data', onData);
+    if (p) p.once('disconnect', onLost);
+    arm(20000); // armed before subscribing: a subscribe that never calls back cannot hang the gateway
     ch.subscribe(err => {
       if (err) return done(err);
       arm(15000);
@@ -114,10 +120,10 @@ async function pollSensor(sc) {
       const [, chars] = await withTimeout(pify(p.discoverSomeServicesAndCharacteristics.bind(p), [P.UUID.svc], [P.UUID.bulk, P.UUID.sys]), 20000, 'หา service');
       const ch = id => chars.find(c => c.uuid === id);
       if (!ch(P.UUID.bulk)) throw new Error('ไม่พบช่องรับข้อมูลของ i-ALERT3');
-      if (ch(P.UUID.sys)) sys = P.parseSys(await pify(ch(P.UUID.sys).read.bind(ch(P.UUID.sys))), st.scale);
+      if (ch(P.UUID.sys)) sys = P.parseSys(await withTimeout(pify(ch(P.UUID.sys).read.bind(ch(P.UUID.sys))), 15000, 'อ่านสถานะ'), st.scale);
       if (sys) st.scale = sys.scale;
       const from = last ? Math.floor(last / 1000) : 0;
-      recs = P.parseTrend(await bulk(ch(P.UUID.bulk), 1, from), st.scale);
+      recs = P.parseTrend(await bulk(ch(P.UUID.bulk), 1, from, p), st.scale);
     } finally { try { p.disconnect(); } catch (e) {} }
   }
   // merge
@@ -138,19 +144,18 @@ async function pollSensor(sc) {
   if (sys && sys.flags.battery) alertOnce(key + '|bat', `🔋 แบตเซนเซอร์ต่ำ: ${sc.asset} (${sys.battV.toFixed(2)} V)`);
   if (sys && !sys.clockOk) alertOnce(key + '|clk', `⏱ นาฬิกาเซนเซอร์รีเซ็ต: ${sc.asset} — เปิดแอป i-ALERT เชื่อมต่อ 1 ครั้งเพื่อตั้งเวลา`);
 }
-let busy = false;
+let busy = false, lastCycle = 0;
 async function cycle() {
-  if (busy) return; busy = true;
-  for (const sc of cfg.sensors) {
-    try { await pollSensor(sc); }
+  if (busy) return; busy = true; lastCycle = Date.now();
+  try { for (const sc of cfg.sensors) {
+    try { await withTimeout(pollSensor(sc), 15 * 60000, 'อ่านเซนเซอร์'); }
     catch (e) {
       const key = sc.mac.toUpperCase(); S.fails[key] = (S.fails[key] || 0) + 1;
       (S.health[key] || (S.health[key] = [])).push({ t: Date.now(), ok: false, att: 1, err: e.message }); saveState();
       log(`${sc.asset}: ไม่สำเร็จ (${S.fails[key]} ครั้งติด) — ${e.message}`);
       if (S.fails[key] === 3) alertOnce(key + '|fail', `ดึงข้อมูล ${sc.asset} ไม่สำเร็จ 3 ครั้งติด: ${e.message}`);
     }
-  }
-  busy = false;
+  } } finally { busy = false; }
 }
 // Daily summary
 let lastDaily = '';
@@ -179,9 +184,18 @@ http.createServer((req, res) => {
   if (url === '/api/status') return json({ gateway: true, sensors: cfg.sensors.map(sc => ({ ...sc, ...S.sensors[sc.mac.toUpperCase()], fails: S.fails[sc.mac.toUpperCase()] || 0 })),
     readings: S.readings.length, intervalMin: cfg.intervalMin, busy });
   if (url === '/api/backup') return json(backupJson());
-  if (url === '/api/poll' && req.method === 'POST') { cycle(); return json({ started: true }); }
-  let file = path.join(webRoot, url === '/' ? 'index.html' : url);
-  if (!file.startsWith(webRoot)) { res.writeHead(403); return res.end(); }
+  if (url === '/api/poll' && req.method === 'POST') {
+    const tok = new URL(req.url, 'http://x').searchParams.get('token') || req.headers['x-token'];
+    if (cfg.pollToken && tok !== cfg.pollToken) { res.writeHead(403); return res.end('token'); }
+    if (busy || Date.now() - lastCycle < 10 * 60000) return json({ started: false, reason: 'เพิ่งอ่านไปไม่ถึง 10 นาที (ถนอมแบตเซนเซอร์)' });
+    cycle(); return json({ started: true });
+  }
+  // Only the dashboard's own files, straight from webRoot: never config.json (LINE/Telegram tokens),
+  // the data folder or anything in a sub-folder
+  const name = url === '/' ? (fs.existsSync(path.join(webRoot, 'index.html')) ? 'index.html' : 'vibration-monitor.html') : url.replace(/^\//, '');
+  if (!/^[A-Za-z0-9._-]+\.(html|js|json|png|svg|css)$/.test(name) || /^(config|package|package-lock)\.json$/.test(name) || name.startsWith('.')) { res.writeHead(404); return res.end('Not found'); }
+  const file = path.join(webRoot, name);
+  if (path.dirname(file) !== webRoot) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
     res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' }); res.end(data);

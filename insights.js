@@ -86,7 +86,9 @@ function forecast(rs,c,key='ov',days){
   const lim=effLimits(c,key==='ov'?'ov':key);res.lim=lim;
   if(m.r2<0.3){res.ok=false;res.why=`ค่าแกว่งมาก หาแนวโน้มที่เชื่อถือได้ไม่ได้ (R² = ${m.r2.toFixed(2)})`;return res}
   const cross=lv=>{if(lv==null)return null;if(res.now>=lv)return 0;if(!m.up)return null;const d=m.inv(lv);return d>0?d:null};
-  res.dWarn=cross(lim.warn);res.dAlarm=cross(lim.alarm);
+  // days are counted from the last reading; shown dates are from today, so take off the data's age
+  const age=Math.max(0,(Date.now()-end)/DAY),fromNow=d=>d==null?null:Math.max(0,d-age);
+  res.dWarn=fromNow(cross(lim.warn));res.dAlarm=fromNow(cross(lim.alarm));res.age=age;
   return res;
 }
 const fmtDays=d=>d==null?null:d===0?'เกินแล้ว':d>365?'มากกว่า 1 ปี':`อีก ~${Math.round(d)} วัน (${new Date(Date.now()+d*DAY).toLocaleDateString('th-TH',{day:'numeric',month:'short'})})`;
@@ -301,7 +303,9 @@ function initApp(){
   handleHash();window.addEventListener('hashchange',handleHash);
   updateWakeLock();
   // opened from the Raspberry Pi gateway (or one is configured): merge its data quietly
-  if(!(location.protocol==='https:'&&/^http:/.test(gwBase())))
+  // (no address set: only ask this page's own server when it is plain http, i.e. the Pi itself; the
+  // https site has no /api/status and would just log a 404 on every load)
+  if(gwBase()?!(location.protocol==='https:'&&/^http:/.test(gwBase())):location.protocol==='http:')
     gatewayStatus(gwBase()).then(st=>{S._gw=st;if(st&&(!S.gw||S.gw.auto!==false))gatewaySync(true)});
 }
 // "#asset=<name>" (QR label / notification) opens that machine; connecting still needs a tap

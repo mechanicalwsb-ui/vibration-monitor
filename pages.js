@@ -34,7 +34,7 @@ function showMaint(id){
   const m=(S.maint||[]).find(x=>x.id===id);if(!m)return;
   const ba=beforeAfter(m);
   infoDialog(`${esc(m.type)} · ${esc(m.asset)}`,`<p style="margin:0 0 6px"><b>${dFull(m.t)}</b>${m.by?' · โดย '+esc(m.by):''}${m.cost?' · '+(+m.cost).toLocaleString('th-TH')+' บาท':''}</p>
-    <p style="white-space:pre-wrap;margin:0 0 8px">${esc(m.text||'')}</p>${m.photo?`<img src="${m.photo}" style="max-width:100%;border-radius:8px">`:''}
+    <p style="white-space:pre-wrap;margin:0 0 8px">${esc(m.text||'')}</p>${m.photo?`<img src="${imgSrc(m.photo)}" style="max-width:100%;border-radius:8px">`:''}
     ${ba?`<p class="muted" style="margin-top:8px">ก่อน 14 วัน ${fv(ba.before)} → หลัง 14 วัน ${fv(ba.after)} ${uv()} (${ba.pct>=0?'+':''}${ba.pct.toFixed(0)}%)</p>`:''}`);
 }
 
@@ -75,7 +75,7 @@ function renderFleet(){
     const a=cv_.dataset.a,rs=series(a),end=rs.at(-1).t,xs=rs.filter(r=>r.t>=end-7*DAY);
     const ctx=cv_.getContext('2d'),W=cv_.width,H=cv_.height;ctx.clearRect(0,0,W,H);
     const v=xs.map(overall).filter(x=>x!=null);if(v.length<2)return;
-    const hi=Math.max(...v)*1.1||1;ctx.strokeStyle=k.x;ctx.lineWidth=1.5;ctx.beginPath();
+    const hi=vmax(v)*1.1||1;ctx.strokeStyle=k.x;ctx.lineWidth=1.5;ctx.beginPath();
     xs.forEach((r,i)=>{const y=overall(r);if(y==null)return;const px=(r.t-(end-7*DAY))/(7*DAY)*W,py=H-y/hi*(H-4)-2;i?ctx.lineTo(px,py):ctx.moveTo(px,py)});ctx.stroke();
   });
 }
@@ -87,7 +87,7 @@ function aggregate(rs,c,per){
   const g=new Map();
   for(const r of rs){if(isRunning(r,c)===false)continue;const v=overall(r);if(v==null)continue;const k=key(r);
     const e=g.get(k)||{k,t:r.t,v:[],temp:[],al:0};e.v.push(v);if(r.temp!=null)e.temp.push(r.temp);const z=status(r,c);if(z==='C'||z==='D')e.al++;g.set(k,e)}
-  return[...g.values()].map(e=>({k:e.k,t:e.t,n:e.v.length,min:Math.min(...e.v),avg:mean(e.v),max:Math.max(...e.v),p95:quantile(e.v,.95),tmax:e.temp.length?Math.max(...e.temp):null,al:e.al}));
+  return[...g.values()].map(e=>({k:e.k,t:e.t,n:e.v.length,min:vmin(e.v),avg:mean(e.v),max:vmax(e.v),p95:quantile(e.v,.95),tmax:e.temp.length?vmax(e.temp):null,al:e.al}));
 }
 const PER_LABEL={day:'วัน',week:'สัปดาห์',month:'เดือน'};
 function renderStats(){
@@ -102,7 +102,7 @@ function renderStats(){
   const mStart=t=>{const d=new Date(t);return new Date(d.getFullYear(),d.getMonth(),1).getTime()};
   const m0=mStart(end),m1=mStart(m0-1);
   const mstat=(f,t)=>{const xs=all.filter(r=>r.t>=f&&r.t<t),v=xs.filter(r=>isRunning(r,c)!==false).map(overall).filter(x=>x!=null);
-    return{avg:mean(v),max:v.length?Math.max(...v):null,temp:mean(xs.map(r=>r.temp).filter(x=>x!=null)),runH:runInfo(xs,c).runH,al:xs.filter(r=>{const z=status(r,c);return z==='C'||z==='D'}).length}};
+    return{avg:mean(v),max:v.length?vmax(v):null,temp:mean(xs.map(r=>r.temp).filter(x=>x!=null)),runH:runInfo(xs,c).runH,al:xs.filter(r=>{const z=status(r,c);return z==='C'||z==='D'}).length}};
   const A=mstat(m0,end+1),B=mstat(m1,m0);
   const diff=(x,y,f=fv)=>x==null||y==null?'–':`<span class="${x>y*1.1?'up':x<y*0.9?'down':''}">${x>=y?'▲':'▼'} ${y?Math.abs((x-y)/y*100).toFixed(0)+'%':''}</span>`;
   const mName=t=>new Date(t).toLocaleDateString('th-TH',{month:'long',year:'numeric'});
@@ -162,7 +162,7 @@ function renderCompare(){
       if(s.size>6){i.checked=false;return toast('เลือกได้สูงสุด 6 เครื่อง')}C.assets=[...s];save();renderCompare()});
     const from=Date.now()-(S.range||90)*DAY;
     C.assets.forEach((a,i)=>{const d=daily(a,from,Infinity);ds.push({label:a,data:d.map(p=>({x:p.t,y:cv(p.y)})),borderColor:pal[i],backgroundColor:pal[i],borderWidth:1.6,pointRadius:1.5,tension:.2});
-      const v=d.map(p=>p.y);rows.push([a,mean(v),v.length?Math.max(...d.map(p=>p.max)):null,v.length])});
+      const v=d.map(p=>p.y);rows.push([a,mean(v),v.length?vmax(d.map(p=>p.max)):null,v.length])});
     const base=rows[0]&&rows[0][1];
     $('#cmpTable').innerHTML=`<table><thead><tr><th>เครื่อง</th><th>เฉลี่ย (${uv()})</th><th>สูงสุด</th><th>จำนวนวัน</th><th>ต่างจาก ${esc(rows[0]?rows[0][0]:'')}</th></tr></thead><tbody>
       ${rows.map(r=>`<tr><td>${esc(r[0])}</td><td class="num">${fv(r[1])}</td><td class="num">${fv(r[2])}</td><td class="num">${r[3]}</td><td class="num">${base&&r[1]!=null?((r[1]-base)/base*100).toFixed(0)+'%':'–'}</td></tr>`).join('')}</tbody></table>`;
@@ -179,7 +179,7 @@ function renderCompare(){
     const o=opts(uv());o.scales.x={type:'linear',title:{display:true,text:'วันที่ (นับจากต้นช่วง)',color:k.muted},ticks:{color:k.muted},grid:{color:k.line}};
     o.plugins.tooltip.callbacks.title=it=>it.length?'วันที่ '+(Math.floor(it[0].parsed.x)+1):'';
     pCharts.push(new Chart($('#cmpChart'),{type:'line',data:{datasets:ds},options:o}));
-    const s=d=>({avg:mean(d.map(p=>p.y)),max:d.length?Math.max(...d.map(p=>p.max)):null});const sa=s(dA),sb=s(dB);
+    const s=d=>({avg:mean(d.map(p=>p.y)),max:d.length?vmax(d.map(p=>p.max)):null});const sa=s(dA),sb=s(dB);
     $('#cmpTable').innerHTML=`<table><thead><tr><th></th><th>${lb}</th><th>${la}</th><th>เปลี่ยน</th></tr></thead><tbody>
       <tr><td>เฉลี่ย (${uv()})</td><td class="num">${fv(sb.avg)}</td><td class="num">${fv(sa.avg)}</td><td class="num">${sa.avg!=null&&sb.avg?((sa.avg-sb.avg)/sb.avg*100).toFixed(0)+'%':'–'}</td></tr>
       <tr><td>สูงสุด</td><td class="num">${fv(sb.max)}</td><td class="num">${fv(sa.max)}</td><td class="num">${sa.max!=null&&sb.max?((sa.max-sb.max)/sb.max*100).toFixed(0)+'%':'–'}</td></tr></tbody></table>`;
@@ -235,7 +235,7 @@ function renderAssetPage(){
       <p class="muted bSrc" style="grid-column:1/-1;margin:0;font-size:12px">${esc(b.src||'')}</p></div>`};
   const d=new Date(),nowLocal=new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16);
   const dr=c.drive||{};
-  p.innerHTML=`<div class="mainhead"><h2>${favBtn(a)}ข้อมูลเครื่อง · ${esc(a)}</h2><div class="row"><button class="btn" onclick="openWizard('${esc(a).replace(/'/g,"\\'")}')">ตั้งค่าด้วยตัวช่วย</button><button class="btn" onclick="openWizard()">+ สร้างเครื่องใหม่</button></div></div>
+  p.innerHTML=`<div class="mainhead"><h2>${favBtn(a)}ข้อมูลเครื่อง · ${esc(a)}</h2><div class="row"><button class="btn" data-act="wizard" data-v="${esc(a)}">ตั้งค่าด้วยตัวช่วย</button><button class="btn" onclick="openWizard()">+ สร้างเครื่องใหม่</button></div></div>
   <datalist id="brgList">${BRG_LIST.map(x=>`<option value="${x}">`).join('')}</datalist>
   <div class="pgrid">
     <div class="panel"><div class="ph"><h3>ข้อมูลเครื่องจักร</h3></div>
@@ -258,7 +258,7 @@ function renderAssetPage(){
         <label class="check" style="align-self:end"><input type="checkbox" name="vfd" ${c.vfd?'checked':''}> ใช้ inverter (VFD)</label>
         <label class="full">ตำแหน่งเซนเซอร์และทิศแกน<input name="mount" value="${esc(pr.mount||'')}" placeholder="เช่น ฝั่ง DE มอเตอร์ · X แนวตั้ง, Y แนวแกน, Z แนวนอน"></label>
         <label class="full">รูปเครื่อง<input type="file" accept="image/*" capture="environment" id="prPhoto"></label>
-        ${pr.photo?`<img src="${pr.photo}" class="full" style="max-width:100%;max-height:220px;object-fit:contain;border-radius:8px">`:''}
+        ${pr.photo?`<img src="${imgSrc(pr.photo)}" class="full" style="max-width:100%;max-height:220px;object-fit:contain;border-radius:8px">`:''}
         <div class="full row" style="justify-content:space-between">
           <span class="muted" style="font-size:12px">${isoClassFor(pr)?`กลุ่ม ISO ที่ควรใช้: ${CLASSES[isoClassFor(pr)].n}${c.cls===isoClassFor(pr)?' ✓':''}`:'ใส่ kW เพื่อเลือกกลุ่ม ISO ให้อัตโนมัติ'}</span>
           <div class="row">${isoClassFor(pr)&&c.cls!==isoClassFor(pr)?'<button class="btn" id="prIso">ใช้กลุ่ม ISO นี้</button>':''}<button class="btn primary" id="prSave">บันทึกข้อมูลเครื่อง</button></div></div>
@@ -391,7 +391,7 @@ function renderRoute(){
   $('#rtNew').onclick=()=>{S._routeEdit={id:uid(),name:'เส้นทาง '+(S.routes.length+1),assets:[]};render()};
   p.querySelectorAll('[data-run]').forEach(b=>b.onclick=()=>{S.routeRun={id:b.dataset.run,i:0,res:{},start:Date.now(),stepAt:Date.now()};save();render()});
   p.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const r=S.routes.find(x=>x.id===b.dataset.edit);S._routeEdit={...r,assets:[...r.assets]};render()});
-  p.querySelectorAll('[data-rdel]').forEach(b=>b.onclick=()=>{if(confirm('ลบเส้นทางนี้?')){S.routes=S.routes.filter(x=>x.id!==b.dataset.rdel);save();render()}});
+  p.querySelectorAll('[data-rdel]').forEach(b=>b.onclick=()=>{if(confirm('ลบเส้นทางนี้?')){tombList('routes').push(b.dataset.rdel);S.routes=S.routes.filter(x=>x.id!==b.dataset.rdel);save();render()}});
   if(ed){
     p.querySelectorAll('[data-ra]').forEach(i=>i.onchange=()=>{ed.name=$('#reName').value;const n=i.dataset.ra;ed.assets=i.checked?[...ed.assets,n]:ed.assets.filter(x=>x!==n);render()});
     const mv=(k,d)=>{ed.name=$('#reName').value;const j=k+d;if(j<0||j>=ed.assets.length)return;[ed.assets[k],ed.assets[j]]=[ed.assets[j],ed.assets[k]];render()};
@@ -476,7 +476,7 @@ async function buildReport(R){
       html+=`<img class="rp-chart" src="${await chartImg(lineCfg([L('X',P.x,pt('vx')),L('Y',P.y,pt('vy')),L('Z',P.z,pt('vz'))],uv()))}">`;
       html+=`<img class="rp-chart" src="${await chartImg(lineCfg([L('อุณหภูมิ',P.t,pt('temp'))],ut()),900,200)}">`;
       const v=rs.filter(r=>isRunning(r,c)!==false).map(overall).filter(x=>x!=null),ri=runInfo(rs,c);
-      html+=`<p class="rp-sub">ค่าเฉลี่ย ${fv(mean(v))} · สูงสุด ${fv(v.length?Math.max(...v):null)} ${uv()} · เดินเครื่อง ${ri.runH.toFixed(0)} ชม. · ${rs.length} ค่า</p>`;
+      html+=`<p class="rp-sub">ค่าเฉลี่ย ${fv(mean(v))} · สูงสุด ${fv(v.length?vmax(v):null)} ${uv()} · เดินเครื่อง ${ri.runH.toFixed(0)} ชม. · ${rs.length} ค่า</p>`;
     }
     if(R.sec.fc&&s.fc.ok)html+=`<p><b>พยากรณ์:</b> ${s.fc.perWeek>=0?'+':''}${fv(s.fc.perWeek)} ${uv()}/สัปดาห์ (R² ${s.fc.r2.toFixed(2)}) · ${s.fc.dWarn!=null?'ถึงเฝ้าระวัง '+fmtDays(s.fc.dWarn):''} ${s.fc.dAlarm!=null?'· ถึงอันตราย '+fmtDays(s.fc.dAlarm):''}</p>`;
     if(R.sec.alarm){const al=rs.filter(r=>{const z=status(r,c);return z==='C'||z==='D'}).slice(-15).reverse();
@@ -485,7 +485,7 @@ async function buildReport(R){
       const rec=list[0],dec=rec&&faDecode(rec);
       if(dec){const sp=ax=>specPoints(dec,'low','vel',ax).filter(p=>p.x>=2);
         html+=`<h3>FFT ล่าสุด (${KIND_LABEL[rec.kind||'alarm']} · ${dFull(rec.ts*1000)})</h3><img class="rp-chart" src="${await chartImg(()=>{const g=lineCfg([L('X',P.x,sp('x')),L('Y',P.y,sp('y')),L('Z',P.z,sp('z'))],uv())();g.options.scales.x.ticks.callback=v=>v;g.options.scales.x.title={display:true,text:'Hz'};return g})}">`;
-        const dg=diagnose(dec,c.rpm||null,null,c);
+        const f1=speedOf(rec,dec,c),dg=diagnose(dec,f1?f1*60:null,null,c); // same 1X as the FFT page (VFD: this capture's speed)
         html+=`<ul>${dg.items.map(it=>`<li><b>${it.name}</b> (${it.level}) — ${it.why}</li>`).join('')||'<li>ไม่พบรูปแบบความผิดปกติเด่น</li>'}</ul>`}}
     if(R.sec.maint){const ml=(S.maint||[]).filter(m=>m.asset===a&&m.t>=from).sort((x,y)=>x.t-y.t);
       if(ml.length)html+=`<h3>บันทึกการบำรุงรักษา</h3><table class="rp"><thead><tr><th>วันที่</th><th>งาน</th><th>รายละเอียด</th><th>ผู้ทำ</th></tr></thead><tbody>${ml.map(m=>`<tr><td>${dFull(m.t)}</td><td>${esc(m.type)}</td><td>${esc(m.text||'')}</td><td>${esc(m.by||'')}</td></tr>`).join('')}</tbody></table>`}

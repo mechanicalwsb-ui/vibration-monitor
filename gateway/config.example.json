@@ -1,4 +1,5 @@
 {
+  "pollToken": "",
   "sensors": [
     { "mac": "30:5A:85:4C:07:AC", "asset": "i-ALERT3", "scale": 816 }
   ],
