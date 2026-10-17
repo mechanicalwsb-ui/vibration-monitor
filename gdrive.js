@@ -9,7 +9,18 @@
 const GD_KEY='vibmon-gdrive',GD_SCOPE='openid email profile https://www.googleapis.com/auth/drive.file';
 const GD_API='https://www.googleapis.com/drive/v3/',GD_UP='https://www.googleapis.com/upload/drive/v3/';
 const GD_FILES={state:'vibmon-state.json',fft:'vibmon-fft.json'};
-function gdCfg(){let c={};try{c=JSON.parse(localStorage.getItem(GD_KEY)||'{}')}catch(e){}return Object.assign({clientId:'',auto:true,allow:'',lock:'none'},c)}
+// SITE (site-config.js) can make sign-in mandatory for everyone: its Client ID and allow-list win
+const siteGate=()=>typeof SITE!=='undefined'&&!!SITE.clientId;
+function gdCfg(){let c={};try{c=JSON.parse(localStorage.getItem(GD_KEY)||'{}')}catch(e){}
+  c=Object.assign({clientId:'',auto:true,allow:'',lock:'none'},c);
+  if(siteGate()){c.clientId=SITE.clientId;c.lock='google';if(SITE.allow&&SITE.allow.length)c.allow=SITE.allow.join(', ')}
+  return c}
+const AUTH_KEY='vibmon-auth';
+function authOk(){
+  try{const a=JSON.parse(localStorage.getItem(AUTH_KEY)||'null');const c=gdCfg();
+    return!!(a&&a.until>Date.now()&&c.email&&a.email===c.email&&allowedEmail(c,a.email))}catch(e){return false}
+}
+function setAuth(email){const d=(typeof SITE!=='undefined'&&SITE.rememberDays)||30;try{localStorage.setItem(AUTH_KEY,JSON.stringify({email,until:Date.now()+d*864e5}))}catch(e){}}
 function gdSave(c){try{localStorage.setItem(GD_KEY,JSON.stringify(c))}catch(e){}}
 const GD={tok:null,exp:0,busy:false,status:'',err:''};
 const gdSignedIn=()=>!!gdCfg().email;
@@ -39,8 +50,8 @@ async function gdLogin(){
   try{
     await gdToken(true);
     const u=await (await gdFetch('https://www.googleapis.com/oauth2/v3/userinfo')).json(),c=gdCfg();
-    if(!allowedEmail(c,u.email)){GD.tok=null;throw new Error(`บัญชี ${u.email} ไม่ได้รับอนุญาตให้ใช้งานเครื่องนี้`)}
-    Object.assign(c,{email:u.email,name:u.name||u.email,picture:u.picture||''});gdSave(c);
+    if(!allowedEmail(c,u.email)){try{google.accounts.oauth2.revoke(GD.tok,()=>{})}catch(e){}GD.tok=null;throw new Error(`บัญชี ${u.email} ไม่ได้รับอนุญาตให้ใช้งานเว็บนี้`)}
+    Object.assign(c,{email:u.email,name:u.name||u.email,picture:u.picture||''});gdSave(c);setAuth(u.email);
     try{sessionStorage.setItem('vibmon-unlocked','1')}catch(e){}
     toast('ล็อกอินแล้ว: '+(u.name||u.email));hideLock();render();
     if(c.clientId)gdSync(false);
@@ -49,7 +60,7 @@ async function gdLogin(){
 function gdLogout(){
   const c=gdCfg();
   try{if(GD.tok&&window.google)google.accounts.oauth2.revoke(GD.tok,()=>{})}catch(e){}
-  GD.tok=null;delete c.email;delete c.name;delete c.picture;gdSave(c);
+  GD.tok=null;delete c.email;delete c.name;delete c.picture;gdSave(c);try{localStorage.removeItem(AUTH_KEY)}catch(e){}
   try{sessionStorage.removeItem('vibmon-unlocked')}catch(e){}
   toast('ออกจากระบบแล้ว');render();checkLock();
 }
@@ -115,12 +126,13 @@ function gdInfoHtml(){const c=gdCfg();return c.email?`ล็อกอินเ�
 function gdSettingsHtml(){
   const c=gdCfg(),origin=location.origin;
   return`<div class="panel span" id="gdPanel"><div class="ph"><h3>บัญชีและการซิงก์ (Google Drive)</h3></div><div class="form">
-    <label class="full">Google OAuth Client ID<input id="gdCid" value="${esc(c.clientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="off"></label>
+    ${siteGate()?'<p class="full" style="margin:0;font-size:13px">🔒 เว็บนี้<b>บังคับล็อกอิน</b>ด้วย Google ก่อนใช้งาน (ตั้งโดยผู้ดูแลใน site-config.js) · เครื่องนี้จะจำการล็อกอินไว้ '+((typeof SITE!=="undefined"&&SITE.rememberDays)||30)+' วัน</p>':''}
+    <label class="full" ${siteGate()?'hidden':''}>Google OAuth Client ID<input id="gdCid" value="${esc(c.clientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="off"></label>
     <div class="full row">${c.email?`<button class="btn primary" id="gdSyncBtn">☁ ซิงก์ตอนนี้</button><button class="btn" id="gdOut">ออกจากระบบ</button>`:`<button class="btn primary" id="gdIn">👤 ล็อกอินด้วย Google</button>`}
       <label class="check"><input type="checkbox" id="gdAuto" ${c.auto?'checked':''}> ซิงก์อัตโนมัติ (หลังดึงข้อมูล และทุก 10 นาที)</label></div>
     <p class="full" id="gdInfo" style="margin:0;font-size:13px">${gdInfoHtml()}</p>
-    <label class="full">อีเมลที่อนุญาตให้ล็อกอิน (เว้นว่าง = ทุกบัญชีที่เพิ่มใน Google Cloud)<input id="gdAllow" value="${esc(c.allow)}" placeholder="เช่น a@company.com, b@gmail.com"></label>
-    <label class="full">ล็อกหน้าเว็บบนเครื่องนี้<select id="gdLock"><option value="none" ${c.lock==='none'?'selected':''}>ไม่ล็อก</option><option value="pin" ${c.lock==='pin'?'selected':''}>ต้องใส่ PIN ก่อนใช้งาน</option><option value="google" ${c.lock==='google'?'selected':''}>ต้องล็อกอิน Google ก่อนใช้งาน (ต้องมีอินเทอร์เน็ต)</option></select></label>
+    <label class="full" ${siteGate()?'hidden':''}>อีเมลที่อนุญาตให้ล็อกอิน (เว้นว่าง = ทุกบัญชีที่เพิ่มใน Google Cloud)<input id="gdAllow" value="${esc(c.allow)}" placeholder="เช่น a@company.com, b@gmail.com"></label>
+    <label class="full" ${siteGate()?'hidden':''}>ล็อกหน้าเว็บบนเครื่องนี้<select id="gdLock"><option value="none" ${c.lock==='none'?'selected':''}>ไม่ล็อก</option><option value="pin" ${c.lock==='pin'?'selected':''}>ต้องใส่ PIN ก่อนใช้งาน</option><option value="google" ${c.lock==='google'?'selected':''}>ต้องล็อกอิน Google ก่อนใช้งาน (ต้องมีอินเทอร์เน็ต)</option></select></label>
     <p class="full muted" style="margin:0;font-size:12px">ข้อมูลเก็บเป็นไฟล์ในโฟลเดอร์ "Vibration Monitor" ใน Google Drive ของบัญชีที่ล็อกอิน (หน้าเว็บเห็นเฉพาะไฟล์ที่สร้างเอง) · ทุกเครื่องที่ล็อกอินบัญชีเดียวกันจะเห็นข้อมูลชุดเดียวกัน · ถ้าจะให้หลายคนใช้ข้อมูลชุดเดียว ให้ทุกคนล็อกอินบัญชีเดียวกัน · การล็อกหน้าเว็บกันคนเปิดเครื่องนี้ แต่ไม่ได้เข้ารหัสข้อมูลในเบราว์เซอร์</p>
     <details class="full gd-help"><summary>วิธีสร้าง Client ID (ฟรี ทำครั้งเดียว ~10 นาที)</summary><ol>
       <li>เปิด <b>console.cloud.google.com</b> ล็อกอิน Google → สร้างโปรเจกต์ใหม่ ตั้งชื่อเช่น "Vibration Monitor"</li>
@@ -153,15 +165,16 @@ async function sha256(t){const b=await crypto.subtle.digest('SHA-256',new TextEn
 function hideLock(){const o=$('#lockScr');if(o)o.remove()}
 function checkLock(){
   const c=gdCfg();let ok=false;try{ok=sessionStorage.getItem('vibmon-unlocked')==='1'}catch(e){}
-  if(c.lock==='none'||ok)return hideLock();
-  if(c.lock==='google'&&c.email&&gdTokenOk())return hideLock();
+  if(siteGate()){if(authOk())return hideLock();ok=false}
+  else{if(c.lock==='none'||ok)return hideLock();
+    if(c.lock==='google'&&c.email&&(gdTokenOk()||authOk()))return hideLock()}
   hideLock();const o=document.createElement('div');o.id='lockScr';
   o.innerHTML=`<div class="lock-box panel"><img src="icon-192.png" alt="" width="56" height="56"><h2>Vibration Monitor</h2>
     ${c.lock==='pin'?`<p class="muted">ใส่ PIN เพื่อใช้งาน</p><input type="password" inputmode="numeric" id="lockPin" maxlength="8" autocomplete="off"><button class="btn primary" id="lockGo">เข้าใช้งาน</button>`
-      :`<p class="muted">ล็อกอินด้วยบัญชี Google ที่ได้รับอนุญาต</p><button class="btn primary" id="lockG">👤 ล็อกอินด้วย Google</button>`}
+      :`<p class="muted">ต้องล็อกอินด้วยบัญชี Google ที่ได้รับอนุญาตก่อนใช้งาน</p><button class="btn primary" id="lockG">👤 ล็อกอินด้วย Google</button>${navigator.onLine?'':'<p class="up" style="font-size:12px">ไม่มีอินเทอร์เน็ต — ต้องต่ออินเทอร์เน็ตเพื่อล็อกอินครั้งแรก</p>'}`}
     <p class="muted" id="lockMsg" style="font-size:12px;min-height:16px"></p></div>`;
   document.body.appendChild(o);
   if(c.lock==='pin'){const go=async()=>{const v=$('#lockPin').value;if(await sha256(c.salt+v)===c.pinHash){try{sessionStorage.setItem('vibmon-unlocked','1')}catch(e){}hideLock()}else{$('#lockMsg').textContent='PIN ไม่ถูกต้อง';$('#lockPin').value=''}};
     $('#lockGo').onclick=go;$('#lockPin').onkeydown=e=>{if(e.key==='Enter')go()};setTimeout(()=>$('#lockPin').focus(),50)}
-  else $('#lockG').onclick=()=>gdLogin().then(()=>{if(gdTokenOk())hideLock();else $('#lockMsg').textContent=GD.err||''});
+  else $('#lockG').onclick=()=>gdLogin().then(()=>{if(authOk()||(!siteGate()&&gdTokenOk()))hideLock();else $('#lockMsg').textContent=GD.err||'ล็อกอินไม่สำเร็จ'});
 }
