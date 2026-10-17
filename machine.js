@@ -306,7 +306,7 @@ function askMerge(i,assetsIn){
 // Move everything stored under `froms` to `to`
 async function mergeAssets(froms,to){
   froms=froms.filter(a=>a!==to);if(!froms.length)return series(to).length;
-  S.renames=S.renames||{};for(const f of froms)S.renames[f]=to;delete S.renames[to];
+  S.renames=normRenames(S.renames,Object.fromEntries(froms.map(f=>[f,{to,t:Date.now()}])));
   const keep=new Map();for(const r of S.readings)if(r.asset===to)keep.set(r.t,r);
   S.readings=S.readings.filter(r=>{
     if(!froms.includes(r.asset))return true;

@@ -142,9 +142,17 @@ async function gatewaySync(quiet){
 // Deletes and renames are remembered as tombstones, so data removed or merged on one device does not
 // come back from another: S.tomb = {assets:{name:deletedAt}, maint:[ids], failures:[ids]}, S.renames = {from:to}
 function tomb(){return S.tomb||(S.tomb={assets:{},maint:[],failures:[]})}
-function finalName(a,ren){const seen=new Set();while(ren[a]&&!seen.has(a)){seen.add(a);a=ren[a]}return a}
+// renames: {from:{to,t}} (older files: {from:"to"}, treated as oldest). Applied oldest first, and renaming
+// X→Y drops any earlier Y→… so merging back and forth on two devices never leaves a loop that keeps both names.
+function normRenames(...lists){
+  const all=[];for(const l of lists)for(const[f,v]of Object.entries(l||{}))all.push([f,typeof v==='string'?v:v.to,typeof v==='string'?0:(v.t||0)]);
+  all.sort((a,b)=>a[2]-b[2]);const out={};
+  for(const[f,to,t]of all){if(!to||f===to)continue;delete out[to];out[f]={to,t}}
+  return out;
+}
+function finalName(a,ren){const seen=new Set();while(ren[a]&&!seen.has(a)){seen.add(a);const v=ren[a];a=typeof v==='string'?v:v.to}return a}
 async function mergeState(st,fft){
-  const ren=Object.assign({},st.renames||{},S.renames||{});S.renames=ren;
+  const ren=normRenames(st.renames,S.renames);S.renames=ren;
   const tb=tomb(),rt=st.tomb||{};
   for(const[a,t]of Object.entries(rt.assets||{}))tb.assets[a]=Math.max(tb.assets[a]||0,t);
   tb.maint=[...new Set([...(tb.maint||[]),...(rt.maint||[])])];tb.failures=[...new Set([...(tb.failures||[]),...(rt.failures||[])])];
