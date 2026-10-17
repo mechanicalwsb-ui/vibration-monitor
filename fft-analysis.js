@@ -100,8 +100,8 @@ async function renderFFTPage(){
     return;
   }
   const recA=list.find(r=>r.key===FA.keyA)||list[0];FA.keyA=recA.key;
-  FA.cmp=(FA.cmp||[]).filter(k=>k!==recA.key&&list.some(r=>r.key===k)).slice(0,CMP_MAX);FA.keyB=FA.cmp[0]||'';
-  const recB=FA.keyB?list.find(r=>r.key===FA.keyB&&r.key!==recA.key):null;
+  const others=selRecs(list).filter(r=>r.key!==recA.key);FA.keyB=others[0]?others[0].key:'';
+  const recB=others[0]||null,nSel=others.length+1;
   const decA=faDecode(recA),decB=recB?faDecode(recB):null;
   if(!decA){el.innerHTML='<div class="panel empty"><h2>ถอดข้อมูล FFT ชุดนี้ไม่ได้</h2></div>';return}
   const hasHigh=!!(decA.high&&decA.high.startBin!=null);
@@ -114,39 +114,43 @@ async function renderFFTPage(){
   el.innerHTML=`
   <div class="mainhead"><h2>วิเคราะห์ FFT · ${esc(S.sel)}</h2>
     ${seg('faMode',FA_MODES,FA.mode)}</div>
-  <div class="panel fa-ctl">
-    <label>ชุดข้อมูล<span class="row" style="flex-wrap:nowrap;gap:6px"><select id="faA" style="flex:1;min-width:0">${list.map((r,i)=>opt(r.key,recLabel(r,i),recA.key)).join('')}</select><button type="button" class="btn sm" id="faDel" title="ลบชุดข้อมูล FFT ที่ไม่ต้องการ">🗑 ลบ…</button></span></label>
-    <label style="flex:1 1 260px">โน้ตของชุดนี้<input type="text" id="faNoteIn" maxlength="300" value="${esc(fftNote(recA.key))}" placeholder="เช่น หลังเปลี่ยน bearing, วัดตอนโหลดเต็ม, ข้อมูลไม่น่าเชื่อถือ"></label>
-    <label class="cmp-ctl">เปรียบเทียบกับ (สูงสุด ${CMP_MAX} ชุด)<span class="row" style="gap:6px;flex-wrap:nowrap"><select id="faB" ${FA.cmp.length>=CMP_MAX?'disabled':''}><option value="">${FA.cmp.length?'+ เพิ่มชุด…':'— ไม่เทียบ —'}</option>${list.filter(r=>r.key!==recA.key&&!FA.cmp.includes(r.key)).map(r=>opt(r.key,recLabel(r,list.indexOf(r)),'')).join('')}</select>
-      ${FA.cmp.length&&['spectrum','wave'].includes(FA.mode)?seg('faCmpView',[['split','แยกกราฟ'],['overlay','รวมกราฟเดียว']],FA.cmpView):''}</span>
-      ${FA.cmp.length?`<span class="cmp-chips"><span class="cmp-chip"><i style="background:${CMP_COL[0]}"></i>A · ${esc(dShort(recA.ts*1000))} ${esc(new Date(recA.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))}</span>${FA.cmp.map((k,i)=>{const r=list.find(x=>x.key===k);return`<span class="cmp-chip"><i style="background:${CMP_COL[i+1]}"></i>${CMP_LET[i+1]} · ${esc(dShort(r.ts*1000))} ${esc(new Date(r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))}<button type="button" data-cmpx="${esc(k)}" title="เอาออก">×</button></span>`}).join('')}<button type="button" class="btn sm" id="faCmpClr">ล้าง</button></span>`:''}</label>
-    <label>แกน (เลือกได้หลายแกน)<div class="seg" id="faAxis"><button data-v="all" class="${faAxes().length===3?'on':''}">ทุกแกน</button>${['x','y','z'].map(a=>`<button data-v="${a}" class="${faAxes().includes(a)?'on':''}" aria-pressed="${faAxes().includes(a)}">${a.toUpperCase()}</button>`).join('')}</div></label>
-    <label>ปริมาณ${seg('faQty',[['vel','Velocity'],['acc','Acceleration']],FA.qty)}</label>
-    ${decA.single?'':`<label>ช่วงความถี่ของข้อมูล<select id="faBand">${opt('low','ต่ำ (ละเอียด)',FA.band)}${hasHigh?opt('high','สูง',FA.band)+opt('combined','รวม',FA.band):''}</select></label>`}
-    <label>สเกลแกนตั้ง${seg('faLog',[['lin','Linear'],['log','Log']],FA.logY?'log':'lin')}</label>
-    <label class="fa-range">ซูมความถี่ (Hz)<span><input type="number" id="faMin" placeholder="${Math.round(range.lo)}" value="${FA.fmin??''}"> – <input type="number" id="faMax" placeholder="${Math.round(range.hi)}" value="${FA.fmax??''}"></span>
-      <span class="fa-presets">${f1?`<button class="btn sm" data-r="0,${Math.ceil(f1*5)}">0–5X</button><button class="btn sm" data-r="0,${Math.ceil(f1*12)}">0–12X</button>`:''}<button class="btn sm" data-r="0,1000">0–1 kHz</button><button class="btn sm" data-r="">ทั้งหมด</button></span></label>
-    <label>ความเร็วรอบ 1X<span class="fa-rpm"><input type="number" id="faRpm" value="${f1?Math.round(f1*60):''}" placeholder="RPM"> RPM <small class="muted">${f1?`= ${f1.toFixed(2)} Hz · ${src}`:'ไม่ทราบ'}</small></span></label>
-  </div>
-  <div class="panel fa-ctl fa-marks">
-    <span class="sub-h">เส้นบอกความถี่</span>
-    <label class="check"><input type="checkbox" data-m="harm" ${FA.marks.harm?'checked':''}> Harmonics 1X–10X</label>
-    <label class="check"><input type="checkbox" data-m="line" ${FA.marks.line?'checked':''}> ไฟฟ้า 50/100 Hz</label>
-    <label class="check"><input type="checkbox" data-m="vane" ${FA.marks.vane?'checked':''}> Vane pass ใบพัด <input type="number" id="faVanes" value="${c.vanes||''}" placeholder="จำนวนใบ" style="width:80px"></label>
-    <label class="check"><input type="checkbox" data-m="drive" ${FA.marks.drive?'checked':''}> มอเตอร์/เกียร์/สายพาน ${c.drive&&(c.drive.poles||c.drive.teeth||c.drive.beltRatio)?'':'<small class="muted">(ตั้งในหน้าข้อมูลเครื่อง)</small>'}</label>
-    <label class="check"><input type="checkbox" data-m="bearing" ${FA.marks.bearing?'checked':''}> Bearing: ลูก <input type="number" id="faBn" value="${b.n||''}" style="width:56px"> Ø ลูก <input type="number" step="any" id="faBd" value="${b.d||''}" style="width:64px"> Ø pitch <input type="number" step="any" id="faBD" value="${b.D||''}" style="width:64px"> มุม° <input type="number" step="any" id="faBa" value="${b.ang??0}" style="width:52px"></label>
-  </div>
-  <div class="panel fa-ctl fa-tools">
-    <label>Cursor${seg('faCur',[['off','ปิด'],['harm','Harmonic'],['side','Sideband'],['delta','Delta']],FA.cur.mode)}</label>
-    <span class="row"><button class="btn sm" id="faFindH">หา harmonics</button><button class="btn sm" id="faFindS">หา sidebands</button></span>
-    <label>แกนนอน${seg('faXu',[['hz','Hz'],['cpm','CPM'],['order','× รอบ']],FA.xu)}</label>
-    <span class="row"><button class="btn sm" id="faRef">${c.refFft===recA.key?'★ ชุดอ้างอิงอยู่แล้ว':'ตั้งชุดนี้เป็นอ้างอิง'}</button>${c.refFft?'<label class="check" style="font-size:12px">เส้นอ้างอิง ×<input type="number" step="0.5" id="faMaskMul" value="'+(c.maskMul||2)+'" style="width:56px"></label>':''}</span>
-    <span class="row"><button class="btn sm" id="faPlay" title="เล่น waveform เป็นเสียง">▶ ฟังเสียง</button><button class="btn sm" id="faImp">นำเข้า FFT/Time CSV</button></span>
-    <span class="muted" id="faCurInfo" style="font-size:12px;flex-basis:100%">${cursorInfo(f1)}</span>
+  <div class="panel fa-bar">
+    <div class="fa-ctl">
+      <label class="fa-asel">ชุดหลัก (A)<span class="row" style="flex-wrap:nowrap;gap:6px"><select id="faA" style="flex:1;min-width:0">${list.map((r,i)=>opt(r.key,recLabel(r,i),recA.key)).join('')}</select><button type="button" class="btn sm" id="faDel" title="ลบชุดข้อมูล FFT ที่ไม่ต้องการ">🗑</button></span></label>
+      <label class="fa-notel">📝 โน้ตของชุดหลัก<input type="text" id="faNoteIn" maxlength="300" value="${esc(fftNote(recA.key))}" placeholder="เช่น หลังเปลี่ยน bearing, วัดตอนโหลดเต็ม"></label>
+    </div>
+    <div class="fa-ctl">
+      <label>แกน<div class="seg" id="faAxis"><button data-v="all" class="${faAxes().length===3?'on':''}">ทุกแกน</button>${['x','y','z'].map(a=>`<button data-v="${a}" class="${faAxes().includes(a)?'on':''}" aria-pressed="${faAxes().includes(a)}">${a.toUpperCase()}</button>`).join('')}</div></label>
+      <label>ปริมาณ${seg('faQty',[['vel','Velocity'],['acc','Acc']],FA.qty)}</label>
+      ${decA.single?'':`<label>ช่วงข้อมูล<select id="faBand">${opt('low','ต่ำ (ละเอียด)',FA.band)}${hasHigh?opt('high','สูง',FA.band)+opt('combined','รวม',FA.band):''}</select></label>`}
+      <label>สเกล${seg('faLog',[['lin','Linear'],['log','Log']],FA.logY?'log':'lin')}</label>
+      <label class="fa-range">ซูม (Hz)<span><input type="number" id="faMin" placeholder="${Math.round(range.lo)}" value="${FA.fmin??''}"> – <input type="number" id="faMax" placeholder="${Math.round(range.hi)}" value="${FA.fmax??''}"><span class="fa-presets">${f1?`<button class="btn sm" data-r="0,${Math.ceil(f1*5)}">5X</button><button class="btn sm" data-r="0,${Math.ceil(f1*12)}">12X</button>`:''}<button class="btn sm" data-r="0,1000">1k</button><button class="btn sm" data-r="">ทั้งหมด</button></span></span></label>
+      <label>รอบ 1X<span class="fa-rpm"><input type="number" id="faRpm" value="${f1?Math.round(f1*60):''}" placeholder="RPM"> <small class="muted" title="${esc(src||'')}">${f1?`RPM · ${f1.toFixed(2)} Hz`:'RPM'}</small></span></label>
+      ${['spectrum','wave'].includes(FA.mode)&&nSel>1?`<label>เปรียบเทียบ ${Math.min(nSel,CMP_MAX+1)} ชุด${seg('faCmpView',[['split','แยกกราฟ'],['overlay','รวมกราฟ']],FA.cmpView)}</label>`:''}
+      <button type="button" class="btn sm fa-more-btn ${FA.more?'on':''}" id="faMore">⚙ เส้นบอกความถี่ / เครื่องมือ ${FA.more?'▴':'▾'}</button>
+    </div>
+    <div class="fa-more" ${FA.more?'':'hidden'}>
+      <div class="fa-group fa-marks"><span class="sub-h">เส้นบอกความถี่</span>
+        <label class="check"><input type="checkbox" data-m="harm" ${FA.marks.harm?'checked':''}> Harmonics 1X–10X</label>
+        <label class="check"><input type="checkbox" data-m="line" ${FA.marks.line?'checked':''}> ไฟฟ้า 50/100 Hz</label>
+        <label class="check"><input type="checkbox" data-m="vane" ${FA.marks.vane?'checked':''}> Vane pass <input type="number" id="faVanes" value="${c.vanes||''}" placeholder="ใบ" style="width:64px"></label>
+        <label class="check"><input type="checkbox" data-m="drive" ${FA.marks.drive?'checked':''}> มอเตอร์/เกียร์/สายพาน ${c.drive&&(c.drive.poles||c.drive.teeth||c.drive.beltRatio)?'':'<small class="muted">(ตั้งในหน้าข้อมูลเครื่อง)</small>'}</label>
+        <label class="check"><input type="checkbox" data-m="bearing" ${FA.marks.bearing?'checked':''}> Bearing: ลูก <input type="number" id="faBn" value="${b.n||''}" style="width:52px"> Ø ลูก <input type="number" step="any" id="faBd" value="${b.d||''}" style="width:60px"> Ø pitch <input type="number" step="any" id="faBD" value="${b.D||''}" style="width:60px"> มุม° <input type="number" step="any" id="faBa" value="${b.ang??0}" style="width:48px"></label>
+      </div>
+      <div class="fa-group fa-tools"><span class="sub-h">เครื่องมือ</span>
+        <label>Cursor${seg('faCur',[['off','ปิด'],['harm','Harmonic'],['side','Sideband'],['delta','Delta']],FA.cur.mode)}</label>
+        <span class="row"><button class="btn sm" id="faFindH">หา harmonics</button><button class="btn sm" id="faFindS">หา sidebands</button></span>
+        <label>แกนนอน${seg('faXu',[['hz','Hz'],['cpm','CPM'],['order','× รอบ']],FA.xu)}</label>
+        <span class="row"><button class="btn sm" id="faRef">${c.refFft===recA.key?'★ ชุดอ้างอิงอยู่แล้ว':'ตั้งชุดหลักเป็นอ้างอิง'}</button>${c.refFft?'<label class="check" style="font-size:12px">เส้นอ้างอิง ×<input type="number" step="0.5" id="faMaskMul" value="'+(c.maskMul||2)+'" style="width:56px"></label>':''}</span>
+        <span class="row"><button class="btn sm" id="faPlay" title="เล่น waveform เป็นเสียง">▶ ฟังเสียง</button><button class="btn sm" id="faImp">นำเข้า FFT/Time CSV</button></span>
+      </div>
+    </div>
+    <span class="muted" id="faCurInfo" style="font-size:12px;display:block;margin-top:4px">${cursorInfo(f1)}</span>
   </div>
   <div class="panel"><div class="cbox fa-main"><canvas id="faChart"></canvas></div><p class="muted fa-note" id="faNote"></p></div>
   <div class="fa-grid" id="faSide"></div>`;
   faBind(list);
+  wfMountPicker(list,modeDefaultN());
   (FA_FN()[FA.mode]||faSpectrum)(decA,decB,recA,recB,list,f1,c,range);
   faAfterRender(decA,recA,list,f1,c);
 }
@@ -158,9 +162,7 @@ function faBind(list){
   $('#faA').onchange=e=>{FA.keyA=e.target.value;FA.cmp=FA.cmp.filter(k=>k!==FA.keyA);re()};
   $('#faDel').onclick=()=>faManageDelete(list,FA.keyA);
   $('#faNoteIn').onchange=e=>{setFftNote(FA.keyA,e.target.value);toast(e.target.value.trim()?'บันทึกโน้ตแล้ว':'ลบโน้ตแล้ว');re()};
-  $('#faB').onchange=e=>{const k=e.target.value;if(k&&!FA.cmp.includes(k))FA.cmp.push(k);re()};
-  document.querySelectorAll('[data-cmpx]').forEach(b=>b.onclick=()=>{FA.cmp=FA.cmp.filter(k=>k!==b.dataset.cmpx);re()});
-  if($('#faCmpClr'))$('#faCmpClr').onclick=()=>{FA.cmp=[];re()};
+  $('#faMore').onclick=()=>{FA.more=!FA.more;re()};
   segBind('faCmpView',v=>FA.cmpView=v);
   if($('#faBand'))$('#faBand').onchange=e=>{FA.band=e.target.value;FA.fmin=FA.fmax=null;re()};
   const num=v=>v===''?null:+v;
@@ -191,7 +193,7 @@ const faLogSafe=pts=>FA.logY?pts.map(p=>({x:p.x,y:p.y>0?p.y:null})):pts;
 // ---- spectrum: main view with markers, peak table, band breakdown, waveform stats, diagnosis ----
 function faSpectrum(decA,decB,recA,recB,list,f1,c,range){
   const k=css(),col={x:k.x,y:k.y,z:k.z},axes=faAxes(),ds=[];
-  const cmps=FA.cmp.map(key=>list.find(r=>r.key===key)).filter(Boolean).map(r=>({r,d:faDecode(r)})).filter(x=>x.d);
+  const cmps=selRecs(list).filter(r=>r.key!==recA.key).slice(0,CMP_MAX).map(r=>({r,d:faDecode(r)})).filter(x=>x.d);
   const items=[{r:recA,d:decA},...cmps].map((it,i)=>({...it,letter:CMP_LET[i],color:CMP_COL[i]}));
   if(cmps.length&&FA.cmpView==='split')faSplitSpectra(items,axes,f1,c,range);
   else if(cmps.length) // one line per capture (largest of the shown axes), so captures are told apart by colour
@@ -273,7 +275,7 @@ function faWaterfall(decA,decB,recA,recB,list,f1,c,range){
 
 // ---- frequency trend: amplitude at 1X/2X/3X and high-frequency energy across captures ----
 function faTrend(decA,decB,recA,recB,list,f1,c,range){
-  const k=css(),axes=faAxes(),recs=list.slice().reverse(),rows=[];
+  const k=css(),axes=faAxes(),recs=selRecs(list),rows=[];
   for(const r of recs){const d=faDecode(r);if(!d)continue;const env=faEnvelope(d,axes);
     const at=h=>{if(!f1)return null;const f=h*f1,bin=env.length>1?env[1].x-env[0].x:1;let m=0;for(const p of env)if(Math.abs(p.x-f)<=Math.max(2*bin,f*0.02))m=Math.max(m,p.y);return m};
     const hi=d.high&&d.high.startBin!=null?faRss(faEnvelopeBand(d,axes,'high'),1000,5001):null;
@@ -294,20 +296,34 @@ function faTrend(decA,decB,recA,recB,list,f1,c,range){
 // ---- waveform: time signal with statistics, optional overlay of the comparison capture ----
 function faWave(decA,decB,recA,recB,list,f1,c,range){
   const k=css(),col={x:k.x,y:k.y,z:k.z},axes=faAxes(),ds=[];
-  axes.forEach(a=>ds.push({label:(decB?'A ':'')+AXES.find(x=>x[0]===a)[1],data:twfPoints(decA,FA.band,a),borderColor:col[a],backgroundColor:col[a],borderWidth:1,pointRadius:0,tension:0}));
-  if(decB)axes.forEach(a=>ds.push({label:'B '+AXES.find(x=>x[0]===a)[1],data:twfPoints(decB,FA.band,a),borderColor:col[a],backgroundColor:col[a],borderWidth:1,borderDash:[4,3],pointRadius:0,tension:0}));
-  const o=opts('g');o.scales.y.beginAtZero=false;
+  const cmps=selRecs(list).filter(r=>r.key!==recA.key).slice(0,CMP_MAX).map(r=>({r,d:faDecode(r)})).filter(x=>x.d);
+  const items=[{r:recA,d:decA},...cmps].map((it,i)=>({...it,letter:CMP_LET[i],color:CMP_COL[i]}));
+  const waveOpts=()=>{const o=opts('g');o.scales.y.beginAtZero=false;o.scales.x={type:'linear',title:{display:true,text:'เวลา (ms)',color:k.muted},ticks:{color:k.muted},grid:{color:k.line}};
+    if(f1){const rev=1000/f1;o.plugins.faVlines={lines:Array.from({length:8},(_,i)=>({x:(i+1)*rev,label:`รอบที่ ${i+1}`,color:k.muted}))}}
+    o.plugins.tooltip.callbacks.title=it=>it.length?it[0].parsed.x.toFixed(2)+' ms':'';return o};
+  if(cmps.length&&FA.cmpView==='split'){
+    faSplitCharts(items,it=>axes.map(a=>({label:AXES.find(x=>x[0]===a)[1],data:twfPoints(it.d,FA.band,a),borderColor:col[a],backgroundColor:col[a],borderWidth:1,pointRadius:0,tension:0})),waveOpts,true);
+    $('#faNote').textContent=`แยกกราฟ ${items.length} ชุด สเกลแกนตั้งเท่ากัน · ตารางด้านล่างเป็นของชุด A`;
+  }
+  if(cmps.length&&FA.cmpView!=='split')items.forEach((it,i)=>ds.push({label:`${it.letter} ${dShort(it.r.ts*1000)} ${new Date(it.r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})} (${axes[0].toUpperCase()})`,data:twfPoints(it.d,FA.band,axes[0]),borderColor:it.color,backgroundColor:it.color,borderWidth:i?1:1.4,pointRadius:0,tension:0}));
+  else if(!cmps.length)axes.forEach(a=>ds.push({label:AXES.find(x=>x[0]===a)[1],data:twfPoints(decA,FA.band,a),borderColor:col[a],backgroundColor:col[a],borderWidth:1,pointRadius:0,tension:0}));
+  if(cmps.length&&FA.cmpView==='split')return faWaveSide(decA,axes,f1,items);
+  const o=waveOpts();
   o.scales.x={type:'linear',title:{display:true,text:'เวลา (ms)',color:k.muted},ticks:{color:k.muted},grid:{color:k.line}};
   if(f1){ // mark one revolution so impacts per turn are easy to count
     const rev=1000/f1;o.plugins.faVlines={lines:Array.from({length:8},(_,i)=>({x:(i+1)*rev,label:`รอบที่ ${i+1}`,color:k.muted}))};
   }
   o.plugins.tooltip.callbacks.title=it=>it.length?it[0].parsed.x.toFixed(2)+' ms':'';
   faCharts.push(new Chart($('#faChart'),{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}));
+  if(cmps.length)$('#faNote').textContent=`รวมกราฟ ${items.length} ชุด สีละชุด (แกน ${axes[0].toUpperCase()}) · ตารางด้านล่างเป็นของชุด A`;
+  faWaveSide(decA,axes,f1,items);
+}
+function faWaveSide(decA,axes,f1,items){
   const B=faBandOf(decA);
-  $('#faNote').textContent=`Waveform ช่วง${FA.band==='high'?'สูง':'ต่ำ'} · ${B&&B.twfSampleRate?Math.round(B.twfSampleRate)+' ค่า/วินาที':''}${f1?' · เส้นประ = ทุก 1 รอบเพลา':''} · แรงกระแทกเป็นจังหวะ (ยอดแหลมซ้ำ ๆ) มักมาจาก bearing หรือการหลวม`;
+  if(items.length<2)$('#faNote').textContent=`Waveform ช่วง${FA.band==='high'?'สูง':'ต่ำ'} · ${B&&B.twfSampleRate?Math.round(B.twfSampleRate)+' ค่า/วินาที':''}${f1?' · เส้นประ = ทุก 1 รอบเพลา':''} · แรงกระแทกเป็นจังหวะ (ยอดแหลมซ้ำ ๆ) มักมาจาก bearing หรือการหลวม`;
   const stats=(d,tag)=>{const BB=faBandOf(d);return BB&&BB.twf?axes.map(a=>{const s=faWaveStats(BB.twf[a]);return s?`<tr><td>${tag}${a.toUpperCase()}</td><td class="num">${s.peak.toFixed(3)}</td><td class="num">${s.p2p.toFixed(3)}</td><td class="num">${s.rms.toFixed(3)}</td><td class="num">${s.crest.toFixed(2)}</td><td class="num">${s.kurt.toFixed(2)}</td></tr>`:''}).join(''):''};
   $('#faSide').innerHTML=`<div class="panel" style="grid-column:1/-1"><div class="ph"><h3>สถิติ waveform (g)</h3></div><div class="tablewrap"><table>
-    <thead><tr><th>แกน</th><th>Peak</th><th>Peak-Peak</th><th>RMS</th><th>Crest factor</th><th>Kurtosis</th></tr></thead><tbody>${stats(decA,decB?'A ':'')}${decB?stats(decB,'B '):''}</tbody></table></div>
+    <thead><tr><th>แกน</th><th>Peak</th><th>Peak-Peak</th><th>RMS</th><th>Crest factor</th><th>Kurtosis</th></tr></thead><tbody>${items.map(it=>stats(it.d,items.length>1?it.letter+' ':'')).join('')}</tbody></table></div>
     <p class="muted fa-note">Crest factor = Peak/RMS (ปกติราว 3 สำหรับสัญญาณเรียบ) · Kurtosis ≈ 3 = ปกติ, > 4 = มีแรงกระแทก</p></div>`;
 }
 
@@ -448,15 +464,22 @@ function setFftNote(key,text){
 }
 // ---------- waterfall: which captures to show ----------
 // S.wfSel = {asset: [keys]} (this device only); nothing chosen = the newest n
+// n = how many newest captures the current chart shows when nothing is ticked (0 = only the main capture A)
 function wfRecs(list,n){
   const sel=S.wfSel&&S.wfSel[S.sel],pick=sel&&sel.length?list.filter(r=>sel.includes(r.key)):[];
-  return(pick.length?pick:list.slice(0,n)).slice().sort((a,b)=>a.ts-b.ts);
+  const def=n===0?list.filter(r=>r.key===FA.keyA):list.slice(0,n);
+  return(pick.length?pick:def).slice().sort((a,b)=>a.ts-b.ts);
 }
+// one selection for every chart type; the default depends on the chart
+const FA_SINGLE=['env','ceps','acorr','circ','motion','bump']; // these draw the main capture only
+function modeDefaultN(){return FA.mode==='waterfall'?(FA.wf2d?12:24):FA.mode==='trend'?Infinity:FA.mode==='sgram'?60:FA.mode==='bands'?30:0}
+function selRecs(list){return wfRecs(list,modeDefaultN())}
 function wfPickerHtml(list,n){
   const shown=new Set(wfRecs(list,n).map(r=>r.key)),own=!!(S.wfSel&&S.wfSel[S.sel]&&S.wfSel[S.sel].length);
   return`<div class="wf-head"><button type="button" class="btn sm wf-tog" id="wfTog" title="${S.wfCollapsed?'แสดงรายการชุดข้อมูล':'ยุบรายการ'}">${S.wfCollapsed?'▶':'◀'}</button>
       <b class="wf-title">ชุดข้อมูล (${shown.size}/${list.length})</b></div>
-    <div class="wf-body"><div class="row wf-btns"><button type="button" class="btn sm" data-wfp="all">ทั้งหมด</button><button type="button" class="btn sm" data-wfp="new">ล่าสุด ${n}${own?'':' ✓'}</button><button type="button" class="btn sm" data-wfp="none">ล้าง</button></div>
+    ${S.wfCollapsed?'':`<p class="wf-hint muted">${FA_SINGLE.includes(FA.mode)?'กราฟนี้แสดงเฉพาะชุดหลัก (A) · ที่ติ๊กไว้ใช้กับกราฟอื่น':['spectrum','wave'].includes(FA.mode)?'ติ๊กเพิ่มเพื่อเปรียบเทียบกับชุดหลัก (A) สูงสุด '+CMP_MAX+' ชุด':'ติ๊กครั้งเดียว ใช้กับทุกกราฟ'}</p>`}
+    <div class="wf-body"><div class="row wf-btns"><button type="button" class="btn sm" data-wfp="all">ทั้งหมด</button><button type="button" class="btn sm" data-wfp="new" title="กลับไปใช้ค่าเริ่มต้นของกราฟนี้">ค่าเริ่มต้น${own?'':' ✓'}</button><button type="button" class="btn sm" data-wfp="none">ล้าง</button></div>
     <div class="wf-pick">${wfGroupsHtml(list,shown)}</div></div>`;
 }
 // Put the picker in a column to the left of the chart (inside the chart panel), before the chart is sized
@@ -482,14 +505,22 @@ function wfPickerBind(list,n){
 const CMP_MAX=5,CMP_LET=['A','B','C','D','E','F'],CMP_COL=['#2563eb','#ea580c','#16a34a','#9333ea','#db2777','#0891b2'];
 // One chart per capture, stacked, same frequency range and the same vertical scale so peak heights compare directly
 function faSplitSpectra(items,axes,f1,c,range){
-  const k=css(),col={x:k.x,y:k.y,z:k.z},host=document.querySelector('#fftPage .fa-main')||$('#faChart').parentElement;
+  const k=css(),col={x:k.x,y:k.y,z:k.z};
+  faSplitCharts(items,it=>axes.map(a=>({label:AXES.find(x=>x[0]===a)[1],data:faLogSafe(faSpec(it.d,a)),borderColor:col[a],backgroundColor:col[a],borderWidth:1.1,pointRadius:0,tension:0})),
+    ()=>{const o=faChartOpts(faUnit(),range);o.plugins.faVlines={lines:faMarkers(f1,c,range.max)};return o},false,
+    it=>{let m=0;for(const p of faEnvelope(it.d,axes))if(p.x>=range.min&&p.x<=range.max&&p.y>m)m=p.y;return m});
+}
+// One chart per capture, stacked, same vertical scale (peak heights compare directly)
+function faSplitCharts(items,dsFn,optFn,symmetric,topFn){
+  const host=document.querySelector('#fftPage .fa-main')||$('#faChart').parentElement;
   host.classList.add('cmp-split');
   host.innerHTML=items.map((it,i)=>`<div class="cmp-row"><div class="cmp-title"><i style="background:${it.color}"></i><b>${it.letter}</b> ${esc(dFull(it.r.ts*1000))} · ${esc(KIND_LABEL[it.r.kind||'alarm']||it.r.kind||'')}${fftNote(it.r.key)?' · <span class="muted">📝 '+esc(fftNote(it.r.key))+'</span>':''}</div><div class="cmp-box"><canvas ${i===0?'id="faChart"':''}></canvas></div></div>`).join('');
-  let top=0;for(const it of items)for(const p of faEnvelope(it.d,axes))if(p.x>=range.min&&p.x<=range.max&&p.y>top)top=p.y;
-  host.querySelectorAll('canvas').forEach((cv_,i)=>{const it=items[i];
-    const ds=axes.map(a=>({label:AXES.find(x=>x[0]===a)[1],data:faLogSafe(faSpec(it.d,a)),borderColor:col[a],backgroundColor:col[a],borderWidth:1.1,pointRadius:0,tension:0}));
-    const o=faChartOpts(faUnit(),range);o.plugins.faVlines={lines:faMarkers(f1,c,range.max)};o.plugins.legend.display=i===0;
-    if(!FA.logY&&top>0)o.scales.y.max=+(top*1.08).toPrecision(3);
+  const dss=items.map(dsFn);let top=0,bot=0;
+  items.forEach((it,i)=>{if(topFn){top=Math.max(top,topFn(it));return}for(const d of dss[i])for(const p of d.data)if(p&&p.y!=null){if(p.y>top)top=p.y;if(p.y<bot)bot=p.y}});
+  if(symmetric){const m=Math.max(top,-bot);top=m;bot=-m}
+  host.querySelectorAll('canvas').forEach((cv_,i)=>{const ds=dss[i];
+    const o=optFn();o.plugins.legend.display=i===0;
+    if(!FA.logY&&top>0){o.scales.y.max=+(top*1.08).toPrecision(3);if(symmetric)o.scales.y.min=-o.scales.y.max}
     if(i<items.length-1){o.scales.x.title.display=false}
     faCharts.push(new Chart(cv_,{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}))});
 }
@@ -508,7 +539,7 @@ function wfGroupsHtml(list,shown){
   const box=g=>{const n=g.recs.filter(r=>shown.has(r.key)).length;
     return`<input type="checkbox" data-wfg="${esc(JSON.stringify(g.recs.map(r=>r.key)))}" ${n===g.recs.length?'checked':''} ${n&&n<g.recs.length?'data-ind="1"':''}>`};
   const head=(g,lvl)=>`<div class="wfg-h lvl${lvl}"><button type="button" class="wfg-c" data-gt="${g.id}">${isOpen(g)?'▾':'▸'}</button><label class="check">${box(g)}<span>${esc(g.label)} <small class="muted">${g.recs.filter(r=>shown.has(r.key)).length}/${g.recs.length}</small></span></label></div>`;
-  const item=r=>`<label class="check wfg-i"><input type="checkbox" data-wfk="${esc(r.key)}" ${shown.has(r.key)?'checked':''}><span>${esc(new Date(r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))} · ${esc(KIND_LABEL[r.kind||'alarm']||r.kind||'')}${fftNote(r.key)?'<small class="muted"> 📝 '+esc(fftNote(r.key))+'</small>':''}</span></label>`;
+  const item=r=>`<label class="check wfg-i"><input type="checkbox" data-wfk="${esc(r.key)}" ${shown.has(r.key)?'checked':''}><span>${r.key===FA.keyA?'<b class="wf-a">A</b> ':''}${esc(new Date(r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))} · ${esc(KIND_LABEL[r.kind||'alarm']||r.kind||'')}${fftNote(r.key)?'<small class="muted"> 📝 '+esc(fftNote(r.key))+'</small>':''}</span></label>`;
   const grp=(g,lvl,inner)=>`<div class="wfg${isOpen(g)?'':' shut'}" data-g="${g.id}">${head(g,lvl)}<div class="wfg-b">${inner}</div></div>`;
   return[...Y.values()].map(y=>grp(y,0,[...y.kids.values()].map(m=>grp(m,1,[...m.kids.values()].map(d=>grp(d,2,d.recs.map(item).join(''))).join(''))).join(''))).join('');
 }

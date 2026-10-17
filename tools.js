@@ -231,7 +231,7 @@ function faCirc(decA,decB,recA,recB,list,f1,c){
 }
 // Spectrograph: one column per capture, colour = amplitude (log)
 function faSgram(decA,decB,recA,recB,list,f1,c,range){
-  const k=css(),recs=list.slice(0,60).reverse(),axes=faAxes(),cols=[];
+  const k=css(),recs=selRecs(list),axes=faAxes(),cols=[];
   for(const r of recs){const d=faDecode(r);if(!d)continue;cols.push({r,pts:faEnvelope(d,axes).filter(p=>p.x>=range.min&&p.x<=range.max)})}
   const host=$('#faChart').parentElement;host.innerHTML='<canvas id="faSg" style="width:100%;height:100%;cursor:crosshair"></canvas>';
   const cv_=$('#faSg'),W=cv_.clientWidth||800,H=cv_.clientHeight||420,dpr=devicePixelRatio||1;cv_.width=W*dpr;cv_.height=H*dpr;
@@ -345,7 +345,7 @@ function importFftCsv(file,asset,unit){
 function faBands(decA,decB,recA,recB,list,f1,c){
   const k=css();
   if(!c.bands||!c.bands.length){c.bands=defaultBands();save()}
-  const B=c.bands,recs=list.slice(0,30).reverse();
+  const B=c.bands,recs=selRecs(list);
   const rows=recs.map(r=>{const d=faDecode(r);if(!d)return null;const f=speedOf(r,d,c)||f1;
     return{r,vals:B.map(b=>{const v=bandValue(d,b,f);return v?v.v:null}),fi:faultIndices(d,c,f)}}).filter(Boolean);
   const pal=[k.x,k.y,k.z,k.r,k.t,k.zb,k.zc,k.zd,k.muted];
