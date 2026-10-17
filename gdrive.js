@@ -24,7 +24,8 @@ const siteHashes=()=>typeof SITE!=='undefined'&&siteGate()&&SITE.allowHash||[];
 const hashAllowed=h=>!siteHashes().length||siteHashes().includes(h);
 function setAuth(email,h){const d=(typeof SITE!=='undefined'&&SITE.rememberDays)||30;try{localStorage.setItem(AUTH_KEY,JSON.stringify({email,h,until:Date.now()+d*864e5}))}catch(e){}}
 function gdSave(c){try{localStorage.setItem(GD_KEY,JSON.stringify(c))}catch(e){}}
-const GD={tok:null,exp:0,busy:false,status:'',err:''};
+const GD={tok:null,exp:0,busy:false,status:'',err:'',drive:false,needDrive:false};
+const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
 const gdSignedIn=()=>!!gdCfg().email;
 const gdTokenOk=()=>GD.tok&&Date.now()<GD.exp-60000;
 
@@ -35,18 +36,23 @@ async function gdToken(interactive){
   await loadScript('https://accounts.google.com/gsi/client');
   return new Promise((res,rej)=>{
     const tc=google.accounts.oauth2.initTokenClient({client_id:c.clientId,scope:GD_SCOPE,
-      callback:r=>{if(r.error)return rej(new Error(r.error_description||r.error));GD.tok=r.access_token;GD.exp=Date.now()+(+r.expires_in||3600)*1000;res(GD.tok)},
+      callback:r=>{if(r.error)return rej(new Error(r.error_description||r.error));GD.tok=r.access_token;GD.exp=Date.now()+(+r.expires_in||3600)*1000;
+        GD.drive=String(r.scope||'').split(' ').includes(DRIVE_SCOPE);if(GD.drive)GD.needDrive=false;res(GD.tok)},
       error_callback:e=>rej(new Error(e&&e.type==='popup_closed'?'ปิดหน้าต่างล็อกอินก่อนเสร็จ':e&&(e.message||e.type)||'ล็อกอินไม่สำเร็จ'))});
-    tc.requestAccessToken({prompt:c.email?'':'select_account',login_hint:c.email||undefined});
+    // asking again after the Drive box was left unticked: show the consent page so it can be ticked
+    tc.requestAccessToken({prompt:GD.needDrive?'consent':c.email?'':'select_account',login_hint:c.email||undefined});
   });
 }
 async function gdFetch(url,opt={}){
   const tok=await gdToken(false);if(!tok)throw new Error('ต้องล็อกอินใหม่');
   const r=await fetch(url,{...opt,headers:{...(opt.headers||{}),Authorization:'Bearer '+tok}});
   if(r.status===401){GD.tok=null;throw new Error('สิทธิ์หมดอายุ กดซิงก์อีกครั้ง')}
+  if(r.status===403&&url.startsWith('https://www.googleapis.com/')&&!url.includes('userinfo')){let m='';try{m=(await r.clone().json()).error.message}catch(e){}
+    if(/insufficient authentication scopes|insufficientPermissions/i.test(m)){GD.tok=null;GD.drive=false;GD.needDrive=true;throw new Error(DRIVE_HELP)}}
   if(!r.ok){let m='';try{m=(await r.json()).error.message}catch(e){}throw new Error(`Google Drive ${r.status}${m?': '+m:''}`)}
   return r;
 }
+const DRIVE_HELP='ยังไม่ได้อนุญาตให้เข้าถึง Google Drive — กด "ซิงก์" อีกครั้ง แล้วในหน้าของ Google ให้ติ๊กช่อง "ดู แก้ไข สร้าง และลบไฟล์ Google ไดรฟ์ที่ใช้กับแอปนี้เท่านั้น" ก่อนกด Continue';
 const allowedEmail=(c,email)=>{const L=(c.allow||'').split(/[\s,;]+/).map(x=>x.trim().toLowerCase()).filter(Boolean);return!L.length||L.includes(String(email).toLowerCase())};
 async function gdLogin(){
   try{
@@ -93,7 +99,11 @@ function syncState(){const st={};for(const k in S)if(k[0]!=='_'&&!['view','sel',
 // ---- sync ----
 async function gdSync(interactive){
   const c=gdCfg();if(GD.busy||!c.clientId||!c.email)return;
-  try{if(!(await gdToken(interactive))){GD.status='need';renderGdChip();return}}catch(e){GD.err=e.message;renderGdChip();return toast(e.message)}
+  try{
+    if(gdTokenOk()&&!GD.drive&&interactive){GD.needDrive=true;GD.tok=null} // ask again, this time for Drive
+    if(!(await gdToken(interactive))){GD.status='need';renderGdChip();return}
+    if(!GD.drive){GD.needDrive=true;GD.err=DRIVE_HELP;GD.status='err';renderGdChip();if(interactive)toast(DRIVE_HELP);return}
+  }catch(e){GD.err=e.message;renderGdChip();return toast(e.message)}
   GD.busy=true;GD.err='';GD.status='busy';renderGdChip();
   try{
     const folder=await gdFolder();
@@ -119,7 +129,7 @@ setInterval(()=>{if(gdCfg().auto&&gdTokenOk())gdSync(false)},10*60000);
 function renderGdChip(){
   const el=$('#gdChip');if(!el)return;const c=gdCfg();
   if(!c.email){el.innerHTML=`<button class="btn sm" style="width:100%" onclick="${c.clientId?'gdLogin()':"S._setFocus='gd';setView('settings')"}">👤 ล็อกอินด้วย Google</button>`;return}
-  const st=GD.busy?'กำลังซิงก์…':GD.status==='err'?'ซิงก์ไม่สำเร็จ — กดลองใหม่':!gdTokenOk()?'กดเพื่อซิงก์':c.lastSync?'ซิงก์ล่าสุด '+new Date(c.lastSync).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):'กดเพื่อซิงก์';
+  const st=GD.busy?'กำลังซิงก์…':GD.needDrive?'ยังไม่ได้อนุญาต Drive — กดที่นี่':GD.status==='err'?'ซิงก์ไม่สำเร็จ — กดลองใหม่':!gdTokenOk()?'กดเพื่อซิงก์':c.lastSync?'ซิงก์ล่าสุด '+new Date(c.lastSync).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}):'กดเพื่อซิงก์';
   el.innerHTML=`<button class="gd-user" onclick="gdSync(true)" title="${esc(c.email)} — กดเพื่อซิงก์ Google Drive">
     ${c.picture?`<img src="${esc(c.picture)}" alt="" referrerpolicy="no-referrer">`:'<span class="gd-av">'+esc((c.name||'?')[0])+'</span>'}
     <span><b>${esc(c.name||c.email)}</b><small class="${GD.status==='err'?'up':''}">☁ ${st}</small></span></button>`;
