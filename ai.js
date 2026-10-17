@@ -127,11 +127,17 @@ async function buildAIContext(asset,opt={}){
   };
   if(cf.maint){const ml=(S.maint||[]).filter(m=>m.asset===asset).sort((a,b)=>b.t-a.t).slice(0,10);
     if(ml.length)ctx.maintenance=ml.map(m=>({date:new Date(m.t).toLocaleDateString('th-TH'),type:m.type,detail:m.text||''}))}
+  const fl=openFailures(asset);if(fl.length)ctx.openFailureReports=fl.map(f=>({title:f.title,status:f.status,action:f.action}));
+  if(c.machine)ctx.machine.group=c.machine,ctx.machine.point=c.point||null;
   const sid=Object.keys(S.sensors).find(id=>S.sensors[id].asset===asset);
   if(sid){const h=healthSummary(sid);if(h.score!=='none')ctx.sensorHealth={battery_V:h.last&&h.last.batt||null,issues:h.issues.map(i=>i[1])}}
   if(opt.fft!==false){let list=[];try{list=await FFTDB.list(asset)}catch(e){}
     const rec=opt.fftKey?list.find(r=>r.key===opt.fftKey):list[0];
-    if(rec){const f=aiFftSummary(rec,c);if(f)ctx.fft=f}
+    if(rec){const f=aiFftSummary(rec,c);if(f)ctx.fft=f;const d=faDecode(rec),f1=d&&speedOf(rec,d,c);
+      if(d){const fi=faultIndices(d,c,f1);if(fi)ctx.faultIndices0to10=fi.scores;
+        if(c.bands)ctx.bands=c.bands.map(b=>{const v=bandValue(d,b,f1);return{name:b.name,value:v?r3(v.v):null,unit:bandUnit(b),warn:b.warn??null,alarm:b.alarm??null}});
+        const ref=c.refFft&&c.refFft!==rec.key&&list.find(r=>r.key===c.refFft),rd=ref&&faDecode(ref);if(rd)ctx.referenceMaskExceed=maskExceed(d,refMask(rd,c)).map(e=>({hz:r2(e.x),axis:e.ax.toUpperCase(),times:r2(e.r)}));
+        const m=motorFreqs(f1,c);if(m)ctx.motor={poles:c.drive.poles,lineHz:m.lf,slipHz:r3(m.slip),polePassHz:r3(m.ppf)}}}
     if(list.length>1){const prev=aiFftSummary(list[1],c);if(prev)ctx.fftPrevious={measured:prev.measured,topPeaks:prev.topPeaks.slice(0,5)}}}
   return ctx;
 }
@@ -201,7 +207,7 @@ function renderAIPage(){
   </div>
   <div class="panel ai-chat" id="aiChat">${chat.length?chat.map(m=>`<div class="ai-msg ${m.role}">${m.role==='user'?`<div class="ai-q">${esc(m.show||m.text)}</div>`:`<div class="ai-a">${mdToHtml(m.text)}</div>`}</div>`).join(''):'<p class="muted" style="margin:0">กดปุ่มด้านบนเพื่อเริ่มวิเคราะห์ หรือพิมพ์คำถามเกี่ยวกับเครื่องนี้ด้านล่าง</p>'}</div>
   <div class="panel pbody ai-ask"><textarea id="aiQ" rows="2" placeholder="ถามต่อ เช่น ถ้าเปลี่ยน bearing แล้วค่ายังสูง ควรตรวจอะไร?" ${AI.busy?'disabled':''}></textarea>
-    <div class="row"><button class="btn primary" id="aiSend" ${AI.busy?'disabled':''}>ส่งคำถาม</button>${chat.length?`<button class="btn" id="aiSave">บันทึกคำตอบล่าสุด</button><button class="btn" id="aiClear">เริ่มใหม่</button>`:''}</div></div>
+    <div class="row"><button class="btn primary" id="aiSend" ${AI.busy?'disabled':''}>ส่งคำถาม</button>${chat.length?`<button class="btn" id="aiSave">บันทึกคำตอบล่าสุด</button><button class="btn" id="aiFail">สร้างรายงานความผิดปกติ</button><button class="btn" id="aiClear">เริ่มใหม่</button>`:''}</div></div>
   <div class="panel"><div class="ph"><h3>ผลวิเคราะห์ที่บันทึกไว้ (${hist.length})</h3></div><div class="pbody">
     ${hist.length?`<ul class="klist">${hist.slice().reverse().map(h=>`<li><div><b>${esc(h.title)}</b><div class="muted" style="font-size:12px">${dFull(h.t)} · ${esc(h.model)}</div></div>
       <div class="row"><button class="btn sm" data-hview="${h.id}">อ่าน</button><button class="btn sm danger" data-hdel="${h.id}">ลบ</button></div></li>`).join('')}</ul>`
@@ -214,6 +220,7 @@ function renderAIPage(){
   const send=()=>{const q=$('#aiQ').value.trim();if(q)aiAsk(a,q,q)};
   $('#aiSend').onclick=send;$('#aiQ').onkeydown=e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey))send()};
   if($('#aiSave'))$('#aiSave').onclick=()=>aiSaveLast(a);
+  if($('#aiFail'))$('#aiFail').onclick=()=>{const m=chat.slice().reverse().find(x=>x.role==='model'&&!x.err&&x.text);if(!m)return toast('ยังไม่มีคำตอบ');failureFromAI(a,m.text)};
   if($('#aiClear'))$('#aiClear').onclick=()=>{AI.chat[a]=[];renderAIPage()};
   p.querySelectorAll('[data-hview]').forEach(b=>b.onclick=()=>{const h=hist.find(x=>x.id===b.dataset.hview);
     infoDialog(esc(h.title)+' · '+dFull(h.t),`<div class="ai-a">${mdToHtml(h.text)}</div><p class="muted" style="font-size:12px">${esc(h.model)}</p>`)});

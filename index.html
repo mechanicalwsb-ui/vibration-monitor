@@ -12,12 +12,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.1.1"></script>
-<script src="fft-analysis.js?v=2.1.1"></script>
-<script src="store.js?v=2.1.1"></script>
-<script src="insights.js?v=2.1.1"></script>
-<script src="pages.js?v=2.1.1"></script>
-<script src="ai.js?v=2.1.1"></script>
+<script src="ia3-fft.js?v=2.2.0"></script>
+<script src="fft-analysis.js?v=2.2.0"></script>
+<script src="store.js?v=2.2.0"></script>
+<script src="insights.js?v=2.2.0"></script>
+<script src="pages.js?v=2.2.0"></script>
+<script src="ai.js?v=2.2.0"></script>
+<script src="tools.js?v=2.2.0"></script>
+<script src="machine.js?v=2.2.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -288,7 +290,21 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ai-ask textarea{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px 10px;font:inherit;color:inherit;resize:vertical}
 .ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
 .rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
-.plabel svg{width:38mm;height:38mm}.plabel b{font-size:12pt}.plabel small{font-size:8pt;color:#555}
+.plabel svg{width:38mm;height:38mm}
+#faMode{flex-wrap:wrap}
+.fa-tools{align-items:center}
+.fbars{display:flex;flex-direction:column;gap:8px}
+.fbar{display:grid;grid-template-columns:130px 1fr 36px;gap:2px 10px;align-items:center;font-size:13px}
+.fbar small{grid-column:1/-1;font-size:11.5px}
+.fbar-t{height:10px;border-radius:5px;background:var(--soft);overflow:hidden}.fbar-t i{display:block;height:100%}
+.bands-t input,.bands-t select{width:100%;min-width:60px;padding:3px 6px}
+.bands-t td{padding:4px 6px}
+.star{border:0;background:none;cursor:pointer;font-size:20px;line-height:1;color:var(--muted);padding:0 4px}.star.on{color:#f5b301}
+.pstrip{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 12px}
+.fr-st{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}.fr-st.open{color:var(--zd);border-color:var(--zd)}.fr-st.progress{color:var(--zc);border-color:var(--zc)}.fr-st.closed{color:var(--za);border-color:var(--za)}
+.wiz-steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.wiz-steps span{font-size:12px;padding:2px 8px;border-radius:999px;background:var(--soft)}.wiz-steps span.on{background:var(--accent);color:var(--accent-ink)}
+.vid-wrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px}
+.vid-wrap canvas,.vid-wrap video{width:100%;border-radius:8px;background:#000}.plabel b{font-size:12pt}.plabel small{font-size:8pt;color:#555}
 </style>
 </head>
 <body>
@@ -307,6 +323,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
     <button class="nav-i" data-v="asset"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>ข้อมูลเครื่อง / บันทึกซ่อม</button>
     <button class="nav-i" data-v="route"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z"/></svg>เดินตรวจ / QR</button>
     <button class="nav-i" data-v="report"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></svg>รายงาน</button>
+    <button class="nav-i" data-v="video"><svg viewBox="0 0 24 24"><path d="M15 10l5-3v10l-5-3zM3 6h12v12H3z"/></svg>ขยายการสั่นจากวิดีโอ</button>
     <div class="nav-sec">ระบบ</div>
     <button class="nav-i" data-v="sensor"><svg viewBox="0 0 24 24"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg>เซนเซอร์ / เชื่อมต่อ</button>
     <button class="nav-i" data-v="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>ตั้งค่าและข้อมูล</button>
@@ -329,6 +346,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
   <main id="assetPage" hidden></main>
   <main id="routePage" hidden></main>
   <main id="reportPage" hidden></main>
+  <main id="videoPage" hidden></main>
   <main id="sensorPage" hidden>
     <div class="mainhead"><h2>เซนเซอร์ / เชื่อมต่อ</h2></div>
     <form id="bleForm" class="pgrid" onsubmit="return false">
@@ -391,7 +409,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.1.1',APP_BUILD='2026-10-16T21:06:09+07:00';
+const APP_VERSION='2.2.0',APP_BUILD='2026-10-17T10:30:29+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -600,7 +618,7 @@ function exportCSV(){
 // Pages in the left menu; each has its own <main>. The sensor page is static HTML (it holds the
 // connection log), the others are re-rendered
 const VIEWS={fleet:['fleetPage','ทุกเครื่อง'],overview:['main','ภาพรวมเครื่อง'],fft:['fftPage','วิเคราะห์ FFT'],stats:['statsPage','สถิติและเปรียบเทียบ'],ai:['aiPage','วิเคราะห์ด้วย AI'],
-  asset:['assetPage','ข้อมูลเครื่อง / บันทึกซ่อม'],route:['routePage','เดินตรวจ / QR'],report:['reportPage','รายงาน'],
+  asset:['assetPage','ข้อมูลเครื่อง / บันทึกซ่อม'],route:['routePage','เดินตรวจ / QR'],report:['reportPage','รายงาน'],video:['videoPage','ขยายการสั่นจากวิดีโอ'],
   sensor:['sensorPage','เซนเซอร์ / เชื่อมต่อ'],settings:['setPage','ตั้งค่าและข้อมูล']};
 function applyTheme(){if(S.theme==='light'||S.theme==='dark')document.documentElement.dataset.theme=S.theme;else delete document.documentElement.dataset.theme}
 function render(){
@@ -615,7 +633,7 @@ function render(){
   if(v!=='overview'){charts.forEach(c=>c.destroy());charts=[]}
   pDestroy();
   try{({overview:()=>renderMain(ns),fft:renderFFTPage,sensor:renderSensorPage,settings:()=>renderSettings(ns),
-    fleet:renderFleet,stats:renderStats,ai:renderAIPage,asset:renderAssetPage,route:renderRoute,report:renderReport})[v]()}
+    fleet:renderFleet,stats:renderStats,ai:renderAIPage,asset:renderAssetPage,route:renderRoute,report:renderReport,video:renderVideoPage})[v]()}
   catch(e){console.error(e);$('#'+VIEWS[v][0]).innerHTML=`<div class="panel empty"><h2>หน้านี้แสดงผลไม่ได้</h2><p>${esc(e.message)}</p>
     <p>ลองกดรีเฟรชแบบล้างแคช (Ctrl+Shift+R) ถ้ายังไม่หาย กดคัดลอกข้อความนี้ส่งมาให้ผู้ดูแล</p><button class="btn" onclick="location.reload()">รีเฟรช</button></div>`}
   if(v!=='sensor')stopScan();
@@ -624,10 +642,15 @@ function setView(v){S.view=v;save();document.body.classList.remove('nav-open');r
 function renderSide(ns){
   const side=$('#side');
   if(!ns.length){side.innerHTML='<div class="nav-sec">เครื่องจักร</div><p class="muted" style="padding:4px 10px;margin:0;font-size:12.5px">ยังไม่มีข้อมูล</p>';return}
-  side.innerHTML='<div class="nav-sec">เครื่องจักร ('+ns.length+')</div><div class="alist">'+ns.map(a=>{
-    const s=series(a),r=s[s.length-1],z=status(r,cfg(a));
-    return `<button class="asset ${a===S.sel?'on':''}" data-a="${esc(a)}"><span class="dot z${z||''}"></span><span class="nm">${esc(a)}</span><span class="num">${fv(overall(r))}</span><span class="sub">${z?ZL[z]+' · ':''}${ago(r.t)}</span></button>`;
-  }).join('')+'</div>';
+  const item=(a,sub)=>{const s=series(a),r=s[s.length-1],z=status(r,cfg(a));
+    return `<button class="asset ${a===S.sel?'on':''}" data-a="${esc(a)}"><span class="dot z${z||''}"></span><span class="nm">${sub?esc(pointLabel(a)):esc(a)}</span><span class="num">${fv(overall(r))}</span><span class="sub">${z?ZL[z]+' · ':''}${ago(r.t)}</span></button>`};
+  const favs=ns.filter(isFav),groups=new Map();
+  ns.forEach(a=>{const m=machineOf(a);if(!groups.has(m))groups.set(m,[]);groups.get(m).push(a)});
+  let html=favs.length?'<div class="nav-sec">★ ปักหมุด</div><div class="alist">'+favs.map(a=>item(a)).join('')+'</div>':'';
+  html+='<div class="nav-sec">เครื่องจักร ('+groups.size+')</div><div class="alist">';
+  for(const[m,pts]of groups){if(pts.length===1&&pts[0]===m)html+=item(m);
+    else{const z=worstZone(pts);html+=`<div class="nav-sec" style="padding-top:6px;display:flex;gap:6px;align-items:center"><span class="dot z${z||''}"></span>${esc(m)}</div>`+pts.map(a=>item(a,true)).join('')}}
+  side.innerHTML=html+'</div>';
   side.querySelectorAll('.asset').forEach(b=>b.onclick=()=>{S.sel=b.dataset.a;
     // picking a machine from the sensor page means "show me its data"
     if(S.view==='sensor')S.view='overview';
@@ -666,10 +689,12 @@ function renderMain(ns){
 
   m.innerHTML=`${banners}
   <div class="mainhead">
-    <h2>${esc(a)} ${z?`<span class="tag z${z}"><span class="dot z${z}"></span>${ZL[z]} (โซน ${z})</span>`:''} ${stale?`<span class="tag stale">ค่าล่าสุด ${ago(last.t)}</span>`:''}</h2>
+    <h2>${favBtn(a)}${esc(a)} ${z?`<span class="tag z${z}"><span class="dot z${z}"></span>${ZL[z]} (โซน ${z})</span>`:''} ${stale?`<span class="tag stale">ค่าล่าสุด ${ago(last.t)}</span>`:''}</h2>
     <div class="row"><button class="btn" onclick="setView('ai')">✨ วิเคราะห์ด้วย AI</button><div class="seg" id="range">${[[7,'7 วัน'],[30,'30 วัน'],[90,'90 วัน'],[0,'ทั้งหมด']].map(([d,l])=>`<button data-d="${d}" class="${S.range===d?'on':''}">${l}</button>`).join('')}</div></div>
   </div>
   ${ble.cfg&&ble.cfg.asset===a?'<div class="panel" id="livePanel" hidden></div>':''}
+  ${pointsStripHtml(a)}
+  ${openFailures(a).length?`<div class="panel banner warn"><span>มีรายงานความผิดปกติที่ยังไม่ปิด ${openFailures(a).length} เรื่อง: ${openFailures(a).map(f=>esc(f.title)).join(' · ')}</span><button class="btn" onclick="setView('asset')">ดู</button></div>`:''}
   <div class="kpis">
     ${kpi('Velocity รวม (สูงสุดของ 3 แกน)',fv(ov),uv(),delta,'hero z'+(vz||''))}
     ${kpi('Velocity X / Y / Z',`${fv(last.vx)}<small>/</small>${fv(last.vy)}<small>/</small>${fv(last.vz)}`,'','หน่วย '+uv()).replace('class="v num"','class="v num" style="font-size:18px;margin-top:10px"')}
@@ -807,6 +832,7 @@ function renderSettings(ns){
           <div class="row"><button class="btn sm kSave">บันทึก</button><button class="btn sm danger kDel">ลืม</button></div></li>`).join('')}</ul>
         <p class="muted" style="margin:8px 0 0;font-size:12px">เปลี่ยนชื่อแล้ว ค่าที่ดึงครั้งต่อไปจะเก็บในชื่อใหม่ (ค่าเดิมยังอยู่ในชื่อเก่า) · "ลืม" ลบเฉพาะชื่อที่จำไว้ ไม่ลบข้อมูลที่วัดแล้ว</p>`
         :'<p class="muted" style="margin:0">ยังไม่มี เชื่อมต่อเซนเซอร์ครั้งแรกที่เมนู "เซนเซอร์ / เชื่อมต่อ"</p>'}</div></div>
+    ${copySettingsHtml(ns)}
     ${has?`<div class="panel span"><div class="ph"><h3>แยกข้อมูลที่ปนกัน</h3></div>
       <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
         <label>จากเครื่อง<select id="mvFrom">${ns.map(n=>`<option ${n===a?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
@@ -826,7 +852,7 @@ function renderSettings(ns){
   $('#gwTest').onclick=async()=>{gwSet();const st=await gatewayStatus(gwBase());S._gw=st;
     $('#gwInfo').textContent=st?`พบ Gateway: ${st.sensors.map(s=>s.asset).join(', ')} · ${st.readings.toLocaleString('th-TH')} ค่า · ดึงทุก ${st.intervalMin} นาที`:'ติดต่อ Gateway ไม่ได้ (ตรวจที่อยู่ และต้องอยู่วง LAN เดียวกัน; หน้า https เรียก http ไม่ได้)'};
   $('#gwSync').onclick=()=>{gwSet();gatewaySync()};
-  aiBindSettings();
+  aiBindSettings();bindCopySettings();
   storageInfo().then(i=>{const el=$('#storeInfo');if(i&&el)el.textContent+=` · ใช้ ${fmtBytes(i.used)} จาก ${fmtBytes(i.quota)}`});
 
   $('#sUnit').value=S.unit;$('#sTUnit').value=S.tunit;$('#sTheme').value=S.theme||'';
@@ -1259,7 +1285,8 @@ async function bleFetchFFT(mode){
     const keep=async(kind,bytes,ts)=>{
       const key=asset+'|'+(kind==='alarm'?'':kind[0]+'|')+ts;
       if(have.some(h=>h.key===key))return false;
-      await FFTDB.put({key,asset,ts,kind,rev:s?s.rev:null,devType:s?s.devType:null,bytes});FUI.key=key;return true;
+      const rec={key,asset,ts,kind,rev:s?s.rev:null,devType:s?s.devType:null,rpm:s&&s.rpm||null,bytes};
+      await FFTDB.put(rec);FUI.key=key;setTimeout(()=>onFftSaved(rec),0);return true;
     };
     let added=0;
     if(mode==='manual'){
@@ -1386,7 +1413,8 @@ async function bleMeasureFFT(opt={}){
     // Download the new capture (read-only opcode 2)
     const have=await FFTDB.list(asset),prev=(have.find(h=>h.kind==='manual')||{}).ts||0,sNow=ble.live&&ble.live.sys;
     const keep=async(kind,bytes,ts)=>{const key=asset+'|m|'+ts;if(have.some(h=>h.key===key))return false;
-      await FFTDB.put({key,asset,ts,kind,rev:sNow?sNow.rev:null,devType:sNow?sNow.devType:null,bytes});FUI.key=key;return true};
+      const rec={key,asset,ts,kind,rev:sNow?sNow.rev:null,devType:sNow?sNow.devType:null,rpm:sNow&&sNow.rpm||null,bytes};
+      await FFTDB.put(rec);FUI.key=key;setTimeout(()=>onFftSaved(rec),0);return true};
     const r=await downloadManualFFT(ch,keep);
     if(r.ts<=prev)bleLog('⚠ ได้ FFT ชุดเดิม (เวลาไม่ใหม่กว่าเดิม) เซนเซอร์อาจไม่ได้วัดใหม่');
     toast(r.ts>prev?'วัด FFT ใหม่เสร็จแล้ว':'ได้ FFT ชุดเดิม เซนเซอร์อาจไม่ได้วัดใหม่');
@@ -1412,8 +1440,9 @@ async function sendStreamCmd(ch,v){
 // ---- FFT / waveform panel (decoding in ia3-fft.js, ported from the app) ----
 const FUI={key:null,band:'low',qty:'vel'}; // low band first: 1X/2X peaks are unreadable on the 0-5 kHz axis
 let fftCharts=[];
-const KIND_LABEL={alarm:'ตอน alarm',manual:'manual'};
+const KIND_LABEL={alarm:'ตอน alarm',manual:'manual',import:'นำเข้า CSV'};
 function decodeRec(r){
+  if(r.dec)return r.dec;
   // rev/devType are saved with the record; fall back on the record length for older entries
   return IA3FFT.decodeAlarmRecord(r.bytes,{rev:r.rev!=null?r.rev:(r.bytes.length>=49380?16:9),devType:r.devType!=null?r.devType:8});
 }
@@ -1743,6 +1772,7 @@ function renderHealth(){
       <div class="row" style="margin-top:8px;font-size:12.5px;border-top:1px solid var(--line);padding-top:8px">
         <label class="check"><input type="checkbox" data-sch="${esc(id)}" ${sch.on?'checked':''}> สั่งวัด FFT ตามตาราง</label>
         <select data-schper="${esc(id)}"><option value="day" ${sch.per!=='week'?'selected':''}>วันละครั้ง</option><option value="week" ${sch.per==='week'?'selected':''}>สัปดาห์ละครั้ง</option></select>
+        <label class="check"><input type="checkbox" data-cond="${esc(id)}" ${sv.cond&&sv.cond.on?'checked':''}> สั่งวัด FFT เมื่อค่าเกินเกณฑ์</label>
         <span class="muted">${sch.on?`ครั้งล่าสุด ${sv.schedLog&&sv.schedLog.length?dFull(Math.max(...sv.schedLog)):'ยังไม่เคย'}${sv.schedFail>=3?' · <span class="up">หยุดชั่วคราว (ไม่สำเร็จ 3 ครั้ง)</span>':''}`:'ปิดอยู่'}</span>
       </div></div>`}).join('')||'<p class="muted" style="margin:0">ยังไม่มีเซนเซอร์</p>'}
     <p class="muted" style="margin:4px 0 0;font-size:12px">ข้อมูลสุขภาพเก็บทุกครั้งที่ดึงข้อมูล · "สั่งวัด FFT ตามตาราง" เขียนคำสั่งวัดลงเซนเซอร์แบบเดียวกับปุ่ม "สั่งวัด FFT ใหม่" (ผ่านด่านป้องกันทุกข้อ) ทำงานเฉพาะตอนที่ดึงข้อมูลอยู่และเครื่องเดิน ไม่เกินวันละ 2 ครั้ง และข้ามเมื่อแบตต่ำ</p></div>`;
@@ -1750,6 +1780,10 @@ function renderHealth(){
     const sv=S.sensors[i.dataset.sch];
     if(i.checked&&!confirm(`เปิด "สั่งวัด FFT ตามตาราง" ให้ ${sv.asset}?\n\n• หน้าเว็บจะเขียนคำสั่งวัด FFT ลงเซนเซอร์เองโดยไม่ถามทุกครั้ง (คำสั่งเดียวกับปุ่ม "สั่งวัด FFT ใหม่")\n• ทำเฉพาะตอนที่กำลังดึงข้อมูล เครื่องเดินอยู่ แบตไม่ต่ำ และนาฬิกาตรง\n• ไม่เกินวันละ 2 ครั้ง และหยุดเองถ้าไม่สำเร็จ 3 ครั้งติด\n• การวัดแต่ละครั้งใช้แบตเซนเซอร์เพิ่ม\n\nกด OK เพื่อเปิด`)){i.checked=false;return}
     sv.sched=Object.assign(sv.sched||{per:'day'},{on:i.checked});if(i.checked)sv.schedFail=0;save();renderHealth()});
+  el.querySelectorAll('[data-cond]').forEach(i=>i.onchange=()=>{
+    const sv=S.sensors[i.dataset.cond];
+    if(i.checked&&!confirm(`เปิด "สั่งวัด FFT เมื่อค่าเกินเกณฑ์" ให้ ${sv.asset}?\n\n• เมื่อดึงข้อมูลแล้วพบค่าล่าสุดอยู่ระดับเฝ้าระวัง/อันตราย หน้าเว็บจะเขียนคำสั่งวัด FFT ลงเซนเซอร์เอง (คำสั่งเดียวกับปุ่ม "สั่งวัด FFT ใหม่" ผ่านด่านป้องกันทุกข้อ)\n• ไม่เกิน 1 ครั้งต่อ 12 ชั่วโมง และรวมกับ FFT ตามตารางไม่เกินวันละ 2 ครั้ง\n• ข้ามเมื่อแบตต่ำ นาฬิกาไม่ตรง หรือเครื่องหยุด\n\nกด OK เพื่อเปิด`)){i.checked=false;return}
+    sv.cond={on:i.checked};if(i.checked)sv.schedFail=0;save();renderHealth()});
   el.querySelectorAll('[data-schper]').forEach(s=>s.onchange=()=>{const sv=S.sensors[s.dataset.schper];sv.sched=Object.assign(sv.sched||{on:false},{per:s.value});save();renderHealth()});
 }
 

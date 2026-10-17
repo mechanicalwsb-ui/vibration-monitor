@@ -1,8 +1,8 @@
 // Offline support + notification clicks.
 // Own files: network first (updates arrive as soon as they are online), cached copy when offline.
 // Libraries and fonts from CDNs: cache first (versioned URLs never change).
-const CACHE='vibmon-v2';
-const CORE=['./','./index.html','./ia3-fft.js','./fft-analysis.js','./store.js','./insights.js','./pages.js','./ai.js','./manifest.json','./icon-192.png','./icon-512.png',
+const CACHE='vibmon-v3';
+const CORE=['./','./index.html','./ia3-fft.js','./fft-analysis.js','./store.js','./insights.js','./pages.js','./ai.js','./tools.js','./machine.js','./manifest.json','./icon-192.png','./icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js','https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'];
 
 self.addEventListener('install',e=>{

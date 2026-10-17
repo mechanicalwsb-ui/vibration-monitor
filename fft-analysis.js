@@ -3,10 +3,11 @@
 // specPoints, twfPoints, diagnose, diagHtml, opts, css, cv, uv, fv, dFull, ble, toast, KIND_LABEL).
 
 const FA={keyA:null,keyB:'',mode:'spectrum',axis:'all',qty:'vel',band:'low',logY:false,fmin:null,fmax:null,
-  marks:{harm:true,bearing:false,vane:false,line:false}};
+  marks:{harm:true,bearing:false,vane:false,line:false,drive:true},cur:{mode:'off',pts:[]},xu:'hz'};
 let faCharts=[];
 const faDecCache=new Map();
 function faDecode(r){
+  if(r.dec)return r.dec; // imported spectrum/time signal (CSV)
   if(!faDecCache.has(r.key)){try{faDecCache.set(r.key,decodeRec(r))}catch(e){faDecCache.set(r.key,null)}}
   return faDecCache.get(r.key);
 }
@@ -22,15 +23,21 @@ const faVlines={id:'faVlines',afterDatasetsDraw(chart,args,o){
   ctx.restore()}};
 
 // Running speed (Hz): sensor RPM when live, else the RPM saved for this machine, else estimated from the spectrum
-function faRunSpeed(dec,c){
+function faRunSpeed(dec,c,rec){
   const s=ble.live&&ble.cfg&&ble.cfg.asset===S.sel?ble.live.sys:null;
+  if(c.vfd){ // variable speed: each capture has its own speed
+    if(rec&&rec.rpm)return{f1:rec.rpm/60,src:'RPM ตอนวัดชุดนี้'};
+    const d=dec?diagnose(dec,null,null,{}):null;if(d&&d.f1)return{f1:d.f1,src:'ประมาณจากชุดนี้ (VFD)'};
+  }
   if(c.rpm)return{f1:c.rpm/60,src:'ตั้งค่าเอง'};
+  if(rec&&rec.rpm)return{f1:rec.rpm/60,src:'RPM ตอนวัดชุดนี้'};
   if(s&&s.rpm)return{f1:s.rpm/60,src:'RPM จากเซนเซอร์'};
   const d=dec?diagnose(dec,null,null,{}):null;
   return d&&d.f1?{f1:d.f1,src:'ประมาณจากสเปกตรัม'}:{f1:null,src:''};
 }
 // Bearing defect frequencies from geometry: balls n, ball dia d, pitch dia D (same unit), contact angle deg
 function bearingFreqs(f1,b){
+  if(f1&&b&&b.fac&&b.fac.BPFO)return{FTF:b.fac.FTF*f1,BPFO:b.fac.BPFO*f1,BPFI:b.fac.BPFI*f1,BSF:b.fac.BSF*f1}; // catalogue factors (× RPM)
   if(!f1||!b||!(b.n>0&&b.d>0&&b.D>0))return null;
   const r=b.d/b.D*Math.cos((b.ang||0)*Math.PI/180);
   return{FTF:f1/2*(1-r),BPFO:b.n*f1/2*(1-r),BPFI:b.n*f1/2*(1+r),BSF:b.D/(2*b.d)*f1*(1-r*r)};
@@ -42,6 +49,8 @@ function faMarkers(f1,c,fmax){
   if(FA.marks.line){L.push({x:50,label:'50 Hz',color:k.t});L.push({x:100,label:'100 Hz',color:k.t})}
   const bf=FA.marks.bearing?bearingFreqs(f1,c.bearing):null;
   if(bf)for(const[name,f]of Object.entries(bf))for(let h=1;h<=3&&h*f<=fmax;h++)L.push({x:h*f,label:h>1?`${h}×${name}`:name,color:k.zd});
+  if(FA.marks.drive)L.push(...machineMarks(f1,c,fmax,k));
+  L.push(...cursorLines(k));
   return L;
 }
 // Velocity = g / (2*pi*f): near 0 Hz this blows the noise floor up into large, meaningless values,
@@ -96,14 +105,14 @@ async function renderFFTPage(){
   if(!decA){el.innerHTML='<div class="panel empty"><h2>ถอดข้อมูล FFT ชุดนี้ไม่ได้</h2></div>';return}
   const hasHigh=!!(decA.high&&decA.high.startBin!=null);
   if(decA.single||(!hasHigh&&FA.band!=='low'))FA.band='low';
-  const c=cfg(S.sel),{f1,src}=faRunSpeed(decA,c),range=faFreqRange(decA);
+  const c=cfg(S.sel),{f1,src}=faRunSpeed(decA,c,recA),range=faFreqRange(decA);
   const opt=(v,l,cur)=>`<option value="${v}" ${v===cur?'selected':''}>${l}</option>`;
   const seg=(id,items,cur)=>`<div class="seg" id="${id}">${items.map(([v,l])=>`<button data-v="${v}" class="${v===cur?'on':''}">${l}</button>`).join('')}</div>`;
-  const recLabel=(r,i)=>`${KIND_LABEL[r.kind||'alarm']} · ${dFull(r.ts*1000)}${i===0?' (ล่าสุด)':''}`;
+  const recLabel=(r,i)=>`${r.key===c.refFft?'★ ':''}${KIND_LABEL[r.kind||'alarm']||r.kind}${r.tag==='bump'?' (bump test)':''}${r.src?' '+r.src:''} · ${dFull(r.ts*1000)}${i===0?' (ล่าสุด)':''}`;
   const b=c.bearing||{};
   el.innerHTML=`
   <div class="mainhead"><h2>วิเคราะห์ FFT · ${esc(S.sel)}</h2>
-    ${seg('faMode',[['spectrum','สเปกตรัม'],['waterfall','Waterfall'],['trend','แนวโน้มความถี่'],['wave','Waveform'],['env','Envelope (bearing)']],FA.mode)}</div>
+    ${seg('faMode',FA_MODES,FA.mode)}</div>
   <div class="panel fa-ctl">
     <label>ชุดข้อมูล<select id="faA">${list.map((r,i)=>opt(r.key,recLabel(r,i),recA.key)).join('')}</select></label>
     <label>เปรียบเทียบกับ<select id="faB"><option value="">— ไม่เทียบ —</option>${list.filter(r=>r.key!==recA.key).map(r=>opt(r.key,recLabel(r,list.indexOf(r)),FA.keyB)).join('')}</select></label>
@@ -120,18 +129,28 @@ async function renderFFTPage(){
     <label class="check"><input type="checkbox" data-m="harm" ${FA.marks.harm?'checked':''}> Harmonics 1X–10X</label>
     <label class="check"><input type="checkbox" data-m="line" ${FA.marks.line?'checked':''}> ไฟฟ้า 50/100 Hz</label>
     <label class="check"><input type="checkbox" data-m="vane" ${FA.marks.vane?'checked':''}> Vane pass ใบพัด <input type="number" id="faVanes" value="${c.vanes||''}" placeholder="จำนวนใบ" style="width:80px"></label>
+    <label class="check"><input type="checkbox" data-m="drive" ${FA.marks.drive?'checked':''}> มอเตอร์/เกียร์/สายพาน ${c.drive&&(c.drive.poles||c.drive.teeth||c.drive.beltRatio)?'':'<small class="muted">(ตั้งในหน้าข้อมูลเครื่อง)</small>'}</label>
     <label class="check"><input type="checkbox" data-m="bearing" ${FA.marks.bearing?'checked':''}> Bearing: ลูก <input type="number" id="faBn" value="${b.n||''}" style="width:56px"> Ø ลูก <input type="number" step="any" id="faBd" value="${b.d||''}" style="width:64px"> Ø pitch <input type="number" step="any" id="faBD" value="${b.D||''}" style="width:64px"> มุม° <input type="number" step="any" id="faBa" value="${b.ang??0}" style="width:52px"></label>
+  </div>
+  <div class="panel fa-ctl fa-tools">
+    <label>Cursor${seg('faCur',[['off','ปิด'],['harm','Harmonic'],['side','Sideband'],['delta','Delta']],FA.cur.mode)}</label>
+    <span class="row"><button class="btn sm" id="faFindH">หา harmonics</button><button class="btn sm" id="faFindS">หา sidebands</button></span>
+    <label>แกนนอน${seg('faXu',[['hz','Hz'],['cpm','CPM'],['order','× รอบ']],FA.xu)}</label>
+    <span class="row"><button class="btn sm" id="faRef">${c.refFft===recA.key?'★ ชุดอ้างอิงอยู่แล้ว':'ตั้งชุดนี้เป็นอ้างอิง'}</button>${c.refFft?'<label class="check" style="font-size:12px">เส้นอ้างอิง ×<input type="number" step="0.5" id="faMaskMul" value="'+(c.maskMul||2)+'" style="width:56px"></label>':''}</span>
+    <span class="row"><button class="btn sm" id="faPlay" title="เล่น waveform เป็นเสียง">▶ ฟังเสียง</button><button class="btn sm" id="faImp">นำเข้า FFT/Time CSV</button></span>
+    <span class="muted" id="faCurInfo" style="font-size:12px;flex-basis:100%">${cursorInfo(f1)}</span>
   </div>
   <div class="panel"><div class="cbox fa-main"><canvas id="faChart"></canvas></div><p class="muted fa-note" id="faNote"></p></div>
   <div class="fa-grid" id="faSide"></div>`;
   faBind(list);
-  ({spectrum:faSpectrum,waterfall:faWaterfall,trend:faTrend,wave:faWave,env:faEnv})[FA.mode](decA,decB,recA,recB,list,f1,c,range);
+  (FA_FN()[FA.mode]||faSpectrum)(decA,decB,recA,recB,list,f1,c,range);
+  faAfterRender(decA,recA,list,f1,c);
 }
 
 function faBind(list){
   const re=()=>renderFFTPage();
   const segBind=(id,fn)=>document.querySelectorAll('#'+id+' button').forEach(b=>b.onclick=()=>{fn(b.dataset.v);re()});
-  segBind('faMode',v=>FA.mode=v);segBind('faAxis',v=>FA.axis=v);segBind('faQty',v=>FA.qty=v);segBind('faLog',v=>FA.logY=v==='log');
+  segBind('faMode',v=>{FA.mode=v;cancelAnimationFrame(motionAnim)});segBind('faCur',v=>{FA.cur={mode:v,pts:[]}});segBind('faXu',v=>FA.xu=v);segBind('faAxis',v=>FA.axis=v);segBind('faQty',v=>FA.qty=v);segBind('faLog',v=>FA.logY=v==='log');
   $('#faA').onchange=e=>{FA.keyA=e.target.value;if(FA.keyB===FA.keyA)FA.keyB='';re()};
   $('#faB').onchange=e=>{FA.keyB=e.target.value;re()};
   if($('#faBand'))$('#faBand').onchange=e=>{FA.band=e.target.value;FA.fmin=FA.fmax=null;re()};
@@ -149,10 +168,11 @@ function faBind(list){
 }
 function faAxes(){return FA.axis==='all'?['x','y','z']:[FA.axis]}
 function faChartOpts(yTitle,range){
-  const k=css(),o=opts(yTitle);
-  o.scales.x={type:'linear',min:range.min,max:range.max,title:{display:true,text:'ความถี่ (Hz)',color:k.muted},ticks:{color:k.muted},grid:{color:k.line}};
+  const k=css(),o=opts(yTitle),f1=FA._f1;
+  const xu=FA.xu==='order'&&!f1?'hz':FA.xu,tick=v=>xu==='cpm'?Math.round(v*60).toLocaleString():xu==='order'?(v/f1).toFixed(1)+'X':v;
+  o.scales.x={type:'linear',min:range.min,max:range.max,title:{display:true,text:xu==='cpm'?'ความถี่ (CPM)':xu==='order'?'เท่าของรอบ (order)':'ความถี่ (Hz)',color:k.muted},ticks:{color:k.muted,callback:tick},grid:{color:k.line}};
   if(FA.logY){o.scales.y.type='logarithmic';o.scales.y.beginAtZero=false}
-  o.plugins.tooltip.callbacks.title=it=>it.length?it[0].parsed.x.toFixed(2)+' Hz':'';
+  o.plugins.tooltip.callbacks.title=it=>{if(!it.length)return'';const x=it[0].parsed.x;return x.toFixed(2)+' Hz · '+Math.round(x*60)+' CPM'+(f1?' · '+(x/f1).toFixed(2)+'X':'')};
   return o;
 }
 const faUnit=()=>FA.qty==='acc'?'g':uv();
@@ -164,9 +184,14 @@ function faSpectrum(decA,decB,recA,recB,list,f1,c,range){
   const k=css(),col={x:k.x,y:k.y,z:k.z},axes=faAxes(),ds=[];
   axes.forEach(a=>ds.push({label:(decB?'A ':'')+AXES.find(x=>x[0]===a)[1],data:faLogSafe(faSpec(decA,a)),borderColor:col[a],backgroundColor:col[a],borderWidth:1.2,pointRadius:0,tension:0}));
   if(decB)axes.forEach(a=>ds.push({label:'B '+AXES.find(x=>x[0]===a)[1],data:faLogSafe(faSpec(decB,a)),borderColor:col[a],backgroundColor:col[a],borderWidth:1.2,borderDash:[5,4],pointRadius:0,tension:0}));
+  // reference spectrum mask (velocity): line + points above it
+  const refRec=c.refFft&&c.refFft!==recA.key?list.find(r=>r.key===c.refFft):null,refDec=refRec&&faDecode(refRec);
+  const mask=refDec&&FA.qty==='vel'?refMask(refDec,c):null,ex=mask?maskExceed(decA,mask):[];
+  if(mask){ds.push({label:`เส้นอ้างอิง ×${c.maskMul||2}`,data:faLogSafe(mask.map(p=>({x:p.x,y:cv(p.y)}))),borderColor:k.zd,backgroundColor:k.zd,borderWidth:1,borderDash:[3,3],pointRadius:0,tension:0,isRef:true});
+    if(ex.length)ds.push({label:'เกินเส้นอ้างอิง',type:'scatter',data:ex.map(e=>({x:e.x,y:cv(e.y)})),borderColor:k.zd,backgroundColor:k.zd,pointRadius:5,pointStyle:'triangle'})}
   const o=faChartOpts(faUnit(),range);o.plugins.faVlines={lines:faMarkers(f1,c,range.max)};
   faCharts.push(new Chart($('#faChart'),{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}));
-  $('#faNote').textContent=(decB?`A = ${dFull(recA.ts*1000)} (เส้นทึบ) · B = ${dFull(recB.ts*1000)} (เส้นประ) · `:'')+'ซูมด้วยช่อง "ซูมความถี่" หรือปุ่มลัด · ชี้เมาส์บนกราฟเพื่อดูค่า'+(FA.qty==='vel'?` · velocity แสดงตั้งแต่ ${VEL_MIN_HZ} Hz ขึ้นไป (ต่ำกว่านั้นเป็น noise ที่ถูกขยายจากการแปลงหน่วย)`:'');
+  $('#faNote').textContent=(mask?`เทียบกับชุดอ้างอิง ${dFull(refRec.ts*1000)}: ${ex.length?'เกิน '+ex.length+' ยอด':'ไม่มียอดเกิน'} · `:'')+(decB?`A = ${dFull(recA.ts*1000)} (เส้นทึบ) · B = ${dFull(recB.ts*1000)} (เส้นประ) · `:'')+'ซูมด้วยช่อง "ซูมความถี่" หรือปุ่มลัด · ชี้เมาส์บนกราฟเพื่อดูค่า'+(FA.qty==='vel'?` · velocity แสดงตั้งแต่ ${VEL_MIN_HZ} Hz ขึ้นไป (ต่ำกว่านั้นเป็น noise ที่ถูกขยายจากการแปลงหน่วย)`:'');
 
   const env=faEnvelope(decA,axes).filter(p=>p.x>=range.min&&p.x<=range.max);
   const marks=faMarkers(f1,c,range.max*1.1);
@@ -194,7 +219,10 @@ function faSpectrum(decA,decB,recA,recB,list,f1,c,range){
       <div class="tablewrap"><table><thead><tr><th>ช่วง</th><th>ค่ารวม</th><th>สัดส่วน</th><th>มักบ่งบอก</th></tr></thead><tbody>${bandRows||'<tr><td colspan="4" class="muted">ใส่ RPM เพื่อแบ่งช่วงตาม 1X</td></tr>'}</tbody></table></div>
       ${stats.length?`<div class="ph"><h3>Waveform (g) · ${FA.band==='high'?'ช่วงสูง':'ช่วงต่ำ'}</h3></div><div class="tablewrap"><table><thead><tr><th>แกน</th><th>Peak</th><th>RMS</th><th>Crest</th><th>Kurtosis</th></tr></thead><tbody>${statRows}</tbody></table></div>
       <p class="muted fa-note">Crest factor > 5 หรือ kurtosis > 4 มักบ่งบอกแรงกระแทก (bearing/การหลวม)</p>`:''}</div>
-    <div class="panel fa-diag">${diagHtml(diagnose(decA,f1?f1*60:null,live?live.kurt:null,c))}</div>`;
+    <div class="panel fa-diag">${diagHtml(diagnose(decA,f1?f1*60:null,live?live.kurt:null,c))}</div>
+    <div class="panel"><div class="ph"><h3>ดัชนีความผิดปกติ (แบบ FASIT)</h3></div><div class="pbody">${faultBarsHtml(faultIndices(decA,c,f1))}</div></div>
+    ${mask?`<div class="panel"><div class="ph"><h3>ยอดที่เกินเส้นอ้างอิง (${ex.length})</h3></div><div class="tablewrap"><table><thead><tr><th>Hz</th><th>แกน</th><th>ค่า (mm/s)</th><th>เส้นอ้างอิง</th><th>เท่า</th><th>เท่าของรอบ</th></tr></thead><tbody>
+      ${ex.map(e=>`<tr><td class="num">${e.x.toFixed(1)}</td><td>${e.ax.toUpperCase()}</td><td class="num">${e.y.toFixed(3)}</td><td class="num">${e.m.toFixed(3)}</td><td class="num up">${e.r.toFixed(1)}×</td><td class="num">${f1?(e.x/f1).toFixed(2)+'X':'–'}</td></tr>`).join('')||'<tr><td colspan="6" class="muted">ไม่มียอดเกินเส้นอ้างอิง</td></tr>'}</tbody></table></div></div>`:''}`;
   $('#faCsv').onclick=()=>faExportCsv(decA,recA);
 }
 function faEnvelopeBand(dec,axes,band){const keep=FA.band;FA.band=band;const e=faEnvelope(dec,axes);FA.band=keep;return e}
@@ -219,7 +247,8 @@ function faWaterfall(decA,decB,recA,recB,list,f1,c,range){
   o.plugins.faVlines={lines:faMarkers(f1,c,range.max)};
   faCharts.push(new Chart($('#faChart'),{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}));
   $('#faNote').textContent=`แสดง ${series.length} ชุดล่าสุด เก่าอยู่ล่าง ใหม่อยู่บน (ค่าสูงสุดของแกนที่เลือก) · ดูว่ายอดที่ความถี่เดิมสูงขึ้นเรื่อย ๆ หรือมียอดใหม่เกิดขึ้น`;
-  $('#faSide').innerHTML='';
+  $('#faSide').innerHTML='<div class="panel pbody" style="grid-column:1/-1"><div class="seg" id="wfMode"><button data-v="3d">3D</button><button data-v="2d" class="on">2D</button></div></div>';
+  document.querySelectorAll('#wfMode button').forEach(b=>b.onclick=()=>{FA.wf2d=b.dataset.v==='2d';renderFFTPage()});
 }
 
 // ---- frequency trend: amplitude at 1X/2X/3X and high-frequency energy across captures ----
@@ -334,4 +363,29 @@ function faEnv(decA,decB,recA,recB,list,f1,c,range){
       </ul><p class="muted diag-note">ตรวจโดยเทียบยอดที่ความถี่ bearing (และ harmonic) กับระดับพื้นของสเปกตรัม ค่า bearing ที่ประมาณจากขนาดอาจคลาดเคลื่อน ±5–10% ควรยืนยันกับแคตตาล็อกและผู้เชี่ยวชาญ</p></div></div>`;
   const upd=()=>{const lo=+$('#envLo').value,hi=+$('#envHi').value;if(lo>0&&hi>lo){FA.envLo=lo;FA.envHi=Math.min(hi,nyq);renderFFTPage()}};
   $('#envLo').onchange=upd;$('#envHi').onchange=upd;
+}
+
+// ---- extra modes and shared controls (tools.js) ----
+const FA_MODES=[['spectrum','สเปกตรัม'],['bands','แถบความถี่ + FASIT'],['waterfall','Waterfall 3D'],['sgram','Spectrograph'],['trend','แนวโน้มความถี่'],['wave','Waveform'],
+  ['env','Envelope (bearing)'],['ceps','Cepstrum'],['acorr','Autocorrelation'],['circ','Circular'],['motion','3D / วงโคจร'],['bump','Bump test']];
+const FA_FN=()=>({spectrum:faSpectrum,bands:faBands,waterfall:faWaterfallMode,sgram:faSgram,trend:faTrend,wave:faWave,env:faEnv,ceps:faCeps,acorr:faAcorr,circ:faCirc,motion:faMotion,bump:faBump});
+function faAfterRender(decA,recA,list,f1,c){
+  FA._f1=f1;
+  const ch=faCharts[0];
+  if(ch&&['spectrum','bump','env'].includes(FA.mode)){ // cursors: click on the spectrum
+    ch.options.onClick=(e)=>{if(!FA.cur||FA.cur.mode==='off')return;const f=ch.scales.x.getValueForPixel(e.x);
+      const pts=faEnvelope(decA,faAxes());if(cursorClick(f,pts)){ch.options.plugins.faVlines={lines:faMarkers(f1,c,ch.scales.x.max)};ch.update('none');$('#faCurInfo').textContent=cursorInfo(f1)}};
+  }
+  $('#faFindH').onclick=()=>{const fams=findHarmonics(faEnvelope(decA,faAxes()),f1);if(!fams.length)return toast('ไม่พบตระกูล harmonic ที่ชัดเจน');
+    FA.cur={mode:'harm',pts:[fams[0].f0]};renderFFTPage().then(()=>{$('#faCurInfo').textContent=fams.map(F=>`${F.f0.toFixed(2)} Hz${f1?' ('+(F.f0/f1).toFixed(2)+'X)':''}: มี ${F.n} harmonic (${F.hits.join(',')})`).join(' · ')})};
+  $('#faFindS').onclick=()=>{const sb=findSidebands(faEnvelope(decA,faAxes()),f1);if(!sb)return toast('ไม่พบ sideband ที่สมมาตร');
+    FA.cur={mode:'side',pts:[sb.center,sb.center+sb.d]};
+    const bf=bearingFreqs(f1,c.bearing),src=f1&&Math.abs(sb.d-f1)/f1<0.05?'= 1X (รอบเพลา)':bf&&Math.abs(sb.d-bf.FTF)/bf.FTF<0.05?'= FTF':f1&&Math.abs(sb.d-2*f1)/f1<0.1?'≈ 2X':'';
+    renderFFTPage().then(()=>{$('#faCurInfo').textContent=`Sideband รอบ ${sb.center.toFixed(1)} Hz ระยะห่าง ${sb.d.toFixed(2)} Hz ${src} · พบ ${sb.pairs} คู่`})};
+  $('#faRef').onclick=()=>{if(c.refFft===recA.key){if(!confirm('ยกเลิกชุดอ้างอิง?'))return;c.refFft=null}else c.refFft=recA.key;save();renderFFTPage()};
+  if($('#faMaskMul'))$('#faMaskMul').onchange=e=>{c.maskMul=Math.max(1.1,+e.target.value||2);save();renderFFTPage()};
+  $('#faPlay').onclick=()=>playTwf(decA,FA.band,FA.axis==='all'?'x':FA.axis);
+  $('#faImp').onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='.csv,.txt';
+    i.onchange=async()=>{const f=i.files[0];if(!f)return;const u=prompt('หน่วยของค่าในไฟล์?\nพิมพ์: mms = mm/s, ips = in/s, g = g, ms2 = m/s²\n(ไฟล์ time signal ใช้ g หรือ ms2)','mms');if(!u)return;
+      try{const r=await importFftCsv(f,S.sel,['mms','ips','g','ms2'].includes(u.trim())?u.trim():'mms');FA.keyA=r.key;toast('นำเข้าแล้ว: '+f.name);renderFFTPage()}catch(e){toast('นำเข้าไม่ได้: '+e.message)}};i.click()};
 }
