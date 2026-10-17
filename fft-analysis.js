@@ -120,7 +120,7 @@ async function renderFFTPage(){
     <label class="cmp-ctl">เปรียบเทียบกับ (สูงสุด ${CMP_MAX} ชุด)<span class="row" style="gap:6px;flex-wrap:nowrap"><select id="faB" ${FA.cmp.length>=CMP_MAX?'disabled':''}><option value="">${FA.cmp.length?'+ เพิ่มชุด…':'— ไม่เทียบ —'}</option>${list.filter(r=>r.key!==recA.key&&!FA.cmp.includes(r.key)).map(r=>opt(r.key,recLabel(r,list.indexOf(r)),'')).join('')}</select>
       ${FA.cmp.length&&['spectrum','wave'].includes(FA.mode)?seg('faCmpView',[['split','แยกกราฟ'],['overlay','รวมกราฟเดียว']],FA.cmpView):''}</span>
       ${FA.cmp.length?`<span class="cmp-chips"><span class="cmp-chip"><i style="background:${CMP_COL[0]}"></i>A · ${esc(dShort(recA.ts*1000))} ${esc(new Date(recA.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))}</span>${FA.cmp.map((k,i)=>{const r=list.find(x=>x.key===k);return`<span class="cmp-chip"><i style="background:${CMP_COL[i+1]}"></i>${CMP_LET[i+1]} · ${esc(dShort(r.ts*1000))} ${esc(new Date(r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))}<button type="button" data-cmpx="${esc(k)}" title="เอาออก">×</button></span>`}).join('')}<button type="button" class="btn sm" id="faCmpClr">ล้าง</button></span>`:''}</label>
-    <label>แกน${seg('faAxis',[['all','ทุกแกน'],['x','X'],['y','Y'],['z','Z']],FA.axis)}</label>
+    <label>แกน (เลือกได้หลายแกน)<div class="seg" id="faAxis"><button data-v="all" class="${faAxes().length===3?'on':''}">ทุกแกน</button>${['x','y','z'].map(a=>`<button data-v="${a}" class="${faAxes().includes(a)?'on':''}" aria-pressed="${faAxes().includes(a)}">${a.toUpperCase()}</button>`).join('')}</div></label>
     <label>ปริมาณ${seg('faQty',[['vel','Velocity'],['acc','Acceleration']],FA.qty)}</label>
     ${decA.single?'':`<label>ช่วงความถี่ของข้อมูล<select id="faBand">${opt('low','ต่ำ (ละเอียด)',FA.band)}${hasHigh?opt('high','สูง',FA.band)+opt('combined','รวม',FA.band):''}</select></label>`}
     <label>สเกลแกนตั้ง${seg('faLog',[['lin','Linear'],['log','Log']],FA.logY?'log':'lin')}</label>
@@ -154,7 +154,7 @@ async function renderFFTPage(){
 function faBind(list){
   const re=()=>renderFFTPage();
   const segBind=(id,fn)=>document.querySelectorAll('#'+id+' button').forEach(b=>b.onclick=()=>{fn(b.dataset.v);re()});
-  segBind('faMode',v=>{FA.mode=v;cancelAnimationFrame(motionAnim)});segBind('faCur',v=>{FA.cur={mode:v,pts:[]}});segBind('faXu',v=>FA.xu=v);segBind('faAxis',v=>FA.axis=v);segBind('faQty',v=>FA.qty=v);segBind('faLog',v=>FA.logY=v==='log');
+  segBind('faMode',v=>{FA.mode=v;cancelAnimationFrame(motionAnim)});segBind('faCur',v=>{FA.cur={mode:v,pts:[]}});segBind('faXu',v=>FA.xu=v);segBind('faAxis',v=>{let s=faAxes();if(v==='all')s=['x','y','z'];else if(s.includes(v)){if(s.length>1)s=s.filter(a=>a!==v)}else s=[...s,v];FA.axes=['x','y','z'].filter(a=>s.includes(a));FA.axis=FA.axes.length===3?'all':FA.axes.length===1?FA.axes[0]:'multi'});segBind('faQty',v=>FA.qty=v);segBind('faLog',v=>FA.logY=v==='log');
   $('#faA').onchange=e=>{FA.keyA=e.target.value;FA.cmp=FA.cmp.filter(k=>k!==FA.keyA);re()};
   $('#faDel').onclick=()=>faManageDelete(list,FA.keyA);
   $('#faNoteIn').onchange=e=>{setFftNote(FA.keyA,e.target.value);toast(e.target.value.trim()?'บันทึกโน้ตแล้ว':'ลบโน้ตแล้ว');re()};
@@ -175,7 +175,7 @@ function faBind(list){
     c.bearing={n:num($('#faBn').value),d:num($('#faBd').value),D:num($('#faBD').value),ang:num($('#faBa').value)||0};
     if(bearingFreqs(1,c.bearing))FA.marks.bearing=true;save();re()});
 }
-function faAxes(){return FA.axis==='all'?['x','y','z']:[FA.axis]}
+function faAxes(){if(Array.isArray(FA.axes)&&FA.axes.length)return FA.axes;return FA.axis==='all'||!['x','y','z'].includes(FA.axis)?['x','y','z']:[FA.axis]}
 function faChartOpts(yTitle,range){
   const k=css(),o=opts(yTitle),f1=FA._f1;
   const xu=FA.xu==='order'&&!f1?'hz':FA.xu,tick=v=>xu==='cpm'?Math.round(v*60).toLocaleString():xu==='order'?(v/f1).toFixed(1)+'X':v;
@@ -404,7 +404,7 @@ function faAfterRender(decA,recA,list,f1,c){
     renderFFTPage().then(()=>{$('#faCurInfo').textContent=`Sideband รอบ ${sb.center.toFixed(1)} Hz ระยะห่าง ${sb.d.toFixed(2)} Hz ${src} · พบ ${sb.pairs} คู่`})};
   $('#faRef').onclick=()=>{if(c.refFft===recA.key){if(!confirm('ยกเลิกชุดอ้างอิง?'))return;c.refFft=null}else c.refFft=recA.key;save();renderFFTPage()};
   if($('#faMaskMul'))$('#faMaskMul').onchange=e=>{c.maskMul=Math.max(1.1,+e.target.value||2);save();renderFFTPage()};
-  $('#faPlay').onclick=()=>playTwf(decA,FA.band,FA.axis==='all'?'x':FA.axis);
+  $('#faPlay').onclick=()=>playTwf(decA,FA.band,faAxes()[0]);
   $('#faImp').onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='.csv,.txt';
     i.onchange=async()=>{const f=i.files[0];if(!f)return;const u=prompt('หน่วยของค่าในไฟล์?\nพิมพ์: mms = mm/s, ips = in/s, g = g, ms2 = m/s²\n(ไฟล์ time signal ใช้ g หรือ ms2)','mms');if(!u)return;
       try{const r=await importFftCsv(f,S.sel,['mms','ips','g','ms2'].includes(u.trim())?u.trim():'mms');FA.keyA=r.key;toast('นำเข้าแล้ว: '+f.name);renderFFTPage()}catch(e){toast('นำเข้าไม่ได้: '+e.message)}};i.click()};
