@@ -266,7 +266,12 @@ function findDuplicateAssets(){
     if(sv.mac)(byMac[sv.mac]=byMac[sv.mac]||[]).push(sv.asset,...(sv.names||[]));
   }
   for(const[mac,list]of Object.entries(byMac))add(list,'MAC เดียวกัน '+mac,mac);
-  // 2. identical readings at identical timestamps (same sensor downloaded under two names)
+  // 2. names that differ only in upper/lower case or spacing ("i-ALERT3 another" / "i-ALERT3 Another")
+  const norm=a=>a.toLowerCase().replace(/\s+/g,' ').trim(),byNorm={};
+  for(const a of ns)(byNorm[norm(a)]=byNorm[norm(a)]||[]).push(a);
+  for(const list of Object.values(byNorm))if(list.length>1){const sv=Object.values(S.sensors||{}).find(v=>list.includes(v.asset)&&v.mac);
+    add(list,'ชื่อเหมือนกัน ต่างแค่ตัวพิมพ์เล็ก/ใหญ่หรือช่องว่าง',sv&&sv.mac)}
+  // 3. identical readings at identical timestamps (same sensor downloaded under two names)
   const idx=new Map();for(const a of ns){const m=new Map();for(const r of series(a))if(!r.live&&r.vx!=null)m.set(r.t,r);idx.set(a,m)}
   for(let i=0;i<ns.length;i++)for(let j=i+1;j<ns.length;j++){
     const A=idx.get(ns[i]),B=idx.get(ns[j]);let same=0;
@@ -330,6 +335,6 @@ function mergeToolHtml(ns){
   return`<div class="panel span"><div class="ph"><h3>รวมเครื่องจักร (ชื่อซ้ำของเซนเซอร์เดียวกัน)</h3></div><div class="pbody">
     <div class="row">${ns.map(n=>`<label class="check" style="font-size:13px"><input type="checkbox" data-mg="${esc(n)}"> ${esc(n)} <span class="muted">(${series(n).length})</span></label>`).join('')}</div>
     <div class="row" style="margin-top:8px"><button class="btn" id="mgPick">รวมที่เลือก…</button></div>
-    <p class="muted" style="margin:6px 0 0;font-size:12px">ใช้เมื่อเครื่องเดียวกันถูกเก็บเป็นหลายชื่อ เลือก 2 ชื่อขึ้นไป แล้วเลือกชื่อที่จะใช้ต่อ</p></div></div>`;
+    <p class="muted" style="margin:6px 0 0;font-size:12px">ใช้เมื่อเครื่องเดียวกันถูกเก็บเป็นหลายชื่อ เลือก 2 ชื่อขึ้นไป แล้วเลือกชื่อที่จะใช้ต่อ${(S.dupIgnore||[]).length?` · ซ่อนคู่ที่กด "ไม่ใช่ตัวเดียวกัน" ไว้ ${S.dupIgnore.length} คู่ <a href="#" onclick="S.dupIgnore=[];save();render();return false">แสดงอีกครั้ง</a>`:''}</p></div></div>`;
 }
 function bindMergeTool(){if(!$('#mgPick'))return;$('#mgPick').onclick=()=>{const sel=[...document.querySelectorAll('[data-mg]:checked')].map(i=>i.dataset.mg);if(sel.length<2)return toast('เลือกอย่างน้อย 2 เครื่อง');askMerge(null,sel)}}

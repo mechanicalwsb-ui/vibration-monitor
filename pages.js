@@ -61,7 +61,7 @@ function renderFleet(){
       <div class="fc-sub">${i.stale?'<span class="up">ข้อมูลเก่า</span> · ':''}${ago(i.r.t)}${i.batt?` · แบต ${i.batt.toFixed(2)} V${i.batLow?' ⚠':''}`:''}</div>
       ${openFailures(i.a).length?`<div class="fc-sub up">รายงานความผิดปกติเปิดอยู่ ${openFailures(i.a).length} เรื่อง</div>`:''}
       ${i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60?`<div class="fc-sub up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</div>`:''}</div>`;
-  p.innerHTML=`<div class="mainhead"><h2>ทุกเครื่อง</h2>
+  p.innerHTML=`${dupBannerHtml()}<div class="mainhead"><h2>ทุกเครื่อง</h2>
     <div class="row"><div class="seg" id="flF">${[['all','ทั้งหมด'],['need','ต้องดู'],['stale','ข้อมูลเก่า > 3 วัน']].map(([v,l])=>`<button data-v="${v}" class="${F===v?'on':''}">${l}</button>`).join('')}</div>
     <select id="flSort"><option value="risk">เรียงตามความเสี่ยง</option><option value="name">เรียงตามชื่อ</option><option value="area">จัดกลุ่มตามพื้นที่</option><option value="machine">จัดกลุ่มตามเครื่อง (หลายจุดวัด)</option></select></div></div>
   <div class="kpis">${kpi('ปกติ',cnt('A')+cnt('B'),'เครื่อง','','hero zA')}${kpi('เฝ้าระวัง',cnt('C'),'เครื่อง','','hero zC')}${kpi('อันตราย',cnt('D'),'เครื่อง','','hero zD')}${kpi('ข้อมูลเก่า',items.filter(i=>i.stale).length,'เครื่อง','ไม่ได้ดึงเกิน 3 วัน')}</div>

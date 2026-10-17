@@ -12,16 +12,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.9.0"></script>
-<script src="fft-analysis.js?v=2.9.0"></script>
-<script src="store.js?v=2.9.0"></script>
-<script src="insights.js?v=2.9.0"></script>
-<script src="pages.js?v=2.9.0"></script>
-<script src="ai.js?v=2.9.0"></script>
-<script src="tools.js?v=2.9.0"></script>
-<script src="machine.js?v=2.9.0"></script>
-<script src="site-config.js?v=2.9.0"></script>
-<script src="gdrive.js?v=2.9.0"></script>
+<script src="ia3-fft.js?v=2.9.1"></script>
+<script src="fft-analysis.js?v=2.9.1"></script>
+<script src="store.js?v=2.9.1"></script>
+<script src="insights.js?v=2.9.1"></script>
+<script src="pages.js?v=2.9.1"></script>
+<script src="ai.js?v=2.9.1"></script>
+<script src="tools.js?v=2.9.1"></script>
+<script src="machine.js?v=2.9.1"></script>
+<script src="site-config.js?v=2.9.1"></script>
+<script src="gdrive.js?v=2.9.1"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -293,6 +293,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
 .rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
 .plabel svg{width:38mm;height:38mm}
+.side-dup{display:block;width:calc(100% - 12px);margin:2px 6px 6px;text-align:left;white-space:normal;line-height:1.35;border-color:var(--warn,#d9a400);color:inherit;background:color-mix(in srgb,var(--warn,#d9a400) 14%,transparent)}
 .batt-row{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:12px;align-items:center;margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
 .batt-fc{font-size:13px}.batt-fc b{display:block;font-size:18px;font-weight:600;margin:2px 0}
 @media (max-width:700px){.batt-row{grid-template-columns:minmax(0,1fr)}}
@@ -455,7 +456,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.9.0',APP_BUILD='2026-10-17T11:54:43+07:00';
+const APP_VERSION='2.9.1',APP_BUILD='2026-10-17T13:43:27+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -695,11 +696,14 @@ function renderSide(ns){
   const side=$('#side');
   if(!ns.length){side.innerHTML='<div class="nav-sec">เครื่องจักร</div><p class="muted" style="padding:4px 10px;margin:0;font-size:12.5px">ยังไม่มีข้อมูล</p>';return}
   const item=(a,sub)=>{const s=series(a),r=s[s.length-1],z=status(r,cfg(a));
-    return `<button class="asset ${a===S.sel?'on':''}" data-a="${esc(a)}"><span class="dot z${z||''}"></span><span class="nm">${sub?esc(pointLabel(a)):esc(a)}</span><span class="num">${fv(overall(r))}</span><span class="sub">${z?ZL[z]+' · ':''}${ago(r.t)}</span></button>`};
+    return `<button class="asset ${a===S.sel?'on':''}" data-a="${esc(a)}"><span class="dot z${z||''}"></span><span class="nm">${dupSet.has(a)?'<span title="น่าจะเป็นเซนเซอร์ตัวเดียวกับอีกชื่อ" style="color:var(--warn,#d9a400)">⚠ </span>':''}${sub?esc(pointLabel(a)):esc(a)}</span><span class="num">${fv(overall(r))}</span><span class="sub">${z?ZL[z]+' · ':''}${ago(r.t)}</span></button>`};
+  const dups=typeof findDuplicateAssets==='function'?findDuplicateAssets():[],dupSet=new Set(dups.flatMap(d=>d.assets));
   const favs=ns.filter(isFav),groups=new Map();
   ns.forEach(a=>{const m=machineOf(a);if(!groups.has(m))groups.set(m,[]);groups.get(m).push(a)});
   let html=favs.length?'<div class="nav-sec">★ ปักหมุด</div><div class="alist">'+favs.map(a=>item(a)).join('')+'</div>':'';
-  html+='<div class="nav-sec">เครื่องจักร ('+groups.size+')</div><div class="alist">';
+  html+='<div class="nav-sec">เครื่องจักร ('+groups.size+')</div>';
+  html+=dups.map((d,i)=>`<button type="button" class="btn sm side-dup" onclick="askMerge(${i})">⚠ ${d.assets.length} ชื่อเป็นเซนเซอร์ตัวเดียวกัน — แตะเพื่อเลือก 1 ชื่อ</button>`).join('');
+  html+='<div class="alist">';
   for(const[m,pts]of groups){if(pts.length===1&&pts[0]===m)html+=item(m);
     else{const z=worstZone(pts);html+=`<div class="nav-sec" style="padding-top:6px;display:flex;gap:6px;align-items:center"><span class="dot z${z||''}"></span>${esc(m)}</div>`+pts.map(a=>item(a,true)).join('')}}
   side.innerHTML=html+'</div>';
