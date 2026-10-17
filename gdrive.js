@@ -18,9 +18,11 @@ function gdCfg(){let c={};try{c=JSON.parse(localStorage.getItem(GD_KEY)||'{}')}c
 const AUTH_KEY='vibmon-auth';
 function authOk(){
   try{const a=JSON.parse(localStorage.getItem(AUTH_KEY)||'null');const c=gdCfg();
-    return!!(a&&a.until>Date.now()&&c.email&&a.email===c.email&&allowedEmail(c,a.email))}catch(e){return false}
+    return!!(a&&a.until>Date.now()&&c.email&&a.email===c.email&&allowedEmail(c,a.email)&&hashAllowed(a.h))}catch(e){return false}
 }
-function setAuth(email){const d=(typeof SITE!=='undefined'&&SITE.rememberDays)||30;try{localStorage.setItem(AUTH_KEY,JSON.stringify({email,until:Date.now()+d*864e5}))}catch(e){}}
+const siteHashes=()=>typeof SITE!=='undefined'&&siteGate()&&SITE.allowHash||[];
+const hashAllowed=h=>!siteHashes().length||siteHashes().includes(h);
+function setAuth(email,h){const d=(typeof SITE!=='undefined'&&SITE.rememberDays)||30;try{localStorage.setItem(AUTH_KEY,JSON.stringify({email,h,until:Date.now()+d*864e5}))}catch(e){}}
 function gdSave(c){try{localStorage.setItem(GD_KEY,JSON.stringify(c))}catch(e){}}
 const GD={tok:null,exp:0,busy:false,status:'',err:''};
 const gdSignedIn=()=>!!gdCfg().email;
@@ -50,8 +52,9 @@ async function gdLogin(){
   try{
     await gdToken(true);
     const u=await (await gdFetch('https://www.googleapis.com/oauth2/v3/userinfo')).json(),c=gdCfg();
-    if(!allowedEmail(c,u.email)){try{google.accounts.oauth2.revoke(GD.tok,()=>{})}catch(e){}GD.tok=null;throw new Error(`บัญชี ${u.email} ไม่ได้รับอนุญาตให้ใช้งานเว็บนี้`)}
-    Object.assign(c,{email:u.email,name:u.name||u.email,picture:u.picture||''});gdSave(c);setAuth(u.email);
+    const h=await sha256(String(u.email).trim().toLowerCase());
+    if(!allowedEmail(c,u.email)||!hashAllowed(h)){try{google.accounts.oauth2.revoke(GD.tok,()=>{})}catch(e){}GD.tok=null;throw new Error(`บัญชี ${u.email} ไม่ได้รับอนุญาตให้ใช้งานเว็บนี้`)}
+    Object.assign(c,{email:u.email,name:u.name||u.email,picture:u.picture||''});gdSave(c);setAuth(u.email,h);
     try{sessionStorage.setItem('vibmon-unlocked','1')}catch(e){}
     toast('ล็อกอินแล้ว: '+(u.name||u.email));hideLock();render();
     if(c.clientId)gdSync(false);
