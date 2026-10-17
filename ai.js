@@ -9,7 +9,11 @@ const AI_DEFAULT_MODEL='gemini-2.5-flash';
 const GEMINI='https://generativelanguage.googleapis.com/v1beta/';
 function aiCfg(){let c={};try{c=JSON.parse(localStorage.getItem(AI_KEY_STORE)||'{}')}catch(e){}
   return Object.assign({key:'',model:AI_DEFAULT_MODEL,anon:false,maint:true,temp:0.3},c)}
-function aiSaveCfg(c,fromSync){if(!fromSync)c.mt=Date.now();try{localStorage.setItem(AI_KEY_STORE,JSON.stringify(c))}catch(e){toast('บันทึกค่า AI ไม่ได้')}}
+const AI_LBL={key:'Gemini API key',model:'รุ่นโมเดล',temp:'ความสร้างสรรค์',anon:'ซ่อนชื่อเครื่อง',maint:'ส่งบันทึกซ่อม'};
+function aiSaveCfg(c,fromSync){
+  try{const p=aiCfg(),ch=Object.keys(AI_LBL).filter(k=>JSON.stringify(p[k])!==JSON.stringify(c[k]));
+    if(ch.length&&typeof appLog==='function')appLog(fromSync?'sync':'set',(fromSync?'ได้ค่าตั้ง AI จากบัญชี Google: ':'ตั้งค่า AI: ')+ch.map(k=>k==='key'?(c.key?'เปลี่ยน Gemini API key':'ลบ Gemini API key'):AI_LBL[k]+' → '+(typeof c[k]==='boolean'?(c[k]?'เปิด':'ปิด'):c[k])).join(' · '))}catch(e){}
+  if(!fromSync)c.mt=Date.now();try{localStorage.setItem(AI_KEY_STORE,JSON.stringify(c))}catch(e){toast('บันทึกค่า AI ไม่ได้')}}
 const aiReady=()=>!!aiCfg().key;
 
 // ---------- Gemini client ----------

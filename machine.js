@@ -332,6 +332,7 @@ function askMerge(i,assetsIn){
 // Move everything stored under `froms` to `to`
 async function mergeAssets(froms,to){
   froms=froms.filter(a=>a!==to);if(!froms.length)return series(to).length;
+  appLog('edit',`รวมเครื่อง ${froms.map(f=>'"'+f+'"').join(', ')} เข้าเป็น "${to}"`);
   S.renames=normRenames(S.renames,Object.fromEntries(froms.map(f=>[f,{to,t:Date.now()}])));
   const keep=new Map();for(const r of S.readings)if(r.asset===to)keep.set(r.t,r);
   S.readings=S.readings.filter(r=>{

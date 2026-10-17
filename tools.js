@@ -389,6 +389,7 @@ function faBands(decA,decB,recA,recB,list,f1,c){
 
 // ---------- new-capture checks: band alarms, mask, fault indices -> notification ----------
 async function onFftSaved(rec){
+  appLog('data',`ได้ FFT ใหม่ (${KIND_LABEL[rec.kind||'alarm']||rec.kind}) · ${rec.asset} · วัดเมื่อ ${dFull(rec.ts*1000)}`);
   try{
     const c=cfg(rec.asset),d=faDecode(rec);if(!d)return;const f1=speedOf(rec,d,c),msgs=[];
     (c.bands||[]).forEach(b=>{const v=bandValue(d,b,f1),z=v&&bandZone(b,v.v);if(z==='C'||z==='D')msgs.push(`${b.name} ${v.v.toFixed(2)} ${bandUnit(b)} (${z==='D'?'อันตราย':'เตือน'})`)});

@@ -32,15 +32,23 @@ function persistBig(now){
 // instead of whichever device happened to have it first. Records are compared with how they looked at the
 // last save, which catches every edit without touching each settings form.
 const STAMP=new Map();
+// The same comparison feeds the activity log (activity.js): new / edited / deleted records at each save.
 function stampChanges(mark){
-  const now=Date.now();
-  const one=(k,o)=>{if(!o||typeof o!=='object')return;const{mt,...rest}=o;let h;try{h=JSON.stringify(rest)}catch(e){return}
-    const p=STAMP.get(k);if(mark&&(p===undefined?o.mt==null:p!==h))o.mt=now;STAMP.set(k,h)};
+  const now=Date.now(),evs=[],seen=new Set();
+  const one=(k,o)=>{if(!o||typeof o!=='object')return;seen.add(k);const{mt,...rest}=o;let h;try{h=JSON.stringify(rest)}catch(e){return}
+    const p=STAMP.get(k);
+    if(mark&&(p===undefined?o.mt==null:p!==h))o.mt=now;
+    if(mark&&p!==h)evs.push({kind:k[0],act:p===undefined?'new':'edit',id:k.slice(2),prev:p===undefined?null:JSON.parse(p),cur:rest});
+    STAMP.set(k,h)};
   for(const[a,o]of Object.entries(S.assets||{}))one('a|'+a,o);
   for(const[id,o]of Object.entries(S.sensors||{}))one('s|'+id,o);
   for(const m of S.maint||[])one('m|'+m.id,m);
   for(const r of S.routes||[])one('r|'+r.id,r);
   for(const[k,o]of Object.entries(S.brgDb||{}))one('b|'+k,o);
+  for(const f of S.failures||[])one('f|'+f.id,f);
+  for(const[k,o]of Object.entries(S.fftNotes||{}))one('n|'+k,o);
+  for(const[k,h]of STAMP)if(!seen.has(k)){if(mark)evs.push({kind:k[0],act:'del',id:k.slice(2),prev:JSON.parse(h),cur:null});STAMP.delete(k)}
+  try{if(mark&&typeof actRecords==='function')actRecords(evs);if(typeof actSnapshot==='function')actSnapshot(mark)}catch(e){console.warn(e)}
 }
 function saveState(){
   if(typeof idxDirty==='function')idxDirty();
@@ -101,6 +109,7 @@ async function exportBackup(){
   const d=new Date(),ymd=`${d.getFullYear()+543}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   download(`vibmon-backup-${ymd}.json`,new Blob([JSON.stringify(data)],{type:'application/json'}));
   S.lastBackup=Date.now();save();
+  if(typeof appLog==='function')appLog('data',`สำรองข้อมูลเป็นไฟล์ (${S.readings.length} ค่า · FFT ${fft.length} ชุด)`);
   toast(`สำรองข้อมูลแล้ว: ${S.readings.length.toLocaleString('th-TH')} ค่า · FFT ${fft.length} ชุด`);
   if(S.view==='settings')render();
 }
@@ -115,6 +124,7 @@ async function importBackup(file,mode){
     for(const k of Object.keys(S))delete S[k];
     Object.assign(S,{readings:[],assets:{},unit:'mm',tunit:'C',sel:null,range:30,sensors:{},maint:[],health:{},ai:{},failures:[]},st);
     delete S.streamOpen;for(const sv of Object.values(S.sensors||{}))delete sv.schedFail;
+    if(typeof appLog==='function')appLog('data',`กู้คืนจากไฟล์สำรองแบบแทนที่ (${S.readings.length} ค่า · FFT ${fft.length} ชุด)`);
     await FFTDB.clear();for(const r of fft)await FFTDB.put(r);
     save();persistBig(true);render();
     toast(`กู้คืนแล้ว ${S.readings.length.toLocaleString('th-TH')} ค่า · FFT ${fft.length} ชุด`);
@@ -125,6 +135,7 @@ async function importBackup(file,mode){
     return;
   }
   const{nR,nF}=await mergeState(st,fft);
+  if(typeof appLog==='function')appLog(file.name==='gateway.json'?'sync':'data',`${file.name==='gateway.json'?'รวมข้อมูลจาก Gateway':'รวมข้อมูลจากไฟล์สำรอง'}: เพิ่ม ${nR} ค่า · FFT ${nF} ชุด`);
   save();persistBig(true);render();
   toast(`รวมข้อมูลแล้ว: เพิ่ม ${nR.toLocaleString('th-TH')} ค่า · FFT ${nF} ชุด`);
 }
@@ -137,6 +148,7 @@ const backupDue=()=>S.readings.length>0&&Date.now()-(S.lastBackup||0)>7*864e5;
 // Move readings of one machine in a time range to another name (to separate data from two sensors
 // that were saved under the same machine name)
 function moveReadings(from,to,t0,t1){
+  if(typeof appLog==='function')appLog('edit',`ย้ายค่าที่วัดจาก "${from}" ไป "${to}" (${new Date(t0).toLocaleString('th-TH')} – ${new Date(t1).toLocaleString('th-TH')})`);
   tombList('moves').push({id:uid(),from,to,t0,t1,at:Date.now()});
   let n=0;const have=new Set(S.readings.filter(r=>r.asset===to).map(r=>r.t));
   S.readings=S.readings.filter(r=>{

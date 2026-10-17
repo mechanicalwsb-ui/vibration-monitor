@@ -62,7 +62,7 @@ async function gdLogin(){
     if(!allowedEmail(c,u.email)||!hashAllowed(h)){try{google.accounts.oauth2.revoke(GD.tok,()=>{})}catch(e){}GD.tok=null;throw new Error(`บัญชี ${u.email} ไม่ได้รับอนุญาตให้ใช้งานเว็บนี้`)}
     Object.assign(c,{email:u.email,name:u.name||u.email,picture:u.picture||''});gdSave(c);setAuth(u.email,h);
     try{sessionStorage.setItem('vibmon-unlocked','1')}catch(e){}
-    toast('ล็อกอินแล้ว: '+(u.name||u.email));hideLock();render();
+    toast('ล็อกอินแล้ว: '+(u.name||u.email));appLog('sync','ล็อกอิน Google: '+u.email);hideLock();render();
     if(c.clientId)gdSync(false);
   }catch(e){toast(e.message);GD.err=e.message;render()}
 }
@@ -71,7 +71,7 @@ function gdLogout(){
   try{if(GD.tok&&window.google)google.accounts.oauth2.revoke(GD.tok,()=>{})}catch(e){}
   GD.tok=null;delete c.email;delete c.name;delete c.picture;gdSave(c);try{localStorage.removeItem(AUTH_KEY)}catch(e){}
   try{sessionStorage.removeItem('vibmon-unlocked')}catch(e){}
-  toast('ออกจากระบบแล้ว');render();checkLock();
+  toast('ออกจากระบบแล้ว');appLog('sync','ออกจากระบบ Google');render();checkLock();
 }
 // ---- Drive files ----
 async function gdFolder(){
@@ -137,8 +137,9 @@ async function gdSync(interactive){
     else c.fftMt=ff.modifiedTime;
     await gdSyncPrivate(folder);
     c.lastSync=Date.now();gdSave(c);GD.selfSave=true;try{save()}finally{GD.selfSave=false}persistBig(true);
-    GD.forcePush=false;GD.status='ok';GD.pending=GD.pendingDuring||false;GD.pendingDuring=false;if(got||gotF){toast(`ซิงก์แล้ว: ได้ข้อมูลจากเครื่องอื่น ${got} ค่า${gotF?` · FFT ${gotF} ชุด`:''}`);render()}
-  }catch(e){GD.err=e.message;GD.status='err';console.warn(e);if(interactive)toast('ซิงก์ไม่สำเร็จ: '+e.message)}
+    GD.forcePush=false;GD.status='ok';GD.pending=GD.pendingDuring||false;GD.pendingDuring=false;if(got||gotF){toast(`ซิงก์แล้ว: ได้ข้อมูลจากเครื่องอื่น ${got} ค่า${gotF?` · FFT ${gotF} ชุด`:''}`);appLog('sync',`ซิงก์ Google Drive: ได้ข้อมูลจากเครื่องอื่น ${got} ค่า${gotF?` · FFT ${gotF} ชุด`:''}`);render()}
+    else if(interactive||force)appLog('sync',force?'อัปข้อมูลชุดนี้ทับไฟล์บน Google Drive แล้ว':'ซิงก์ Google Drive แล้ว (ไม่มีข้อมูลใหม่จากเครื่องอื่น)');
+  }catch(e){GD.err=e.message;GD.status='err';console.warn(e);appLog('err','ซิงก์ Google Drive ไม่สำเร็จ: '+e.message);if(interactive)toast('ซิงก์ไม่สำเร็จ: '+e.message)}
   finally{GD.busy=false;if(GD.pending&&GD.status==='ok'&&gdTokenOk())setTimeout(()=>gdSync(false),500);renderGdChip();if(S.view==='settings'&&$('#gdInfo'))$('#gdInfo').innerHTML=gdInfoHtml()}
 }
 // small non-cryptographic hash, only to notice "nothing changed since the last upload"
@@ -209,14 +210,14 @@ function gdSettingsHtml(){
 }
 function gdBindSettings(){
   if(!$('#gdPanel'))return;
-  const upd=()=>{const c=gdCfg();c.clientId=$('#gdCid').value.trim();c.auto=$('#gdAuto').checked;c.allow=$('#gdAllow').value.trim();gdSave(c)};
+  const upd=()=>{const c=gdCfg(),was=c.auto;c.clientId=$('#gdCid').value.trim();c.auto=$('#gdAuto').checked;c.allow=$('#gdAllow').value.trim();gdSave(c);if(was!==c.auto)appLog('set','ซิงก์อัตโนมัติ '+(c.auto?'เปิด':'ปิด'))};
   ['gdCid','gdAuto','gdAllow'].forEach(id=>$('#'+id).onchange=upd);
   $('#gdLock').onchange=async e=>{const c=gdCfg(),v=e.target.value;
     if(v==='pin'){const p1=prompt('ตั้ง PIN (ตัวเลข 4–8 หลัก)');if(!p1||!/^\d{4,8}$/.test(p1)){e.target.value=c.lock;return toast('PIN ต้องเป็นตัวเลข 4–8 หลัก')}
       if(prompt('ใส่ PIN อีกครั้งเพื่อยืนยัน')!==p1){e.target.value=c.lock;return toast('PIN ไม่ตรงกัน')}
       c.salt=Math.random().toString(36).slice(2);c.pinHash=await sha256(c.salt+p1)}
     if(v==='google'&&!c.email){e.target.value=c.lock;return toast('ล็อกอิน Google ก่อน แล้วค่อยเปิดการล็อกแบบนี้')}
-    c.lock=v;gdSave(c);try{sessionStorage.setItem('vibmon-unlocked','1')}catch(err){}toast(v==='none'?'ปิดการล็อกแล้ว':'เปิดการล็อกแล้ว — มีผลครั้งถัดไปที่เปิดหน้าเว็บ')};
+    c.lock=v;gdSave(c);appLog('set','ล็อกหน้าเว็บ: '+({none:'ไม่ล็อก',pin:'PIN',google:'Google'}[v]||v));try{sessionStorage.setItem('vibmon-unlocked','1')}catch(err){}toast(v==='none'?'ปิดการล็อกแล้ว':'เปิดการล็อกแล้ว — มีผลครั้งถัดไปที่เปิดหน้าเว็บ')};
   if($('#gdIn'))$('#gdIn').onclick=()=>{upd();gdLogin()};
   if($('#gdOut'))$('#gdOut').onclick=gdLogout;
   if($('#gdSyncBtn'))$('#gdSyncBtn').onclick=()=>gdSync(true);

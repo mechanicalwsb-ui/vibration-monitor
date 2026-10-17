@@ -12,16 +12,17 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.13.1"></script>
-<script src="fft-analysis.js?v=2.13.1"></script>
-<script src="store.js?v=2.13.1"></script>
-<script src="insights.js?v=2.13.1"></script>
-<script src="pages.js?v=2.13.1"></script>
-<script src="ai.js?v=2.13.1"></script>
-<script src="tools.js?v=2.13.1"></script>
-<script src="machine.js?v=2.13.1"></script>
-<script src="site-config.js?v=2.13.1"></script>
-<script src="gdrive.js?v=2.13.1"></script>
+<script src="ia3-fft.js?v=2.14.0"></script>
+<script src="fft-analysis.js?v=2.14.0"></script>
+<script src="store.js?v=2.14.0"></script>
+<script src="activity.js?v=2.14.0"></script>
+<script src="insights.js?v=2.14.0"></script>
+<script src="pages.js?v=2.14.0"></script>
+<script src="ai.js?v=2.14.0"></script>
+<script src="tools.js?v=2.14.0"></script>
+<script src="machine.js?v=2.14.0"></script>
+<script src="site-config.js?v=2.14.0"></script>
+<script src="gdrive.js?v=2.14.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -361,11 +362,21 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ld-list div+div{margin-top:3px;padding-top:3px;border-top:1px dashed var(--line)}
 .log-dock.open .ld-list{display:block}.log-dock.open .ld-last{display:none}
 .log-dock:not(.has-log):not(.open){opacity:.85}
+.ld-filters{display:none;flex-wrap:wrap;gap:3px;padding:6px 8px;border-bottom:1px solid var(--line)}
+.log-dock.open .ld-filters{display:flex}
+.ld-filters button{border:1px solid var(--line);background:none;color:var(--muted);border-radius:999px;font-size:11px;padding:1px 8px;cursor:pointer;min-height:0}
+.ld-filters button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.act-tag{display:inline-block;font-size:10px;line-height:14px;padding:0 4px;border:1px solid;border-radius:4px;margin-right:2px;font-family:inherit;font-weight:600}
+.act-day{font-weight:600;color:var(--ink);font-size:11px;border-top:0!important;margin-top:6px!important;padding-top:0!important}
+.ld-list[data-f="conn"] div[data-c]:not([data-c="conn"]),.ld-list[data-f="data"] div[data-c]:not([data-c="data"]),.ld-list[data-f="edit"] div[data-c]:not([data-c="edit"]),
+.ld-list[data-f="set"] div[data-c]:not([data-c="set"]),.ld-list[data-f="sync"] div[data-c]:not([data-c="sync"]),.ld-list[data-f="err"] div[data-c]:not([data-c="err"]),
+.ld-list[data-f="sys"] div[data-c]:not([data-c="sys"]){display:none}
 @media (min-width:1700px){
   .main-wrap{grid-template-columns:minmax(0,1400px) minmax(300px,1fr)}
   .log-dock{position:sticky;top:12px;right:auto;bottom:auto;width:auto;max-width:460px;margin:12px 16px 12px 0;box-shadow:var(--shadow);max-height:calc(100vh - 24px)}
   .log-dock .ld-list{display:block;max-height:none;flex:1}
   .log-dock .ld-last,#ldToggle{display:none}
+  .log-dock .ld-filters{display:flex}
 }
 @media (max-width:600px){.log-dock{right:8px;bottom:8px;width:calc(100vw - 16px)}.ld-list{max-height:40vh}}
 @media print{.log-dock{display:none!important}}
@@ -474,9 +485,10 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
   </main>
   <main id="setPage" hidden></main>
   </div>
-  <aside class="log-dock" id="logDock" aria-label="บันทึกการเชื่อมต่อ">
+  <aside class="log-dock" id="logDock" aria-label="บันทึกการทำงาน">
     <div class="ld-head" id="ldHead"><span class="conn" id="ldState"><i></i><span></span></span>
-      <span class="row" style="flex-wrap:nowrap;gap:4px"><button type="button" class="btn sm" id="ldCopy" title="คัดลอก log">คัดลอก</button><button type="button" class="btn sm" id="ldToggle" title="ย่อ/ขยาย">▾</button></span></div>
+      <span class="row" style="flex-wrap:nowrap;gap:4px"><button type="button" class="btn sm" id="ldCopy" title="คัดลอกบันทึก (ตามหมวดที่เลือก)">คัดลอก</button><button type="button" class="btn sm" id="ldClear" title="ล้างบันทึก">ล้าง</button><button type="button" class="btn sm" id="ldToggle" title="ย่อ/ขยาย">▾</button></span></div>
+    <div class="ld-filters" id="ldFilters"></div>
     <div class="ld-last mono" id="ldLast">ยังไม่มีบันทึก</div>
     <div class="ld-list mono" id="dockLog"></div>
   </aside>
@@ -508,7 +520,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.13.1',APP_BUILD='2026-10-17T15:25:35+07:00';
+const APP_VERSION='2.14.0',APP_BUILD='2026-10-17T15:42:42+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -1185,12 +1197,11 @@ const REC=28,HDR=8;
 const IDLE_MS=45000;
 let ble={device:null,cfg:null,timer:null,busy:false,last:null,state:{phase:'idle'}};
 
+// Sensor messages: the sensor page's own log, plus the page-wide activity log (dock)
 function bleLog(m){
-  const line=new Date().toLocaleTimeString('th-TH',{hour12:false})+'  '+m;
-  for(const id of['bleLog','dockLog']){const el=$('#'+id);if(!el)continue;const d=document.createElement('div');d.textContent=line;el.prepend(d);
-    while(el.children.length>300)el.lastChild.remove()}
-  const last=$('#ldLast');if(last){last.textContent=line;last.classList.remove('flash');void last.offsetWidth;last.classList.add('flash')}
-  const dock=$('#logDock');if(dock)dock.classList.add('has-log');
+  const line=new Date().toLocaleTimeString('th-TH',{hour12:false})+'  '+m,el=$('#bleLog');
+  if(el){const d=document.createElement('div');d.textContent=line;el.prepend(d);while(el.children.length>300)el.lastChild.remove()}
+  appLog(/ผิดพลาด|ไม่สำเร็จ|ไม่ได้:|หลุด/.test(m)?'err':'conn',m);
 }
 function setDockOpen(o){S.logOpen=o;save();const d=$('#logDock');if(d)d.classList.toggle('open',!!o);const t=$('#ldToggle');if(t)t.textContent=o?'▾':'▴'}
 function bleSupportMsg(){
@@ -2217,7 +2228,8 @@ $('#bleCopy').onclick=async()=>{
 $('#bleChip').onclick=openBle;
 $('#ldToggle').onclick=e=>{e.stopPropagation();setDockOpen(!S.logOpen)};
 $('#ldLast').onclick=()=>setDockOpen(true);
-$('#ldCopy').onclick=e=>{e.stopPropagation();$('#bleCopy').click()};
+$('#ldCopy').onclick=e=>{e.stopPropagation();actCopy()};
+$('#ldClear').onclick=e=>{e.stopPropagation();actClear()};
 $('#mTheme').onclick=$('#bTheme').onclick=()=>{const dark=S.theme==='dark'||(!S.theme&&matchMedia('(prefers-color-scheme: dark)').matches);setTheme(dark?'light':'dark')};
 $('#file').onchange=e=>{if(e.target.files.length)importFiles([...e.target.files]);e.target.value=''};
 ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();document.body.classList.add('drop')}));
@@ -2225,7 +2237,7 @@ $('#file').onchange=e=>{if(e.target.files.length)importFiles([...e.target.files]
 document.addEventListener('drop',e=>{const fs=[...e.dataTransfer.files];if(fs.length)importFiles(fs)});
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',render);
 if(window.Chart)Chart.defaults.font.family='"IBM Plex Sans Thai",system-ui,sans-serif';
-checkLock();loadState().then(()=>{render();initApp();checkLock();setDockOpen(S.logOpen!==false&&matchMedia('(min-width:1700px)').matches?true:!!S.logOpen)});
+checkLock();loadState().then(()=>{render();initApp();actInit();checkLock();setDockOpen(S.logOpen!==false&&matchMedia('(min-width:1700px)').matches?true:!!S.logOpen)});
 </script>
 </body>
 </html>

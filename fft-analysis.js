@@ -446,6 +446,7 @@ function faManageDelete(list,curKey){
     catch(e){$('#fdGo').disabled=false;toast('ลบไม่สำเร็จ: '+e.message)}};
 }
 async function deleteFfts(keys){
+  appLog('data',`ลบ FFT ${keys.length} ชุด · ${S.sel}`);
   const tl=tombList('fft');for(const k of keys)if(!tl.includes(k))tl.push(k);
   await FFTDB.del(keys);
   for(const k of keys){faDecCache.delete(k);if(S.fftNotes)delete S.fftNotes[k]}
