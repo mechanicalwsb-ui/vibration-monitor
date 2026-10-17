@@ -251,6 +251,10 @@ async function mergeState(st,fft){
   if(fft&&fft.length){const have=new Set(await FFTDB.keys());
     for(const r of fft){const a=fix(r.asset);if(dead(a,r.ts*1000)||deadF.has(r.key))continue;const key=a===r.asset?r.key:a+r.key.slice(r.asset.length);if(deadF.has(key))continue;
       if(!have.has(key)){await FFTDB.put({...r,asset:a,key});have.add(key);nF++}}}
+  {S.fftNotes=S.fftNotes||{};const deadF2=T('fft');
+    for(const[k,n]of Object.entries(st.fftNotes||{}))if(!S.fftNotes[k]||newer(n,S.fftNotes[k]))S.fftNotes[k]=n;
+    for(const[k,n]of Object.entries(S.fftNotes)){if(deadF2.has(k)){delete S.fftNotes[k];continue}
+      const a=n.asset&&fix(n.asset);if(a&&a!==n.asset&&k.startsWith(n.asset+'|')){const nk=a+k.slice(n.asset.length);if(!S.fftNotes[nk]||newer(n,S.fftNotes[nk]))S.fftNotes[nk]={...n,asset:a};delete S.fftNotes[k]}}}
   if(S.sel)S.sel=fix(S.sel);
   stampChanges(false); // what came in keeps its own edit time; only later local edits get a new one
   if(typeof idxDirty==='function')idxDirty();

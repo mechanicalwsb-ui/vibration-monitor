@@ -353,6 +353,7 @@ async function mergeAssets(froms,to){
     for(const r of all)if(froms.includes(r.asset)){const old=r.key,nk=to+old.slice(r.asset.length);r.asset=to;r.key=nk;
       if(!have.has(nk))await FFTDB.put(r);await new Promise(res=>{const t=db.transaction('rec','readwrite');t.objectStore('rec').delete(old);t.oncomplete=res;t.onerror=res})}
     if(S.assets[to]&&froms.some(f=>String(S.assets[to].refFft||'').startsWith(f+'|')))S.assets[to].refFft=to+S.assets[to].refFft.slice(S.assets[to].refFft.indexOf('|'))}catch(e){console.warn(e)}
+  if(S.fftNotes)for(const[k,n]of Object.entries(S.fftNotes))for(const f of froms)if(k.startsWith(f+'|')){S.fftNotes[to+k.slice(f.length)]={...n,asset:to,mt:Date.now()};delete S.fftNotes[k]}
   faDecCache.clear();save();persistBig(true);
   return series(to).length;
 }

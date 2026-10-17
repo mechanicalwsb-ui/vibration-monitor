@@ -136,7 +136,7 @@ async function buildAIContext(asset,opt={}){
   if(sid){const h=healthSummary(sid);if(h.score!=='none')ctx.sensorHealth={battery_V:h.last&&h.last.batt||null,issues:h.issues.map(i=>i[1])}}
   if(opt.fft!==false){let list=[];try{list=await FFTDB.list(asset)}catch(e){}
     const rec=opt.fftKey?list.find(r=>r.key===opt.fftKey):list[0];
-    if(rec){const f=aiFftSummary(rec,c);if(f)ctx.fft=f;const d=faDecode(rec),f1=d&&speedOf(rec,d,c);
+    if(rec){const f=aiFftSummary(rec,c);if(f){ctx.fft=f;if(fftNote(rec.key))f.userNote=scrub(fftNote(rec.key))}const d=faDecode(rec),f1=d&&speedOf(rec,d,c);
       if(d){const fi=faultIndices(d,c,f1);if(fi)ctx.faultIndices0to10=fi.scores;
         if(c.bands)ctx.bands=c.bands.map(b=>{const v=bandValue(d,b,f1);return{name:b.name,value:v?r3(v.v):null,unit:bandUnit(b),warn:b.warn??null,alarm:b.alarm??null}});
         const ref=c.refFft&&c.refFft!==rec.key&&list.find(r=>r.key===c.refFft),rd=ref&&faDecode(ref);if(rd)ctx.referenceMaskExceed=maskExceed(d,refMask(rd,c)).map(e=>({hz:r2(e.x),axis:e.ax.toUpperCase(),times:r2(e.r)}));

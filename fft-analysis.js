@@ -108,13 +108,14 @@ async function renderFFTPage(){
   const c=cfg(S.sel),{f1,src}=faRunSpeed(decA,c,recA),range=faFreqRange(decA);
   const opt=(v,l,cur)=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(l)}</option>`;
   const seg=(id,items,cur)=>`<div class="seg" id="${id}">${items.map(([v,l])=>`<button data-v="${v}" class="${v===cur?'on':''}">${l}</button>`).join('')}</div>`;
-  const recLabel=(r,i)=>`${r.key===c.refFft?'★ ':''}${KIND_LABEL[r.kind||'alarm']||r.kind}${r.tag==='bump'?' (bump test)':''}${r.src?' '+r.src:''} · ${dFull(r.ts*1000)}${i===0?' (ล่าสุด)':''}`;
+  const recLabel=(r,i)=>`${fftNote(r.key)?'📝 ':''}${r.key===c.refFft?'★ ':''}${KIND_LABEL[r.kind||'alarm']||r.kind}${r.tag==='bump'?' (bump test)':''}${r.src?' '+r.src:''} · ${dFull(r.ts*1000)}${i===0?' (ล่าสุด)':''}`;
   const b=c.bearing||{};
   el.innerHTML=`
   <div class="mainhead"><h2>วิเคราะห์ FFT · ${esc(S.sel)}</h2>
     ${seg('faMode',FA_MODES,FA.mode)}</div>
   <div class="panel fa-ctl">
     <label>ชุดข้อมูล<span class="row" style="flex-wrap:nowrap;gap:6px"><select id="faA" style="flex:1;min-width:0">${list.map((r,i)=>opt(r.key,recLabel(r,i),recA.key)).join('')}</select><button type="button" class="btn sm" id="faDel" title="ลบชุดข้อมูล FFT ที่ไม่ต้องการ">🗑 ลบ…</button></span></label>
+    <label style="flex:1 1 260px">โน้ตของชุดนี้<input type="text" id="faNoteIn" maxlength="300" value="${esc(fftNote(recA.key))}" placeholder="เช่น หลังเปลี่ยน bearing, วัดตอนโหลดเต็ม, ข้อมูลไม่น่าเชื่อถือ"></label>
     <label>เปรียบเทียบกับ<select id="faB"><option value="">— ไม่เทียบ —</option>${list.filter(r=>r.key!==recA.key).map(r=>opt(r.key,recLabel(r,list.indexOf(r)),FA.keyB)).join('')}</select></label>
     <label>แกน${seg('faAxis',[['all','ทุกแกน'],['x','X'],['y','Y'],['z','Z']],FA.axis)}</label>
     <label>ปริมาณ${seg('faQty',[['vel','Velocity'],['acc','Acceleration']],FA.qty)}</label>
@@ -153,6 +154,7 @@ function faBind(list){
   segBind('faMode',v=>{FA.mode=v;cancelAnimationFrame(motionAnim)});segBind('faCur',v=>{FA.cur={mode:v,pts:[]}});segBind('faXu',v=>FA.xu=v);segBind('faAxis',v=>FA.axis=v);segBind('faQty',v=>FA.qty=v);segBind('faLog',v=>FA.logY=v==='log');
   $('#faA').onchange=e=>{FA.keyA=e.target.value;if(FA.keyB===FA.keyA)FA.keyB='';re()};
   $('#faDel').onclick=()=>faManageDelete(list,FA.keyA);
+  $('#faNoteIn').onchange=e=>{setFftNote(FA.keyA,e.target.value);toast(e.target.value.trim()?'บันทึกโน้ตแล้ว':'ลบโน้ตแล้ว');re()};
   $('#faB').onchange=e=>{FA.keyB=e.target.value;re()};
   if($('#faBand'))$('#faBand').onchange=e=>{FA.band=e.target.value;FA.fmin=FA.fmax=null;re()};
   const num=v=>v===''?null:+v;
@@ -237,19 +239,20 @@ function faExportCsv(dec,rec){
 
 // ---- waterfall: newest captures stacked with a vertical offset ----
 function faWaterfall(decA,decB,recA,recB,list,f1,c,range){
-  const k=css(),recs=list.slice(0,12).reverse(),axes=faAxes(),series=[];
+  const k=css(),recs=wfRecs(list,12),axes=faAxes(),series=[];
   for(const r of recs){const d=faDecode(r);if(!d)continue;series.push({r,pts:faEnvelope(d,axes)})}
   let top=0;series.forEach(s=>s.pts.forEach(p=>{if(p.x>=range.min&&p.x<=range.max&&p.y>top)top=p.y}));
   const step=top*0.6||1,palette=[k.x,k.z,k.y,k.r,k.t,k.zb];
-  const ds=series.map((s,i)=>({label:dFull(s.r.ts*1000)+' · '+KIND_LABEL[s.r.kind||'alarm'],data:s.pts.map(p=>({x:p.x,y:p.y+i*step})),
+  const ds=series.map((s,i)=>({label:dFull(s.r.ts*1000)+' · '+KIND_LABEL[s.r.kind||'alarm']+(fftNote(s.r.key)?' · '+fftNote(s.r.key):''),data:s.pts.map(p=>({x:p.x,y:p.y+i*step})),
     borderColor:palette[i%palette.length],backgroundColor:palette[i%palette.length],borderWidth:1.1,pointRadius:0,tension:0,raw:s.pts}));
   const o=faChartOpts(faUnit()+' (เลื่อนระดับตามลำดับเวลา)',range);o.scales.y.ticks.display=false;o.scales.y.type='linear';
   o.plugins.tooltip.callbacks.label=it=>`${it.dataset.label}: ${faFmt(it.dataset.raw[it.dataIndex].y)} ${faUnit()}`;
   o.plugins.faVlines={lines:faMarkers(f1,c,range.max)};
   faCharts.push(new Chart($('#faChart'),{type:'line',data:{datasets:ds},options:o,plugins:[faVlines]}));
   $('#faNote').textContent=`แสดง ${series.length} ชุดล่าสุด เก่าอยู่ล่าง ใหม่อยู่บน (ค่าสูงสุดของแกนที่เลือก) · ดูว่ายอดที่ความถี่เดิมสูงขึ้นเรื่อย ๆ หรือมียอดใหม่เกิดขึ้น`;
-  $('#faSide').innerHTML='<div class="panel pbody" style="grid-column:1/-1"><div class="seg" id="wfMode"><button data-v="3d">3D</button><button data-v="2d" class="on">2D</button></div></div>';
+  $('#faSide').innerHTML='<div class="panel pbody" style="grid-column:1/-1"><div class="seg" id="wfMode"><button data-v="3d">3D</button><button data-v="2d" class="on">2D</button></div></div>'+wfPickerHtml(list,12);
   document.querySelectorAll('#wfMode button').forEach(b=>b.onclick=()=>{FA.wf2d=b.dataset.v==='2d';renderFFTPage()});
+  wfPickerBind(list,12);
 }
 
 // ---- frequency trend: amplitude at 1X/2X/3X and high-frequency energy across captures ----
@@ -413,8 +416,36 @@ function faManageDelete(list,curKey){
 async function deleteFfts(keys){
   const tl=tombList('fft');for(const k of keys)if(!tl.includes(k))tl.push(k);
   await FFTDB.del(keys);
-  for(const k of keys)faDecCache.delete(k);
+  for(const k of keys){faDecCache.delete(k);if(S.fftNotes)delete S.fftNotes[k]}
   for(const c of Object.values(S.assets||{}))if(keys.includes(c.refFft))delete c.refFft; // reference capture gone
   if(keys.includes(FA.keyA))FA.keyA=null;if(keys.includes(FA.keyB))FA.keyB='';if(keys.includes(FUI.key))FUI.key=null;
   save();render();
+}
+
+// ---------- notes on captures ----------
+// S.fftNotes = {captureKey: {asset, text, mt}}; kept in the synced state (small), newest edit wins
+function fftNote(key){const n=S.fftNotes&&S.fftNotes[key];return n&&n.text||''}
+function setFftNote(key,text){
+  S.fftNotes=S.fftNotes||{};text=String(text||'').trim().slice(0,300);
+  const asset=S.sel;S.fftNotes[key]={asset,text,mt:Date.now()}; // an empty text is kept (with its time) so the removal syncs too
+  save();
+}
+// ---------- waterfall: which captures to show ----------
+// S.wfSel = {asset: [keys]} (this device only); nothing chosen = the newest n
+function wfRecs(list,n){
+  const sel=S.wfSel&&S.wfSel[S.sel],pick=sel&&sel.length?list.filter(r=>sel.includes(r.key)):[];
+  return(pick.length?pick:list.slice(0,n)).slice().sort((a,b)=>a.ts-b.ts);
+}
+function wfPickerHtml(list,n){
+  const shown=new Set(wfRecs(list,n).map(r=>r.key)),own=!!(S.wfSel&&S.wfSel[S.sel]&&S.wfSel[S.sel].length);
+  return`<div class="panel" style="grid-column:1/-1"><div class="ph"><h3>เลือกชุดที่จะแสดง (${shown.size}/${list.length})</h3>
+    <div class="row"><button type="button" class="btn sm" data-wfp="all">ทั้งหมด</button><button type="button" class="btn sm" data-wfp="new">ล่าสุด ${n} ชุด${own?'':' ✓'}</button><button type="button" class="btn sm" data-wfp="none">ล้าง</button></div></div>
+    <div class="pbody wf-pick">${list.map(r=>`<label class="check"><input type="checkbox" data-wfk="${esc(r.key)}" ${shown.has(r.key)?'checked':''}> ${esc(dShort(r.ts*1000))} ${esc(new Date(r.ts*1000).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}))} · ${esc(KIND_LABEL[r.kind||'alarm']||r.kind||'')}${fftNote(r.key)?' · <span class="muted">'+esc(fftNote(r.key))+'</span>':''}</label>`).join('')}</div></div>`;
+}
+function wfPickerBind(list,n){
+  const set=keys=>{S.wfSel=S.wfSel||{};if(keys)S.wfSel[S.sel]=keys;else delete S.wfSel[S.sel];save();renderFFTPage()};
+  document.querySelectorAll('[data-wfk]').forEach(i=>i.onchange=()=>{const keys=[...document.querySelectorAll('[data-wfk]:checked')].map(x=>x.dataset.wfk);
+    if(!keys.length){toast('เลือกอย่างน้อย 1 ชุด');i.checked=true;return}set(keys)});
+  document.querySelectorAll('[data-wfp]').forEach(b=>b.onclick=()=>{const v=b.dataset.wfp;
+    if(v==='all')set(list.map(r=>r.key));else if(v==='new')set(null);else set([list[0].key])});
 }

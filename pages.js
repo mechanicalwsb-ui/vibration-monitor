@@ -484,7 +484,7 @@ async function buildReport(R){
     if(R.sec.fft){let list=[];try{list=await FFTDB.list(a)}catch(e){}
       const rec=list[0],dec=rec&&faDecode(rec);
       if(dec){const sp=ax=>specPoints(dec,'low','vel',ax).filter(p=>p.x>=2);
-        html+=`<h3>FFT ล่าสุด (${KIND_LABEL[rec.kind||'alarm']} · ${dFull(rec.ts*1000)})</h3><img class="rp-chart" src="${await chartImg(()=>{const g=lineCfg([L('X',P.x,sp('x')),L('Y',P.y,sp('y')),L('Z',P.z,sp('z'))],uv())();g.options.scales.x.ticks.callback=v=>v;g.options.scales.x.title={display:true,text:'Hz'};return g})}">`;
+        html+=`<h3>FFT ล่าสุด (${KIND_LABEL[rec.kind||'alarm']} · ${dFull(rec.ts*1000)})</h3>${fftNote(rec.key)?`<p class="rp-sub">โน้ต: ${esc(fftNote(rec.key))}</p>`:''}<img class="rp-chart" src="${await chartImg(()=>{const g=lineCfg([L('X',P.x,sp('x')),L('Y',P.y,sp('y')),L('Z',P.z,sp('z'))],uv())();g.options.scales.x.ticks.callback=v=>v;g.options.scales.x.title={display:true,text:'Hz'};return g})}">`;
         const f1=speedOf(rec,dec,c),dg=diagnose(dec,f1?f1*60:null,null,c); // same 1X as the FFT page (VFD: this capture's speed)
         html+=`<ul>${dg.items.map(it=>`<li><b>${it.name}</b> (${it.level}) — ${it.why}</li>`).join('')||'<li>ไม่พบรูปแบบความผิดปกติเด่น</li>'}</ul>`}}
     if(R.sec.maint){const ml=(S.maint||[]).filter(m=>m.asset===a&&m.t>=from).sort((x,y)=>x.t-y.t);
