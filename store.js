@@ -29,6 +29,7 @@ function persistBig(now){
   store.timer=setTimeout(()=>{store.writing=run()},400);
 }
 function saveState(){
+  if(typeof gdMarkDirty==='function')try{gdMarkDirty()}catch(e){}
   if(!store.idb){ // IndexedDB unavailable (e.g. some private modes): everything in localStorage as before
     const all=smallState();for(const k of BIGKEYS)all[k]=S[k];
     try{localStorage.setItem(KEY,JSON.stringify(all))}

@@ -121,11 +121,35 @@ async function gdSync(interactive){
     else c.fftMt=ff.modifiedTime;
     await gdSyncPrivate(folder);
     c.lastSync=Date.now();gdSave(c);save();persistBig(true);
-    GD.status='ok';if(got||gotF){toast(`ซิงก์แล้ว: ได้ข้อมูลจากเครื่องอื่น ${got} ค่า${gotF?` · FFT ${gotF} ชุด`:''}`);render()}
+    GD.status='ok';GD.pending=false;clearTimeout(gdDirtyT);gdDirtyT=null;if(got||gotF){toast(`ซิงก์แล้ว: ได้ข้อมูลจากเครื่องอื่น ${got} ค่า${gotF?` · FFT ${gotF} ชุด`:''}`);render()}
   }catch(e){GD.err=e.message;GD.status='err';console.warn(e);if(interactive)toast('ซิงก์ไม่สำเร็จ: '+e.message)}
   finally{GD.busy=false;renderGdChip();if(S.view==='settings'&&$('#gdInfo'))$('#gdInfo').innerHTML=gdInfoHtml()}
 }
-setInterval(()=>{if(gdCfg().auto&&gdTokenOk())gdSync(false)},10*60000);
+// ---- automatic sync ----
+// Google only issues a new access token in response to a user action on a page without a server,
+// so: while the token is valid (about 1 hour) everything syncs on its own; when it has expired,
+// the next tap anywhere on the page renews it (a Google window may flash briefly) and syncs.
+const gdAuto=()=>{const c=gdCfg();return c.auto&&c.email&&c.clientId};
+let gdDirtyT=null;
+function gdMarkDirty(){ // called after every save: sync shortly after the last change
+  if(!gdAuto()||GD.busy)return;clearTimeout(gdDirtyT);
+  gdDirtyT=setTimeout(()=>{if(gdTokenOk())gdSync(false);else GD.pending=true},30000);
+}
+setInterval(()=>{if(gdAuto()&&gdTokenOk())gdSync(false)},5*60000);
+document.addEventListener('visibilitychange',()=>{
+  if(!gdAuto()||!gdTokenOk())return;
+  if(document.visibilityState==='visible')gdSync(false);          // back to the tab: pull others' changes
+  else if(GD.pending||gdDirtyT){clearTimeout(gdDirtyT);gdDirtyT=null;gdSync(false)} // leaving: push mine
+});
+// renew on the next user gesture when the token is missing/expired (silent if consent was given before)
+let gdRenewing=false;
+document.addEventListener('pointerup',e=>{
+  if(!gdAuto()||gdTokenOk()||GD.busy||gdRenewing||document.querySelector('#lockScr'))return;
+  if(e.target.closest&&e.target.closest('#gdChip,#gdPanel'))return; // those buttons already sync
+  if(Date.now()-(GD.lastRenewTry||0)<10*60000)return; // do not pop up on every tap if it was declined
+  GD.lastRenewTry=Date.now();gdRenewing=true;
+  gdSync(true).finally(()=>{gdRenewing=false});
+},true);
 // ---- sidebar chip ----
 function renderGdChip(){
   const el=$('#gdChip');if(!el)return;const c=gdCfg();
@@ -143,7 +167,7 @@ function gdSettingsHtml(){
     ${siteGate()?'<p class="full" style="margin:0;font-size:13px">🔒 เว็บนี้<b>บังคับล็อกอิน</b>ด้วย Google ก่อนใช้งาน (ตั้งโดยผู้ดูแลใน site-config.js) · เครื่องนี้จะจำการล็อกอินไว้ '+((typeof SITE!=="undefined"&&SITE.rememberDays)||30)+' วัน</p>':''}
     <label class="full" ${siteGate()?'hidden':''}>Google OAuth Client ID<input id="gdCid" value="${esc(c.clientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com" autocomplete="off"></label>
     <div class="full row">${c.email?`<button class="btn primary" id="gdSyncBtn">☁ ซิงก์ตอนนี้</button><button class="btn" id="gdOut">ออกจากระบบ</button>`:`<button class="btn primary" id="gdIn">👤 ล็อกอินด้วย Google</button>`}
-      <label class="check"><input type="checkbox" id="gdAuto" ${c.auto?'checked':''}> ซิงก์อัตโนมัติ (หลังดึงข้อมูล และทุก 10 นาที)</label></div>
+      <label class="check"><input type="checkbox" id="gdAuto" ${c.auto?'checked':''}> ซิงก์อัตโนมัติ (หลังมีการเปลี่ยนแปลง 30 วินาที, ทุก 5 นาที, ตอนกลับมาที่หน้าเว็บ และก่อนปิด)</label></div>
     <p class="full" id="gdInfo" style="margin:0;font-size:13px">${gdInfoHtml()}</p>
     <label class="full" ${siteGate()?'hidden':''}>อีเมลที่อนุญาตให้ล็อกอิน (เว้นว่าง = ทุกบัญชีที่เพิ่มใน Google Cloud)<input id="gdAllow" value="${esc(c.allow)}" placeholder="เช่น a@company.com, b@gmail.com"></label>
     <label class="full" ${siteGate()?'hidden':''}>ล็อกหน้าเว็บบนเครื่องนี้<select id="gdLock"><option value="none" ${c.lock==='none'?'selected':''}>ไม่ล็อก</option><option value="pin" ${c.lock==='pin'?'selected':''}>ต้องใส่ PIN ก่อนใช้งาน</option><option value="google" ${c.lock==='google'?'selected':''}>ต้องล็อกอิน Google ก่อนใช้งาน (ต้องมีอินเทอร์เน็ต)</option></select></label>
