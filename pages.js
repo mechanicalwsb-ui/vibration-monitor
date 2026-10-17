@@ -54,13 +54,13 @@ function renderFleet(){
   list.sort((x,y)=>(isFav(y.a)-isFav(x.a))||cmpBy(x,y));
   const groups=sort==='area'?[...new Set(list.map(i=>i.area))].map(g=>[g,list.filter(i=>i.area===g)])
     :sort==='machine'?[...new Set(list.map(i=>machineOf(i.a)))].map(g=>[g+(pointsOf(g).length>1?` · สถานะรวม: ${ZL[worstZone(pointsOf(g))]||'-'}`:''),list.filter(i=>machineOf(i.a)===g)]):[['',list]];
-  const card=i=>`<button class="panel fcard z${i.z||''}" data-a="${esc(i.a)}">
+  const card=i=>`<div role="button" tabindex="0" class="panel fcard z${i.z||''}" data-a="${esc(i.a)}">
       <div class="fc-top">${favBtn(i.a)}<span class="dot z${i.z||''}"></span><b>${esc(i.a)}</b>${i.z?`<span class="tag z${i.z}">${ZL[i.z]}</span>`:''}</div>
       <div class="fc-v num">${fv(overall(i.r))}<small> ${uv()}</small></div>
       <canvas class="spark" data-a="${esc(i.a)}" width="220" height="44"></canvas>
       <div class="fc-sub">${i.stale?'<span class="up">ข้อมูลเก่า</span> · ':''}${ago(i.r.t)}${i.batt?` · แบต ${i.batt.toFixed(2)} V${i.batLow?' ⚠':''}`:''}</div>
       ${openFailures(i.a).length?`<div class="fc-sub up">รายงานความผิดปกติเปิดอยู่ ${openFailures(i.a).length} เรื่อง</div>`:''}
-      ${i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60?`<div class="fc-sub up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</div>`:''}</button>`;
+      ${i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60?`<div class="fc-sub up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</div>`:''}</div>`;
   p.innerHTML=`<div class="mainhead"><h2>ทุกเครื่อง</h2>
     <div class="row"><div class="seg" id="flF">${[['all','ทั้งหมด'],['need','ต้องดู'],['stale','ข้อมูลเก่า > 3 วัน']].map(([v,l])=>`<button data-v="${v}" class="${F===v?'on':''}">${l}</button>`).join('')}</div>
     <select id="flSort"><option value="risk">เรียงตามความเสี่ยง</option><option value="name">เรียงตามชื่อ</option><option value="area">จัดกลุ่มตามพื้นที่</option><option value="machine">จัดกลุ่มตามเครื่อง (หลายจุดวัด)</option></select></div></div>
@@ -69,7 +69,7 @@ function renderFleet(){
   $('#flSort').value=sort;
   p.querySelectorAll('#flF button').forEach(b=>b.onclick=()=>{S.fleetF=b.dataset.v;save();render()});
   $('#flSort').onchange=e=>{S.fleetSort=e.target.value;save();render()};
-  p.querySelectorAll('.fcard').forEach(b=>b.onclick=()=>{S.sel=b.dataset.a;setView('overview')});
+  p.querySelectorAll('.fcard').forEach(b=>{b.onclick=()=>{S.sel=b.dataset.a;setView('overview')};b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();b.click()}}});
   const k=css();
   p.querySelectorAll('canvas.spark').forEach(cv_=>{
     const a=cv_.dataset.a,rs=series(a),end=rs.at(-1).t,xs=rs.filter(r=>r.t>=end-7*DAY);
