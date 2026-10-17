@@ -5,7 +5,7 @@
 //                  this public file; empty = any Google account added as a test user in Google Cloud
 //   rememberDays : how long a device stays signed in (lets the tablet work offline in the plant)
 const SITE={
-  clientId:'',
+  clientId:'271678872989-lapos0c73p0o9t5n8qo22eq4192v4d66.apps.googleusercontent.com',
   allow:[],
   allowHash:['fc44c042ee076d206b30b9b81ff2b19a1ae2b982e9dd683fcfbf1bdbb9b72f38'],
   rememberDays:30,
