@@ -12,16 +12,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.7.3"></script>
-<script src="fft-analysis.js?v=2.7.3"></script>
-<script src="store.js?v=2.7.3"></script>
-<script src="insights.js?v=2.7.3"></script>
-<script src="pages.js?v=2.7.3"></script>
-<script src="ai.js?v=2.7.3"></script>
-<script src="tools.js?v=2.7.3"></script>
-<script src="machine.js?v=2.7.3"></script>
-<script src="site-config.js?v=2.7.3"></script>
-<script src="gdrive.js?v=2.7.3"></script>
+<script src="ia3-fft.js?v=2.8.0"></script>
+<script src="fft-analysis.js?v=2.8.0"></script>
+<script src="store.js?v=2.8.0"></script>
+<script src="insights.js?v=2.8.0"></script>
+<script src="pages.js?v=2.8.0"></script>
+<script src="ai.js?v=2.8.0"></script>
+<script src="tools.js?v=2.8.0"></script>
+<script src="machine.js?v=2.8.0"></script>
+<script src="site-config.js?v=2.8.0"></script>
+<script src="gdrive.js?v=2.8.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -293,6 +293,26 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
 .rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
 .plabel svg{width:38mm;height:38mm}
+/* live log dock: a right-hand column on wide screens, a corner box elsewhere */
+.main-wrap{min-width:0;display:grid;grid-template-columns:minmax(0,1fr);align-items:start}
+.log-dock{position:fixed;right:16px;bottom:16px;z-index:40;width:min(380px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}
+.ld-head{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+.ld-head .conn{font-size:11.5px;padding:3px 8px;min-width:0;flex:1}
+.ld-last{font-size:11.5px;padding:6px 10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.ld-last.flash{animation:ldflash 1.2s}
+@keyframes ldflash{0%{background:color-mix(in srgb,var(--accent) 25%,transparent)}100%{background:transparent}}
+.ld-list{display:none;font-size:11.5px;color:var(--muted);padding:6px 10px 10px;max-height:300px;overflow:auto;line-height:1.5}
+.ld-list div+div{margin-top:3px;padding-top:3px;border-top:1px dashed var(--line)}
+.log-dock.open .ld-list{display:block}.log-dock.open .ld-last{display:none}
+.log-dock:not(.has-log):not(.open){opacity:.85}
+@media (min-width:1700px){
+  .main-wrap{grid-template-columns:minmax(0,1400px) minmax(300px,1fr)}
+  .log-dock{position:sticky;top:12px;right:auto;bottom:auto;width:auto;max-width:460px;margin:12px 16px 12px 0;box-shadow:var(--shadow);max-height:calc(100vh - 24px)}
+  .log-dock .ld-list{display:block;max-height:none;flex:1}
+  .log-dock .ld-last,#ldToggle{display:none}
+}
+@media (max-width:600px){.log-dock{right:8px;bottom:8px;width:calc(100vw - 16px)}.ld-list{max-height:40vh}}
+@media print{.log-dock{display:none!important}}
 .gd-user{display:flex;align-items:center;gap:8px;width:100%;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:6px 8px;cursor:pointer;text-align:left}
 .gd-user:hover{background:var(--soft)}
 .gd-user img,.gd-av{width:30px;height:30px;border-radius:50%;flex:none;object-fit:cover}
@@ -347,7 +367,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
   <div id="side"></div>
 </nav>
 <div class="scrim" id="scrim"></div>
-<div style="min-width:0">
+<div class="main-wrap">
   <div class="mbar">
     <button type="button" class="icon-btn" id="bMenu" aria-label="เปิดเมนู"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
     <b id="mTitle">ภาพรวม</b>
@@ -398,6 +418,12 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
   </main>
   <main id="setPage" hidden></main>
   </div>
+  <aside class="log-dock" id="logDock" aria-label="บันทึกการเชื่อมต่อ">
+    <div class="ld-head" id="ldHead"><span class="conn" id="ldState"><i></i><span></span></span>
+      <span class="row" style="flex-wrap:nowrap;gap:4px"><button type="button" class="btn sm" id="ldCopy" title="คัดลอก log">คัดลอก</button><button type="button" class="btn sm" id="ldToggle" title="ย่อ/ขยาย">▾</button></span></div>
+    <div class="ld-last mono" id="ldLast">ยังไม่มีบันทึก</div>
+    <div class="ld-list mono" id="dockLog"></div>
+  </aside>
 </div>
 </div>
 <input type="file" id="file" accept=".csv,.txt,text/csv" multiple hidden>
@@ -426,7 +452,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.7.3',APP_BUILD='2026-10-17T11:37:17+07:00';
+const APP_VERSION='2.8.0',APP_BUILD='2026-10-17T11:39:00+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -1082,7 +1108,14 @@ const REC=28,HDR=8;
 const IDLE_MS=45000;
 let ble={device:null,cfg:null,timer:null,busy:false,last:null,state:{phase:'idle'}};
 
-function bleLog(m){const el=$('#bleLog');if(!el)return;const d=document.createElement('div');d.textContent=new Date().toLocaleTimeString('th-TH',{hour12:false})+'  '+m;el.prepend(d)}
+function bleLog(m){
+  const line=new Date().toLocaleTimeString('th-TH',{hour12:false})+'  '+m;
+  for(const id of['bleLog','dockLog']){const el=$('#'+id);if(!el)continue;const d=document.createElement('div');d.textContent=line;el.prepend(d);
+    while(el.children.length>300)el.lastChild.remove()}
+  const last=$('#ldLast');if(last){last.textContent=line;last.classList.remove('flash');void last.offsetWidth;last.classList.add('flash')}
+  const dock=$('#logDock');if(dock)dock.classList.add('has-log');
+}
+function setDockOpen(o){S.logOpen=o;save();const d=$('#logDock');if(d)d.classList.toggle('open',!!o);const t=$('#ldToggle');if(t)t.textContent=o?'▾':'▴'}
 function bleSupportMsg(){
   if(navigator.bluetooth)return null;
   return !isSecureContext?'ต้องเปิดหน้านี้ผ่าน https:// หรือ http://localhost (ดับเบิลคลิก start.cmd) จึงจะใช้ Bluetooth ได้'
@@ -1799,7 +1832,7 @@ function bleStatusText(full){
 }
 function renderBleStatus(){
   const st=ble.state||{phase:'idle'},cls=(BS[st.phase]||BS.idle)[0];
-  [['bleChip',false],['mChip',false],['bleState',true]].forEach(([id,full])=>{
+  [['bleChip',false],['mChip',false],['bleState',true],['ldState',false]].forEach(([id,full])=>{
     const el=$('#'+id);if(!el)return;
     el.className='conn '+cls;el.querySelector('span').textContent=bleStatusText(full);
     el.title=bleStatusText(true);
@@ -2073,6 +2106,9 @@ $('#bleCopy').onclick=async()=>{
   }
 };
 $('#bleChip').onclick=openBle;
+$('#ldToggle').onclick=e=>{e.stopPropagation();setDockOpen(!S.logOpen)};
+$('#ldLast').onclick=()=>setDockOpen(true);
+$('#ldCopy').onclick=e=>{e.stopPropagation();$('#bleCopy').click()};
 $('#mTheme').onclick=$('#bTheme').onclick=()=>{const dark=S.theme==='dark'||(!S.theme&&matchMedia('(prefers-color-scheme: dark)').matches);setTheme(dark?'light':'dark')};
 $('#file').onchange=e=>{if(e.target.files.length)importFiles([...e.target.files]);e.target.value=''};
 ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();document.body.classList.add('drop')}));
@@ -2080,7 +2116,7 @@ $('#file').onchange=e=>{if(e.target.files.length)importFiles([...e.target.files]
 document.addEventListener('drop',e=>{const fs=[...e.dataTransfer.files];if(fs.length)importFiles(fs)});
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',render);
 if(window.Chart)Chart.defaults.font.family='"IBM Plex Sans Thai",system-ui,sans-serif';
-checkLock();loadState().then(()=>{render();initApp();checkLock()});
+checkLock();loadState().then(()=>{render();initApp();checkLock();setDockOpen(S.logOpen!==false&&matchMedia('(min-width:1700px)').matches?true:!!S.logOpen)});
 </script>
 </body>
 </html>
