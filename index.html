@@ -12,14 +12,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.3.0"></script>
-<script src="fft-analysis.js?v=2.3.0"></script>
-<script src="store.js?v=2.3.0"></script>
-<script src="insights.js?v=2.3.0"></script>
-<script src="pages.js?v=2.3.0"></script>
-<script src="ai.js?v=2.3.0"></script>
-<script src="tools.js?v=2.3.0"></script>
-<script src="machine.js?v=2.3.0"></script>
+<script src="ia3-fft.js?v=2.3.1"></script>
+<script src="fft-analysis.js?v=2.3.1"></script>
+<script src="store.js?v=2.3.1"></script>
+<script src="insights.js?v=2.3.1"></script>
+<script src="pages.js?v=2.3.1"></script>
+<script src="ai.js?v=2.3.1"></script>
+<script src="tools.js?v=2.3.1"></script>
+<script src="machine.js?v=2.3.1"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -311,7 +311,8 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <div class="app">
 <nav class="nav" id="nav" aria-label="เมนูหลัก">
   <div class="brand"><b>Vibration Monitor</b><span>แดชบอร์ดเซนเซอร์ i-ALERT3</span><span class="ver" id="appVer"></span></div>
-  <button type="button" class="conn" id="bleChip" title="สถานะการเชื่อมต่อเซนเซอร์"><i></i><span>ยังไม่ได้เชื่อมต่อเซนเซอร์</span></button>
+  <div class="row" style="flex-wrap:nowrap"><button type="button" class="conn" id="bleChip" title="สถานะการเชื่อมต่อเซนเซอร์" style="flex:1;min-width:0"><i></i><span>ยังไม่ได้เชื่อมต่อเซนเซอร์</span></button>
+  <button type="button" class="icon-btn" id="bTheme" title="สลับโหมดมืด/สว่าง" style="width:34px;height:34px"></button></div>
   <div class="navlist" id="views">
     <div class="nav-sec">ติดตาม</div>
     <button class="nav-i" data-v="fleet"><svg viewBox="0 0 24 24"><path d="M3 21V9l9-6 9 6v12M9 21v-6h6v6"/></svg>ทุกเครื่อง</button>
@@ -336,6 +337,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
     <button type="button" class="icon-btn" id="bMenu" aria-label="เปิดเมนู"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
     <b id="mTitle">ภาพรวม</b>
     <button type="button" class="conn" id="mChip" title="สถานะการเชื่อมต่อเซนเซอร์"><i></i><span></span></button>
+    <button type="button" class="icon-btn" id="mTheme" title="สลับโหมดมืด/สว่าง"></button>
   </div>
   <div class="content">
   <main id="main"></main>
@@ -409,7 +411,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.3.0',APP_BUILD='2026-10-17T10:53:59+07:00';
+const APP_VERSION='2.3.1',APP_BUILD='2026-10-17T10:55:07+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -620,7 +622,13 @@ function exportCSV(){
 const VIEWS={fleet:['fleetPage','ทุกเครื่อง'],overview:['main','ภาพรวมเครื่อง'],fft:['fftPage','วิเคราะห์ FFT'],stats:['statsPage','สถิติและเปรียบเทียบ'],ai:['aiPage','วิเคราะห์ด้วย AI'],
   asset:['assetPage','ข้อมูลเครื่อง / บันทึกซ่อม'],route:['routePage','เดินตรวจ / QR'],report:['reportPage','รายงาน'],video:['videoPage','ขยายการสั่นจากวิดีโอ'],
   sensor:['sensorPage','เซนเซอร์ / เชื่อมต่อ'],settings:['setPage','ตั้งค่าและข้อมูล']};
-function applyTheme(){if(S.theme==='light'||S.theme==='dark')document.documentElement.dataset.theme=S.theme;else delete document.documentElement.dataset.theme}
+function applyTheme(){
+  if(S.theme==='light'||S.theme==='dark')document.documentElement.dataset.theme=S.theme;else delete document.documentElement.dataset.theme;
+  const dark=S.theme==='dark'||(!S.theme&&matchMedia('(prefers-color-scheme: dark)').matches);
+  ['#bTheme','#mTheme'].forEach(id=>{const b=$(id);if(b){b.textContent=dark?'☀️':'🌙';b.title=dark?'เปลี่ยนเป็นโหมดสว่าง':'เปลี่ยนเป็นโหมดมืด'}});
+  const m=document.querySelector('meta[name=theme-color]');if(m)m.content=dark?'#161a20':'#1f6feb';
+}
+function setTheme(v){S.theme=v;save();render()}
 function render(){
   applyTheme();
   const ns=names();
@@ -751,7 +759,7 @@ function renderSettings(ns){
       <div class="form">
         <label>หน่วยความเร็ว (velocity)<select id="sUnit"><option value="mm">mm/s</option><option value="in">in/s</option></select></label>
         <label>หน่วยอุณหภูมิ<select id="sTUnit"><option value="C">°C</option><option value="F">°F</option></select></label>
-        <label class="full">ธีม<select id="sTheme"><option value="">ตามเครื่อง</option><option value="light">สว่าง</option><option value="dark">มืด</option></select></label>
+        <label class="full">โหมดหน้าจอ<div class="seg" id="sTheme" style="width:100%">${[['','🖥 ตามเครื่อง'],['light','☀️ สว่าง'],['dark','🌙 มืด']].map(([v,l])=>`<button type="button" data-v="${v}" class="${(S.theme||'')===v?'on':''}" style="flex:1">${l}</button>`).join('')}</div></label>
       </div></div>
     <div class="panel"><div class="ph"><h3>ข้อมูล</h3></div>
       <div class="pbody">
@@ -855,10 +863,10 @@ function renderSettings(ns){
   aiBindSettings();bindCopySettings();
   storageInfo().then(i=>{const el=$('#storeInfo');if(i&&el)el.textContent+=` · ใช้ ${fmtBytes(i.used)} จาก ${fmtBytes(i.quota)}`});
 
-  $('#sUnit').value=S.unit;$('#sTUnit').value=S.tunit;$('#sTheme').value=S.theme||'';
+  $('#sUnit').value=S.unit;$('#sTUnit').value=S.tunit;
   $('#sUnit').onchange=e=>{S.unit=e.target.value;save();render()};
   $('#sTUnit').onchange=e=>{S.tunit=e.target.value;save();render()};
-  $('#sTheme').onchange=e=>{S.theme=e.target.value;save();render()};
+  document.querySelectorAll('#sTheme button').forEach(b=>b.onclick=()=>setTheme(b.dataset.v));
   p.querySelectorAll('.klist li').forEach(li=>{
     const id=li.dataset.id,s=S.sensors[id];
     li.querySelector('.kSave').onclick=()=>{
@@ -2031,6 +2039,7 @@ $('#bleCopy').onclick=async()=>{
   }
 };
 $('#bleChip').onclick=openBle;
+$('#mTheme').onclick=$('#bTheme').onclick=()=>{const dark=S.theme==='dark'||(!S.theme&&matchMedia('(prefers-color-scheme: dark)').matches);setTheme(dark?'light':'dark')};
 $('#file').onchange=e=>{if(e.target.files.length)importFiles([...e.target.files]);e.target.value=''};
 ['dragenter','dragover'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();document.body.classList.add('drop')}));
 ['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==='drop'||!e.relatedTarget)document.body.classList.remove('drop')}));
