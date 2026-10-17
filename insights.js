@@ -186,7 +186,11 @@ function recordHealth(dev,s,res){
   if(s&&!clockOk(s))notify('clk|'+key,'⏱ นาฬิกาเซนเซอร์ไม่ตรง',`${asset}: ${timeSyncNeeded(s)?'ตั้งเวลาอัตโนมัติไม่สำเร็จ กด "ตั้งเวลาเซนเซอร์" หรือใช้แอป i-ALERT':'เซนเซอร์แจ้งว่าตั้งเวลาแล้วแต่เวลาไม่ตรง ให้ใช้แอป i-ALERT'}`,asset);
   else if(s&&s.wasReset)notify('clkfix|'+key,'⏱ เซนเซอร์รีสตาร์ท — ตั้งเวลาให้แล้ว',`${asset}: ถ้าเกิดบ่อยให้ตรวจแบตเตอรี่${s.battV?' ('+s.battV.toFixed(2)+' V)':''}`,asset);
 }
-const BATT_EMPTY=3.0; // V, assumed end of life for the estimate
+// Battery bars as the i-ALERT app computes them from voltage (SensorIAlertBatteryCalculation):
+// cut-offs 3.02 / 2.93 / 2.74 V plus 0.0049 V per °C of sensor temperature; 1 bar = battery alarm
+const battCut=T=>[2.74,2.93,3.02].map(b=>b+0.0049*(T==null?25:T));
+function batteryBars(v,T){if(!(v>0))return null;const c=battCut(T);return v>c[2]?4:v>c[1]?3:v>c[0]?2:1}
+const BATT_EMPTY=2.74+0.0049*25; // V, the app's 1-bar cut-off at 25 °C, used for the months-left estimate
 function healthSummary(id){
   const sv=S.sensors[id]||{},key=sv.mac||id,H=(S.health[key]||[]).slice(),last=H.filter(h=>h.batt!=null).at(-1);
   const out={key,n:H.length,last,issues:[],score:'ok'};
@@ -210,7 +214,10 @@ function healthSummary(id){
     const first=series(sv.asset).find(r=>!r.live);const span=Math.min(30*DAY,Date.now()-(first?first.t:Date.now()));
     out.complete=span>DAY?Math.min(1,got/(span/1000/last.trendSec)):null;
   }
+  const tNow=sv.asset&&series(sv.asset).filter(r=>r.temp!=null).at(-1);out.battT=tNow?tNow.temp:null;out.bars=last?batteryBars(last.batt,out.battT):null;out.cut=battCut(out.battT);
   if(last&&last.batLow)out.issues.push(['bad','เซนเซอร์แจ้งแบตเตอรี่ต่ำ ควรเปลี่ยนแบต']);
+  else if(out.bars===1)out.issues.push(['bad',`แบต ${last.batt.toFixed(2)} V = 1 ขีดจาก 4 (เกณฑ์แบบแอป i-ALERT ที่ ${out.battT!=null?out.battT.toFixed(0):25} °C) ควรเปลี่ยนแบต`]);
+  else if(out.bars===2)out.issues.push(['warn',`แบต ${last.batt.toFixed(2)} V = 2 ขีดจาก 4 ควรเตรียมแบตสำรอง`]);
   else if(out.battMonths!=null&&out.battMonths<3)out.issues.push(['warn',`แบตน่าจะเหลือราว ${out.battMonths.toFixed(1)} เดือน (ประมาณจากแนวโน้ม)`]);
   // clockBad = still wrong after connecting; older records only have reset (= clock was wrong when read)
   const hb=H.filter(h=>h.batt!=null||h.drift!=null).at(-1),clockBad=hb&&(hb.clockBad!=null?hb.clockBad:hb.drift!=null?Math.abs(hb.drift)>86400:hb.reset);out.clockBad=!!clockBad;

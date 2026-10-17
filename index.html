@@ -12,16 +12,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.7.2"></script>
-<script src="fft-analysis.js?v=2.7.2"></script>
-<script src="store.js?v=2.7.2"></script>
-<script src="insights.js?v=2.7.2"></script>
-<script src="pages.js?v=2.7.2"></script>
-<script src="ai.js?v=2.7.2"></script>
-<script src="tools.js?v=2.7.2"></script>
-<script src="machine.js?v=2.7.2"></script>
-<script src="site-config.js?v=2.7.2"></script>
-<script src="gdrive.js?v=2.7.2"></script>
+<script src="ia3-fft.js?v=2.7.3"></script>
+<script src="fft-analysis.js?v=2.7.3"></script>
+<script src="store.js?v=2.7.3"></script>
+<script src="insights.js?v=2.7.3"></script>
+<script src="pages.js?v=2.7.3"></script>
+<script src="ai.js?v=2.7.3"></script>
+<script src="tools.js?v=2.7.3"></script>
+<script src="machine.js?v=2.7.3"></script>
+<script src="site-config.js?v=2.7.3"></script>
+<script src="gdrive.js?v=2.7.3"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -426,7 +426,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.7.2',APP_BUILD='2026-10-17T11:35:35+07:00';
+const APP_VERSION='2.7.3',APP_BUILD='2026-10-17T11:37:17+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -1839,7 +1839,7 @@ function renderHealth(){
     const sv=S.sensors[id],h=healthSummary(id),l=h.last||{},sch=sv.sched||{};
     return`<div class="hcard"><h4>${esc(sv.asset)} <span class="tag ${sc[h.score][0]}">${sc[h.score][1]}</span>${sv.mac?`<span class="muted mono" style="font-size:12px">${sv.mac}</span>`:''}</h4>
       <div class="hgrid">
-        <div>แบตเตอรี่<b>${l.batt?l.batt.toFixed(2)+' V':'–'}</b>${h.battMonths!=null?`เหลือ ~${h.battMonths.toFixed(1)} เดือน`:''}</div>
+        <div>แบตเตอรี่<b>${l.batt?l.batt.toFixed(2)+' V':'–'}${h.bars?' · '+'▮'.repeat(h.bars)+'▯'.repeat(4-h.bars):''}</b>${h.bars?`เต็ม &gt; ${h.cut[2].toFixed(2)} V · เปลี่ยนเมื่อ ≤ ${h.cut[0].toFixed(2)} V<br>`:''}${h.battMonths!=null?`เหลือ ~${h.battMonths.toFixed(1)} เดือน`:''}</div>
         <div>นาฬิกาเซนเซอร์<b>${l.drift==null?'–':h.clockBad?'ไม่ได้ตั้งเวลา':(l.fixed||(l.fixed==null&&l.reset&&Math.abs(l.drift)<=86400))?'ตั้งเวลาแล้ว ✓':fmtDrift(l.drift)}</b>รีสตาร์ท ${h.resets?h.resets.length:0} ครั้ง</div>
         <div>ความครบของข้อมูล 30 วัน<b>${h.complete!=null?Math.round(h.complete*100)+'%':'–'}</b>${l.trendSec?'บันทึกทุก '+Math.round(l.trendSec/60)+' นาที':''}</div>
         <div>เชื่อมต่อสำเร็จครั้งแรก<b>${h.firstTry!=null?Math.round(h.firstTry*100)+'%':'–'}</b>${h.n} ครั้งที่บันทึก</div>
