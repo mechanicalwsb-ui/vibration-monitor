@@ -153,6 +153,8 @@ async function enableNotifications(on){
 function checkAlerts(asset,recs){
   const c=cfg(asset),last=recs.slice().sort((a,b)=>a.t-b.t).at(-1);if(!last)return;
   const al=(c.spec&&c.spec.alarm)||{};if(al.notify===false)return; // switched off for this machine
+  {const cr=String((c.spec&&c.spec.turbine&&c.spec.turbine.critRpm)||'').match(/(\d+)\s*[-–]\s*(\d+)/);
+    if(cr&&last.rpm&&last.rpm>=+cr[1]&&last.rpm<=+cr[2])notify(asset+'|crit','⚠ เทอร์ไบน์เดินในช่วงรอบวิกฤต: '+asset,`${last.rpm} RPM อยู่ในช่วง ${cr[1]}–${cr[2]} RPM ไม่ควรเดินค้างในช่วงนี้`,asset)}
   const z=status(last,c);
   // only after N readings in a row are in C/D (N from the rule or the machine's criticality), so one spike does not alarm
   const n=typeof alarmPersist==='function'?alarmPersist(c):1,lastN=series(asset).filter(r=>!r.live).slice(-n);

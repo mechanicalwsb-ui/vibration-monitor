@@ -12,20 +12,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.17.1"></script>
-<script src="fft-analysis.js?v=2.17.1"></script>
-<script src="store.js?v=2.17.1"></script>
-<script src="activity.js?v=2.17.1"></script>
-<script src="insights.js?v=2.17.1"></script>
-<script src="pages.js?v=2.17.1"></script>
-<script src="ai.js?v=2.17.1"></script>
-<script src="tools.js?v=2.17.1"></script>
-<script src="machine.js?v=2.17.1"></script>
-<script src="machine-setup.js?v=2.17.1"></script>
-<script src="machine-level.js?v=2.17.1"></script>
-<script src="sensor-config.js?v=2.17.1"></script>
-<script src="site-config.js?v=2.17.1"></script>
-<script src="gdrive.js?v=2.17.1"></script>
+<script src="ia3-fft.js?v=2.18.0"></script>
+<script src="fft-analysis.js?v=2.18.0"></script>
+<script src="store.js?v=2.18.0"></script>
+<script src="activity.js?v=2.18.0"></script>
+<script src="insights.js?v=2.18.0"></script>
+<script src="pages.js?v=2.18.0"></script>
+<script src="ai.js?v=2.18.0"></script>
+<script src="tools.js?v=2.18.0"></script>
+<script src="machine.js?v=2.18.0"></script>
+<script src="machine-setup.js?v=2.18.0"></script>
+<script src="machine-level.js?v=2.18.0"></script>
+<script src="sensor-config.js?v=2.18.0"></script>
+<script src="site-config.js?v=2.18.0"></script>
+<script src="gdrive.js?v=2.18.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -297,6 +297,11 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
 .rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
 .plabel svg{width:38mm;height:38mm}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:10px}
+.ftile{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);border-left-width:5px;background:var(--panel);cursor:pointer;min-height:74px}
+.ftile b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ftile .num{font-size:20px;font-weight:600}.ftile small{color:var(--muted);font-size:11px}
+.ft-head{margin:12px 0 6px}
+.flist td{vertical-align:middle}.frow{cursor:pointer}.frow:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}.fl-group td{background:var(--bg);padding-top:8px}
 .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;align-items:start}
 .mgrid>.mgroup{grid-column:1/-1}
 .mgroup{padding:10px 12px 12px;margin:0}
@@ -554,7 +559,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.17.1',APP_BUILD='2026-10-19T11:46:20+07:00';
+const APP_VERSION='2.18.0',APP_BUILD='2026-10-19T11:55:10+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}

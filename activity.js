@@ -79,7 +79,7 @@ function actChanges(kind,prev,cur){
     const va=actVal(a),vb=actVal(b),lbl=ACT_FIELD[k]||k;out.push(va!=null&&vb!=null&&k!=='photo'&&k!=='chart'?`${lbl} ${va} → ${vb}`:lbl)}
   return out;
 }
-const ACT_SPEC={crit:'ความสำคัญ',standby:'เครื่องสำรอง',hoursDay:'ชม.เดินต่อวัน',note:'หมายเหตุ',motor:'ข้อมูลมอเตอร์',driven:'เครื่องถูกขับ',trans:'การส่งกำลัง',sensorOn:'เซนเซอร์ติดที่',
+const ACT_SPEC={driver:'ต้นกำลัง',turbine:'ข้อมูลเทอร์ไบน์',crit:'ความสำคัญ',standby:'เครื่องสำรอง',hoursDay:'ชม.เดินต่อวัน',note:'หมายเหตุ',motor:'ข้อมูลมอเตอร์',driven:'เครื่องถูกขับ',trans:'การส่งกำลัง',sensorOn:'เซนเซอร์ติดที่',
   brg2:'bearing เครื่องถูกขับ',lube:'การหล่อลื่น',axes:'ทิศแกนเซนเซอร์',axesOk:'ยืนยันทิศแกน',mountType:'วิธีติดเซนเซอร์',alarm:'กฎการเตือน',pm:'แผน PM',parts:'อะไหล่',docs:'เอกสาร',vertical:'เพลาตั้ง',lubeTemp:'อุณหภูมิ bearing'};
 const ACT_SUB={persist:'เกินติดกัน',risePct:'เพิ่มขึ้นเกิน %',riseRef:'เทียบกับ',notify:'แจ้งเตือน',quietFrom:'ไม่แจ้งตั้งแต่',quietTo:'ถึง',fft:'เตือนจาก FFT',make:'ยี่ห้อ',model:'รุ่น',serial:'serial',volt:'V',amp:'A',rpm:'รอบ',frame:'frame',ie:'IE',hzMin:'Hz ต่ำสุด',hzMax:'Hz สูงสุด',
   kind:'ชนิด',stages:'จำนวน stage/ชั้นเกียร์',flow:'อัตราไหล',head:'เฮด',npsh:'NPSHr',fluid:'ของเหลว',ftype:'ชนิดพัดลม',overhung:'overhung',ctype:'ชนิด',male:'กลีบ male',female:'กลีบ female',desc:'รายละเอียด',

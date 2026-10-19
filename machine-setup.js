@@ -12,6 +12,11 @@ function setPath(o,p,v){const ks=p.split('.'),last=ks.pop();let x=o;for(const k 
 // ---------- bearings at four positions ----------
 // motor DE/NDE are the existing profile.brg.de/nde; the driven machine's are spec.brg2.de/nde
 const BPOS=[['m_nde','มอเตอร์ NDE'],['m_de','มอเตอร์ DE'],['d_de','เครื่องถูกขับ DE'],['d_nde','เครื่องถูกขับ NDE']];
+// the driver can be an electric motor or a steam turbine (sugar mills, boiler feed pumps, fans)
+const DRIVERS={motor:'มอเตอร์',turbine:'เทอร์ไบน์'};
+const drvKind=c=>(c&&c.spec&&c.spec.driver)==='turbine'?'turbine':'motor';
+const drvName=c=>DRIVERS[drvKind(c)];
+const bpos=c=>BPOS.map(([p,l])=>[p,l.replace('มอเตอร์',drvName(c))]);
 const USE2POS={de:'m_de',nde:'m_nde',dde:'d_de',dnde:'d_nde'},POS2USE={m_de:'de',m_nde:'nde',d_de:'dde',d_nde:'dnde'};
 function brgAt(c,pos){const pr=c.profile||{};return pos[0]==='m'?(pr.brg||{})[pos==='m_de'?'de':'nde']:((specOf(c).brg2||{})[pos==='d_de'?'de':'nde'])}
 function setBrgAt(c,pos,b){
@@ -61,22 +66,25 @@ function machineFreqs(c,f1){
   if(!(f1>0))return[];const s=specOf(c),t=s.trans||{},d=s.driven||{},out=[];
   const add=(grp,name,hz,short)=>{if(hz>0&&Number.isFinite(hz))out.push({grp,name,hz,short:short||name})};
   const{fM,fD,ratio}=shaftSpeeds(c,f1);
-  add('เพลา','1X มอเตอร์',fM,'1X M');add('เพลา','2X มอเตอร์',2*fM,'2X M');
+  const dn=drvName(c),turb=drvKind(c)==='turbine';
+  add('เพลา','1X '+dn,fM,'1X M');add('เพลา','2X '+dn,2*fM,'2X M');
   if(Math.abs(ratio-1)>1e-3){add('เพลา','1X เครื่องถูกขับ',fD,'1X D');add('เพลา','2X เครื่องถูกขับ',2*fD,'2X D')}
-  const lf=(c.drive&&c.drive.lineHz)||50,m=motorFreqs(fM,c);add('ไฟฟ้า','ความถี่ไฟ (LF)',lf,'LF');add('ไฟฟ้า','2×LF',2*lf);
+  const lf=(c.drive&&c.drive.lineHz)||50,m=turb?null:motorFreqs(fM,c);if(!turb){add('ไฟฟ้า','ความถี่ไฟ (LF)',lf,'LF');add('ไฟฟ้า','2×LF',2*lf)}
+  if(turb){const tb=s.turbine||{};(tb.stages||[]).forEach((st,i)=>{if(st.blades>0){add('เทอร์ไบน์',`Blade pass ชั้น ${i+1} (${st.blades} ใบ)`,st.blades*fM,`TBP${i+1}`);add('เทอร์ไบน์',`2× Blade pass ชั้น ${i+1}`,2*st.blades*fM)}});
+    if(tb.nozzles>0)add('เทอร์ไบน์',`Nozzle pass (${tb.nozzles} หัวฉีด)`,tb.nozzles*fM,'Nozzle')}
   if(m){if(m.slip>0)add('ไฟฟ้า','Slip',m.slip);if(m.ppf>0.01)add('ไฟฟ้า','Pole pass (PPF)',m.ppf,'PPF');if(m.rbpf)add('ไฟฟ้า','Rotor bar pass',m.rbpf,'RBPF')}
   if(t.kind==='belt'&&t.d1>0&&t.len>0)add('ส่งกำลัง','Belt pass',fM*Math.PI*t.d1/t.len,'Belt');
   if(t.kind==='gear'){let fin=fM;(t.stages||[]).forEach((g,i)=>{if(!(g.z1>0&&g.z2>0))return;add('ส่งกำลัง',`GMF ชั้น ${i+1}`,fin*g.z1,`GMF${i+1}`);const fo=fin*g.z1/g.z2;add('เพลา',`เพลาออกชั้น ${i+1}`,fo,`S${i+1}`);fin=fo})}
   const blades=c.vanes>0?c.vanes:null;
   if(blades&&['pump','fan',undefined,''].includes(d.kind)){const nm=d.kind==='fan'?'Blade pass':'Vane pass';add('เครื่องถูกขับ',nm,blades*fD,d.kind==='fan'?'BPF':'VPF');add('เครื่องถูกขับ','2×'+nm,2*blades*fD)}
   if(d.kind==='compressor'&&d.male>0)add('เครื่องถูกขับ','Lobe pass (male)',d.male*fD,'Lobe');
-  for(const[pos,label]of BPOS){const b=brgAt(c,pos),g=brgGeom(b);if(!g)continue;const bf=bearingFreqs(pos[0]==='m'?fM:fD,g);if(!bf)continue;
+  for(const[pos,label]of bpos(c)){const b=brgAt(c,pos),g=brgGeom(b);if(!g)continue;const bf=bearingFreqs(pos[0]==='m'?fM:fD,g);if(!bf)continue;
     for(const[k,v]of Object.entries(bf))add('bearing',`${label}${b.code?' '+b.code:''} ${k}`,v,`${k} ${pos.replace('_','').toUpperCase()}`)}
   return out.sort((a,b)=>a.hz-b.hz);
 }
 // FFT marker lines from the table (shaft 1X/2X and line frequency are drawn by the other marker options)
 function machineSetupMarks(f1,c,fmax,k){
-  const col={'ไฟฟ้า':k.t,'ส่งกำลัง':k.y,'เครื่องถูกขับ':k.r,'bearing':k.zd,'เพลา':k.z};
+  const col={'เทอร์ไบน์':k.t,'ไฟฟ้า':k.t,'ส่งกำลัง':k.y,'เครื่องถูกขับ':k.r,'bearing':k.zd,'เพลา':k.z};
   return machineFreqs(c,f1).filter(r=>r.hz<=fmax&&!/^(1X M|2X M|LF|2×LF)$/.test(r.short)).map(r=>({x:r.hz,label:r.short,color:col[r.grp]||k.muted}));
 }
 
@@ -121,7 +129,7 @@ function pmPanelHtml(){
 function completeness(a){
   const c=cfg(a),pr=c.profile||{},s=c.spec||{},t=s.trans||{},d=s.driven||{};
   const chk=[[!!pr.type,'ประเภทเครื่อง'],[c.rpm>0||(s.motor&&s.motor.rpm>0),'ความเร็วรอบ'],[pr.kw>0&&!!pr.found,'kW และฐาน (ใช้เลือกเกณฑ์ ISO)'],
-    [!!brgGeom(brgAt(c,measPos(c))),'bearing ตรงจุดวัด (ใช้หา BPFO/BPFI)'],[!!(c.drive&&c.drive.poles),'จำนวนขั้วมอเตอร์ (ใช้หา pole pass)'],
+    [!!brgGeom(brgAt(c,measPos(c))),'bearing ตรงจุดวัด (ใช้หา BPFO/BPFI)'],[drvKind(c)==='turbine'?((s.turbine||{}).stages||[]).some(x=>x.blades>0):!!(c.drive&&c.drive.poles),drvKind(c)==='turbine'?'จำนวนใบเทอร์ไบน์ (ใช้หา blade pass)':'จำนวนขั้วมอเตอร์ (ใช้หา pole pass)'],
     [!!t.kind,'ชนิดการส่งกำลัง'],[!['pump','fan'].includes(d.kind)||c.vanes>0,'จำนวนใบพัด/ใบพัดลม'],[!!d.kind,'ชนิดเครื่องถูกขับ'],
     [!!s.crit,'ความสำคัญของเครื่อง (A/B/C)'],[!!s.axesOk,'ยืนยันทิศแกนเซนเซอร์'],[(s.pm||[]).length>0,'แผนบำรุงรักษาอย่างน้อย 1 งาน']];
   const ok=chk.filter(x=>x[0]).length;return{pct:Math.round(ok/chk.length*100),missing:chk.filter(x=>!x[0]).map(x=>x[1])};
@@ -170,7 +178,7 @@ function syncTrans(c){const t=specOf(c).trans||{};c.drive=c.drive||{};
   if(t.kind==='gear'&&t.stages&&t.stages[0]&&t.stages[0].z1>0&&specOf(c).sensorOn!=='driven')c.drive.teeth=t.stages[0].z1;else if(t.kind&&t.kind!=='gear')delete c.drive.teeth}
 
 // ---------- the page ----------
-const MS_TABS=[['gen','ทั่วไป'],['motor','มอเตอร์'],['driven','เครื่องถูกขับ'],['trans','ส่งกำลัง'],['brg','ตลับลูกปืน'],['sensor','จุดวัด/เซนเซอร์'],['alarm','เกณฑ์/การเตือน'],['pm','บำรุงรักษา'],['freq','ความถี่'],['reg','ทะเบียน/แม่แบบ']];
+const MS_TABS=[['gen','ทั่วไป'],['motor','ต้นกำลัง'],['driven','เครื่องถูกขับ'],['trans','ส่งกำลัง'],['brg','ตลับลูกปืน'],['sensor','จุดวัด/เซนเซอร์'],['alarm','เกณฑ์/การเตือน'],['pm','บำรุงรักษา'],['freq','ความถี่'],['reg','ทะเบียน/แม่แบบ']];
 const DRIVEN=[['','— เลือก —'],['pump','ปั๊มหอยโข่ง'],['fan','พัดลม/โบลเวอร์'],['compressor','คอมเพรสเซอร์'],['mill','หีบอ้อย'],['centrifuge','เครื่องเหวี่ยง'],['conveyor','สายพานลำเลียง'],['other','อื่น ๆ']];
 function renderSetupPage(){
   const p=$('#setupPage'),ns=names(),a=S.sel;
@@ -181,10 +189,10 @@ function renderSetupPage(){
     if(o.sel)return`<label${o.full?' class="full"':''}>${label}<select data-f="${pth}" ${o.rr?'data-rr="1"':''}>${o.sel.map(([k,l])=>`<option value="${esc(k)}" ${xs===String(k)?'selected':''}>${esc(l)}</option>`).join('')}</select>${o.hint?`<small class="muted">${o.hint}</small>`:''}</label>`;
     if(o.check)return`<label class="check${o.full?' full':''}"><input type="checkbox" data-f="${pth}" data-t="bool" ${x?'checked':''} ${o.rr?'data-rr="1"':''}> ${label}</label>`;
     return`<label${o.full?' class="full"':''}>${label}<span class="ms-in"><input ${o.num?'type="number" step="any" data-t="num"':'type="text"'} data-f="${pth}" value="${v(pth)}" placeholder="${esc(o.ph||'')}" ${o.rr?'data-rr="1"':''}>${o.unit?`<em>${o.unit}</em>`:''}</span>${o.hint?`<small class="muted">${o.hint}</small>`:''}</label>`};
-  const f1=(c.rpm||(s.motor&&s.motor.rpm)||0)/60,lf=(c.drive&&c.drive.lineHz)||50;
+  const f1=(c.rpm||(drvKind(c)==='turbine'?(s.turbine||{}).rpm:(s.motor||{}).rpm)||0)/60,lf=(c.drive&&c.drive.lineHz)||50;
   let body='';
   if(MS.tab==='gen')body=`<div class="form">
-    ${F('ประเภท','profile.type',{sel:[['',''],...['ปั๊ม','มอเตอร์','พัดลม/โบลเวอร์','เกียร์','คอมเพรสเซอร์','อื่น ๆ'].map(x=>[x,x])]})}
+    ${F('ประเภท','profile.type',{sel:[['',''],...['ปั๊ม','มอเตอร์','เทอร์ไบน์ไอน้ำ','หีบอ้อย','พัดลม/โบลเวอร์','เกียร์','คอมเพรสเซอร์','อื่น ๆ'].map(x=>[x,x])]})}
     ${F('หมายเลขเครื่อง (Tag)','profile.tag')}${F('พื้นที่ / อาคาร','profile.area')}${F('ตำแหน่งติดตั้ง','profile.loc')}
     ${F('เครื่องจักร (กลุ่มจุดวัด)','machine',{ph:'เช่น P-101'})}${F('ชื่อจุดวัด','point',{ph:'เช่น Motor DE'})}
     ${F('ความสำคัญ','spec.crit',{sel:[['','— เลือก —'],['A','A · สำคัญมาก (หยุดแล้วกระทบการผลิต)'],['B','B · สำคัญ'],['C','C · ทั่วไป / มีสำรอง']],rr:1})}
@@ -193,8 +201,20 @@ function renderSetupPage(){
     ${F('หมายเหตุ','spec.note',{full:1})}
     <label class="full">รูปเครื่อง<input type="file" accept="image/*" capture="environment" id="msPhoto"></label>
     ${pr.photo?`<img src="${imgSrc(pr.photo)}" class="full" style="max-width:100%;max-height:200px;object-fit:contain;border-radius:8px">`:''}</div>`;
+  else if(MS.tab==='motor'&&drvKind(c)==='turbine'){const tb=s.turbine||{};
+    body=`<div class="form">${F('ต้นกำลัง','spec.driver',{sel:[['','มอเตอร์ไฟฟ้า'],['turbine','เทอร์ไบน์ไอน้ำ']],rr:1})}
+    ${F('ยี่ห้อ','spec.turbine.make')}${F('รุ่น','spec.turbine.model')}${F('Serial','spec.turbine.serial')}
+    ${F('ชนิด','spec.turbine.type',{sel:[['',''],['backpressure','Back-pressure'],['condensing','Condensing'],['extraction','Extraction']]})}
+    ${F('กำลัง','profile.kw',{num:1,unit:'kW'})}${F('รอบใช้งานปกติ','spec.turbine.rpm',{num:1,unit:'RPM',rr:1})}${F('รอบ trip (overspeed)','spec.turbine.tripRpm',{num:1,unit:'RPM'})}
+    ${F('ไอน้ำเข้า (ความดัน)','spec.turbine.steamP',{num:1,unit:'bar'})}${F('ไอน้ำเข้า (อุณหภูมิ)','spec.turbine.steamT',{num:1,unit:'°C'})}${F('ไอน้ำออก (ความดัน)','spec.turbine.exhP',{num:1,unit:'bar'})}
+    ${F('Governor','spec.turbine.governor',{ph:'เช่น Woodward 505'})}${F('จำนวนหัวฉีด (nozzle)','spec.turbine.nozzles',{num:1,rr:1})}
+    ${F('ช่วงรอบวิกฤต (critical speed)','spec.turbine.critRpm',{ph:'เช่น 2400–2700',hint:'ใช้เตือนเมื่อเดินค้างในช่วงนี้'})}
+    <div class="full"><b style="font-size:13px">ชั้นใบเทอร์ไบน์ (ใช้หา blade pass)</b><table class="ms-t"><thead><tr><th>ชั้น</th><th>จำนวนใบ</th><th class="num">Blade pass</th><th></th></tr></thead><tbody>
+      ${(tb.stages||[]).map((st,i)=>`<tr><td>${i+1}</td><td><input type="number" data-ts="${i}" value="${st.blades||''}"></td><td class="num">${st.blades&&f1?(st.blades*shaftSpeeds(c,f1).fM).toFixed(1)+' Hz':'–'}</td><td><button type="button" class="btn sm" data-tdel="${i}">×</button></td></tr>`).join('')}
+      </tbody></table><button type="button" class="btn sm" id="msTAdd">+ เพิ่มชั้นใบ</button></div>
+    <p class="full muted" style="margin:0;font-size:12px">เทอร์ไบน์ไม่มีความถี่ไฟฟ้า (LF, pole pass) · ถ้าขับหีบอ้อยผ่านเกียร์ ให้ใส่ชั้นเกียร์ในแท็บส่งกำลัง · bearing ของเทอร์ไบน์ใส่ที่ตำแหน่ง "เทอร์ไบน์ DE/NDE"</p></div>`}
   else if(MS.tab==='motor'){const m=s.motor||{},guess=m.rpm>0?Math.max(2,Math.round(120*lf/m.rpm/2)*2):null;
-    body=`<div class="form">
+    body=`<div class="form">${F('ต้นกำลัง','spec.driver',{sel:[['','มอเตอร์ไฟฟ้า'],['turbine','เทอร์ไบน์ไอน้ำ']],rr:1})}
     ${F('ยี่ห้อ','spec.motor.make')}${F('รุ่น','spec.motor.model')}${F('Serial','spec.motor.serial')}${F('Frame','spec.motor.frame')}
     ${F('กำลัง','profile.kw',{num:1,unit:'kW'})}${F('แรงดัน','spec.motor.volt',{num:1,unit:'V'})}${F('กระแส (FLA)','spec.motor.amp',{num:1,unit:'A'})}
     ${F('รอบตามป้าย','spec.motor.rpm',{num:1,unit:'RPM',rr:1})}
@@ -212,18 +232,18 @@ function renderSetupPage(){
     ${!d.kind?'<p class="full muted">เลือกชนิดเครื่องแล้วจะมีช่องเฉพาะชนิดนั้น</p>':''}</div>`}
   else if(MS.tab==='trans'){const t=s.trans||{},sp=f1?shaftSpeeds(c,f1):null;
     body=`<div class="form">${F('การส่งกำลัง','spec.trans.kind',{sel:[['','— เลือก —'],['direct','ต่อตรง'],['coupling','คัปปลิ้ง'],['belt','สายพาน'],['gear','เกียร์']],rr:1})}
-    ${F('เซนเซอร์ติดอยู่ที่','spec.sensorOn',{sel:[['','มอเตอร์ (ฝั่งขับ)'],['driven','เครื่องถูกขับ']],rr:1})}
+    ${F('เซนเซอร์ติดอยู่ที่','spec.sensorOn',{sel:[['',drvName(c)+' (ฝั่งขับ)'],['driven','เครื่องถูกขับ']],rr:1})}
     ${F('รอบเพลาที่จุดวัด','rpm',{num:1,unit:'RPM',rr:1,hint:'ใช้เป็น 1X ในหน้า FFT (เครื่อง VFD ใช้รอบของแต่ละชุดที่วัด)'})}
     ${t.kind==='coupling'?F('ชนิดคัปปลิ้ง','spec.trans.coupling',{ph:'เช่น jaw, grid, disc, gear'}):''}
-    ${t.kind==='belt'?F('Ø พูลเลย์ขับ (มอเตอร์)','spec.trans.d1',{num:1,unit:'mm',rr:1})+F('Ø พูลเลย์ตาม','spec.trans.d2',{num:1,unit:'mm',rr:1})+F('ความยาวสายพาน','spec.trans.len',{num:1,unit:'mm',rr:1})+F('จำนวนเส้น','spec.trans.n',{num:1}):''}
-    ${t.kind==='gear'?`<div class="full"><b style="font-size:13px">ชั้นเกียร์ (นับจากฝั่งมอเตอร์)</b><table class="ms-t"><thead><tr><th>ชั้น</th><th>ฟันเฟืองขับ</th><th>ฟันเฟืองตาม</th><th>อัตราทด</th><th></th></tr></thead><tbody>
+    ${t.kind==='belt'?F('Ø พูลเลย์ขับ ('+drvName(c)+')','spec.trans.d1',{num:1,unit:'mm',rr:1})+F('Ø พูลเลย์ตาม','spec.trans.d2',{num:1,unit:'mm',rr:1})+F('ความยาวสายพาน','spec.trans.len',{num:1,unit:'mm',rr:1})+F('จำนวนเส้น','spec.trans.n',{num:1}):''}
+    ${t.kind==='gear'?`<div class="full"><b style="font-size:13px">ชั้นเกียร์ (นับจากฝั่ง${drvName(c)})</b><table class="ms-t"><thead><tr><th>ชั้น</th><th>ฟันเฟืองขับ</th><th>ฟันเฟืองตาม</th><th>อัตราทด</th><th></th></tr></thead><tbody>
       ${(t.stages||[]).map((g,i)=>`<tr><td>${i+1}</td><td><input type="number" data-gs="${i}" data-k="z1" value="${g.z1||''}"></td><td><input type="number" data-gs="${i}" data-k="z2" value="${g.z2||''}"></td><td class="num">${g.z1&&g.z2?(g.z2/g.z1).toFixed(3)+' : 1':'–'}</td><td><button type="button" class="btn sm" data-gdel="${i}">×</button></td></tr>`).join('')}
       </tbody></table><button type="button" class="btn sm" id="msGAdd">+ เพิ่มชั้น</button></div>`:''}
-    ${sp?`<p class="full muted" style="margin:0">รอบมอเตอร์ ${Math.round(sp.fM*60)} RPM · รอบเครื่องถูกขับ ${Math.round(sp.fD*60)} RPM${Math.abs(sp.ratio-1)>1e-3?` (อัตรา ${sp.ratio.toFixed(3)})`:''}</p>`:'<p class="full muted" style="margin:0">ใส่รอบเพลาที่จุดวัด หรือรอบตามป้ายมอเตอร์ เพื่อคำนวณรอบแต่ละเพลา</p>'}</div>`}
+    ${sp?`<p class="full muted" style="margin:0">รอบ${drvName(c)} ${Math.round(sp.fM*60)} RPM · รอบเครื่องถูกขับ ${Math.round(sp.fD*60)} RPM${Math.abs(sp.ratio-1)>1e-3?` (อัตรา ${sp.ratio.toFixed(3)})`:''}</p>`:'<p class="full muted" style="margin:0">ใส่รอบเพลาที่จุดวัด หรือรอบตามป้ายมอเตอร์ เพื่อคำนวณรอบแต่ละเพลา</p>'}</div>`}
   else if(MS.tab==='brg'){const T=(c.spec&&c.spec.lubeTemp)||((lastOf(a)||{}).temp)||null,sp=f1?shaftSpeeds(c,f1):null;
     body=`<datalist id="msBrgList">${BRG_LIST.concat(Object.keys(S.brgDb||{})).map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
     <p class="muted" style="margin:0 0 8px;font-size:12.5px">พิมพ์เบอร์แล้วระบบเติมขนาดให้ (ใช้คำนวณ BPFO/BPFI/BSF/FTF และปริมาณจาระบี) · เลือก "จุดวัด" = bearing ที่ติดเซนเซอร์ (ใช้ในหน้า FFT)</p>
-    <div class="ms-brg">${BPOS.map(([pos,label])=>{const b=brgAt(c,pos)||{},inf=brgInfo(b.code)||{},L=(s.lube||{})[pos]||{},rpm=sp?(pos[0]==='m'?sp.fM:sp.fD)*60:0,rl=relube(Object.assign({},b,L),rpm,T,s.vertical);
+    <div class="ms-brg">${bpos(c).map(([pos,label])=>{const b=brgAt(c,pos)||{},inf=brgInfo(b.code)||{},L=(s.lube||{})[pos]||{},rpm=sp?(pos[0]==='m'?sp.fM:sp.fD)*60:0,rl=relube(Object.assign({},b,L),rpm,T,s.vertical);
       return`<div class="panel ms-bcard" data-pos="${pos}"><div class="ph"><h3>${label}</h3><label class="check" style="font-size:12px"><input type="radio" name="msUse" value="${pos}" ${measPos(c)===pos?'checked':''}> จุดวัด</label></div><div class="form">
         <label>เบอร์ bearing<input class="bC" list="msBrgList" value="${esc(b.code||'')}" placeholder="เช่น 6309, 22216"></label>
         <label>ชนิด<select class="bK"><option value="">${inf.kind?'อัตโนมัติ ('+({ball:'ball',roller:'roller',spherical:'spherical'}[inf.kind])+')':'—'}</option><option value="ball" ${L.kind==='ball'?'selected':''}>Ball</option><option value="roller" ${L.kind==='roller'?'selected':''}>Cylindrical roller</option><option value="spherical" ${L.kind==='spherical'?'selected':''}>Spherical/Taper</option></select></label>
@@ -308,9 +328,13 @@ function msBind(a,c){
     if(i.dataset.f==='drive.poles')v=v===''?null:+v;
     setPath(c,i.dataset.f,v);
     if(i.dataset.f.startsWith('spec.trans')||i.dataset.f==='spec.sensorOn')syncTrans(c);
-    if(i.dataset.f==='spec.motor.rpm'&&!c.rpm&&v)c.rpm=v; // the rated speed is a good first 1X
+    if((i.dataset.f==='spec.motor.rpm'||i.dataset.f==='spec.turbine.rpm')&&!c.rpm&&v)c.rpm=v; // the rated speed is a good first 1X
     save();if(i.dataset.rr)re();else{const d=p.querySelector('.ms-done');if(d){const q=completeness(a);d.lastChild.textContent=' ข้อมูลครบ '+q.pct+'%';d.querySelector('i').style.width=q.pct+'%'}}});
   if($('#msPhoto'))$('#msPhoto').onchange=async e=>{if(!e.target.files[0])return;c.profile.photo=await shrinkImage(e.target.files[0]);save();re()};
+  // turbine blade stages
+  p.querySelectorAll('[data-ts]').forEach(i=>i.onchange=()=>{s.turbine.stages[+i.dataset.ts].blades=+i.value||null;save();re()});
+  p.querySelectorAll('[data-tdel]').forEach(b=>b.onclick=()=>{s.turbine.stages.splice(+b.dataset.tdel,1);save();re()});
+  if($('#msTAdd'))$('#msTAdd').onclick=()=>{s.turbine=s.turbine||{};(s.turbine.stages=s.turbine.stages||[]).push({blades:null});save();re()};
   // gear stages
   p.querySelectorAll('[data-gs]').forEach(i=>i.onchange=()=>{const st=s.trans.stages[+i.dataset.gs];st[i.dataset.k]=+i.value||null;syncTrans(c);save();re()});
   p.querySelectorAll('[data-gdel]').forEach(b=>b.onclick=()=>{s.trans.stages.splice(+b.dataset.gdel,1);syncTrans(c);save();re()});
@@ -325,7 +349,7 @@ function msBind(a,c){
     q('.bC').onchange=()=>{const g=bearingGeom(q('.bC').value);if(g){if(g.n)q('.bN').value=g.n;if(g.d)q('.bD').value=g.d;if(g.D)q('.bP').value=g.D;if(g.ang!=null)q('.bA').value=g.ang}upd()};
     card.querySelectorAll('input:not(.bC),select').forEach(i=>{if(i.name!=='msUse')i.onchange=upd})});
   p.querySelectorAll('input[name=msUse]').forEach(r=>r.onchange=()=>{c.profile.brgUse=POS2USE[r.value];syncMeasured(c);FA.marks.bearing=!!c.bearing;save();re()});
-  p.querySelectorAll('[data-mkpm]').forEach(b=>b.onclick=()=>{const pos=b.dataset.mkpm,lbl=(BPOS.find(x=>x[0]===pos)||[])[1],code=(brgAt(c,pos)||{}).code||'';
+  p.querySelectorAll('[data-mkpm]').forEach(b=>b.onclick=()=>{const pos=b.dataset.mkpm,lbl=(bpos(c).find(x=>x[0]===pos)||[])[1],code=(brgAt(c,pos)||{}).code||'';
     (s.pm=s.pm||[]).push({id:uid(),name:`เติมจาระบี ${lbl} ${code}${b.dataset.g?' · '+b.dataset.g+' g':''}`,every:+b.dataset.h,unit:'runh',lube:pos,created:((s.lube||{})[pos]||{}).last||Date.now()});
     save();MS.tab='pm';re();toast('สร้างงานเติมจาระบีแล้ว')});
   // axes
@@ -351,12 +375,13 @@ function msBind(a,c){
 function machineSetupSummary(c,f1){
   const s=c.spec||{},pr=c.profile||{},t=s.trans||{},o={};
   if(s.crit)o.criticality=s.crit;if(s.standby)o.standby=true;if(s.hoursDay)o.hoursPerDay=s.hoursDay;
-  if(s.motor)o.motor=Object.fromEntries(Object.entries(s.motor).filter(([k])=>k!=='serial'));
+  o.driver=drvName(c);if(drvKind(c)==='turbine'&&s.turbine)o.turbine=Object.fromEntries(Object.entries(s.turbine).filter(([k])=>k!=='serial'));
+  else if(s.motor)o.motor=Object.fromEntries(Object.entries(s.motor).filter(([k])=>k!=='serial'));
   if(c.drive&&c.drive.poles)o.motorPoles=c.drive.poles;
   if(s.driven&&s.driven.kind)o.driven=s.driven;
   if(t.kind)o.transmission=t;if(s.sensorOn)o.sensorOn=s.sensorOn;
   o.sensorAxes=Object.fromEntries(Object.entries(sensorAxesOf(c)).map(([k,v])=>[k.toUpperCase(),AXN[v]]));
-  const br={};for(const[pos,l]of BPOS){const b=brgAt(c,pos);if(b&&b.code)br[l]=b.code}if(Object.keys(br).length)o.bearings=br;
+  const br={};for(const[pos,l]of bpos(c)){const b=brgAt(c,pos);if(b&&b.code)br[l]=b.code}if(Object.keys(br).length)o.bearings=br;
   if(f1>0)o.frequenciesHz=machineFreqs(c,f1).slice(0,40).map(r=>({name:r.name,hz:+r.hz.toFixed(2)}));
   return o;
 }

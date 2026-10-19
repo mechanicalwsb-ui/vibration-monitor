@@ -7,7 +7,7 @@
 // - Whole-machine AI analysis, report and grouped alerts.
 // Loaded after machine-setup.js; uses the dashboard's globals at call time.
 
-const SHARED_PATHS=['profile.type','profile.kw','profile.found','profile.tag','profile.area','profile.loc','profile.photo','profile.brg','vfd','drive','vanes',
+const SHARED_PATHS=['spec.driver','spec.turbine','profile.type','profile.kw','profile.found','profile.tag','profile.area','profile.loc','profile.photo','profile.brg','vfd','drive','vanes',
   'spec.crit','spec.standby','spec.hoursDay','spec.note','spec.motor','spec.driven','spec.trans','spec.brg2','spec.lube','spec.pm','spec.parts','spec.docs','spec.alarm','spec.vertical','spec.lubeTemp'];
 const mlClone=v=>v===undefined?undefined:JSON.parse(JSON.stringify(v));
 function sharedSlice(c){const o={};for(const p of SHARED_PATHS){const v=getPath(c,p);if(v!==undefined&&v!==null)o[p]=mlClone(v)}return o}
@@ -38,10 +38,10 @@ const sharedWith=a=>{const c=cfg(a),m=(c.machine||'').trim();if(!m)return[];cons
 
 // ---------- where a point sits on the machine ----------
 function pointSide(a){const c=cfg(a),u=(c.profile||{}).brgUse,l=pointLabel(a);
-  if(u==='dde'||u==='dnde')return'driven';if(/motor|มอเตอร์|^m[\s-]?n?de/i.test(l))return'motor';
+  if(u==='dde'||u==='dnde')return'driven';if(/motor|มอเตอร์|turbine|เทอร์ไบน์|^[mt][\s-]?n?de/i.test(l))return'motor';
   if(/pump|ปั๊ม|fan|พัดลม|gear|เกียร์|blower|โบลเวอร์|comp|^p[\s-]?n?de/i.test(l))return'driven';return u==='de'||u==='nde'?'motor':'?'}
 function pointEnd(a){const c=cfg(a),u=(c.profile||{}).brgUse,l=pointLabel(a);if(/nde/i.test(l)||u==='nde'||u==='dnde')return'NDE';if(/de\b|ฝั่งขับ/i.test(l)||u==='de'||u==='dde')return'DE';return'?'}
-const SIDE_TH={motor:'มอเตอร์',driven:'เครื่องถูกขับ','?':'ไม่ระบุ'};
+const SIDE_TH={motor:'ต้นกำลัง',driven:'เครื่องถูกขับ','?':'ไม่ระบุ'};
 // radial / axial from the trend reading, using this point's sensor axes
 function radAx(a,r){const o=sensorAxesOf(cfg(a)),v={x:r.vx,y:r.vy,z:r.vz};let ax=null,rad=null;
   for(const k of['x','y','z']){if(v[k]==null)continue;if(o[k]==='A')ax=v[k];else rad=Math.max(rad??0,v[k])}return{rad,ax}}
@@ -53,8 +53,8 @@ async function machineDiag(m){
   const add=(lvl,t,why)=>out.push({lvl,t,why});
   // 1. which side is the source
   const mx=s=>vmax(P.filter(p=>p.side===s).map(p=>p.ov));const mo=mx('motor'),dr=mx('driven');
-  if(mo&&dr){const k=mo/dr;if(k>=1.5)add('info','ต้นเหตุน่าจะอยู่ฝั่งมอเตอร์',`มอเตอร์สั่นสูงกว่าเครื่องถูกขับ ~${k.toFixed(1)} เท่า (${fv(mo)} vs ${fv(dr)} ${uv()})`);
-    else if(1/k>=1.5)add('info','ต้นเหตุน่าจะอยู่ฝั่งเครื่องถูกขับ',`เครื่องถูกขับสั่นสูงกว่ามอเตอร์ ~${(1/k).toFixed(1)} เท่า (${fv(dr)} vs ${fv(mo)} ${uv()})`)}
+  if(mo&&dr){const k=mo/dr;if(k>=1.5)add('info',`ต้นเหตุน่าจะอยู่ฝั่ง${drvName(P[0].c)}`,`${drvName(P[0].c)}สั่นสูงกว่าเครื่องถูกขับ ~${k.toFixed(1)} เท่า (${fv(mo)} vs ${fv(dr)} ${uv()})`);
+    else if(1/k>=1.5)add('info','ต้นเหตุน่าจะอยู่ฝั่งเครื่องถูกขับ',`เครื่องถูกขับสั่นสูงกว่า${drvName(P[0].c)} ~${(1/k).toFixed(1)} เท่า (${fv(dr)} vs ${fv(mo)} ${uv()})`)}
   // 2. axial high on both sides of the coupling -> misalignment
   const cp=P.filter(p=>p.end==='DE'&&p.ax!=null&&p.rad);
   const hiAx=cp.filter(p=>p.ax>=0.5*p.rad&&p.ov>=(p.c.z||[1.4])[0]);

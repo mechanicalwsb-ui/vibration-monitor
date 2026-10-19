@@ -66,20 +66,36 @@ function renderFleet(){
       ${pmAll().some(x=>x.a===i.a&&x.due)?`<div class="fc-sub up">🔧 งาน PM ถึงกำหนด ${pmStatus(i.a).filter(x=>x.due).length} งาน</div>`:''}
       ${openFailures(i.a).length?`<div class="fc-sub up">รายงานความผิดปกติเปิดอยู่ ${openFailures(i.a).length} เรื่อง</div>`:''}
       ${i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60?`<div class="fc-sub up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</div>`:''}</div>`;
+  // sections: machine groups (machine layout) or the chosen grouping; drawn as cards, a table or small tiles
+  const FV=S.fleetView||'card';
+  const sections=sort==='machine'?mGroups.map(g=>({multi:g.all.length>1,g,items:g.its})):groups.map(([g,l])=>({title:g,items:l}));
+  const mHead=g=>`<span class="dot z${g.wz||''}"></span><b>${esc(g.m)}</b>${g.crit?`<span class="crit ${g.crit}" title="ความสำคัญ">${g.crit}</span>`:''}${g.wz?`<span class="tag z${g.wz}">${ZL[g.wz]}</span>`:''}<span class="muted">${g.all.length} เซนเซอร์${g.its.length<g.all.length?` (แสดง ${g.its.length})`:''}</span>${g.pm?`<span class="up">🔧 PM ถึงกำหนด ${g.pm}</span>`:''}<span class="mg-act"><button type="button" class="btn sm" data-mach="${esc(g.its[0].a)}">ภาพรวมทั้งเครื่อง</button></span>`;
+  const flags=i=>[i.stale&&'<span class="up">ข้อมูลเก่า</span>',pmAll().some(x=>x.a===i.a&&x.due)&&'🔧 PM',openFailures(i.a).length&&`<span class="up">รายงานเปิด ${openFailures(i.a).length}</span>`,i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60&&`<span class="up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</span>`].filter(Boolean).join(' · ');
+  const tile=(i,pt)=>`<div role="button" tabindex="0" class="fcard ftile z${i.z||''}" data-a="${esc(i.a)}" title="${esc(i.a)} · ${i.z?ZL[i.z]:''} · ${ago(i.r.t)}"><b>${esc(pt?pointLabel(i.a):i.a)}</b><span class="num">${fv(overall(i.r))}</span><small>${i.z?ZL[i.z]:'–'}${i.stale?' · เก่า':''}</small></div>`;
+  const lrow=(i,pt)=>{const r=i.r;return`<tr class="frow" data-a="${esc(i.a)}" tabindex="0"><td>${favBtn(i.a)}</td><td><span class="dot z${i.z||''}"></span> <b>${esc(pt?pointLabel(i.a):i.a)}</b>${pt&&pointLabel(i.a)!==i.a?`<br><small class="muted">${esc(i.a)}</small>`:''}</td>
+      <td>${i.z?`<span class="tag z${i.z}">${ZL[i.z]}</span>`:'–'}</td><td class="num">${fv(overall(r))}</td><td class="num">${fv(r.vx)} / ${fv(r.vy)} / ${fv(r.vz)}</td><td class="num">${r.temp!=null?ft(r.temp):'–'}</td>
+      <td class="num">${i.batt?i.batt.toFixed(2)+' V'+(i.batLow?' ⚠':''):'–'}</td><td>${ago(r.t)}</td><td>${flags(i)}</td></tr>`};
+  function fleetBody(){
+    if(!sections.length||!sections.some(x=>x.items.length))return'<p class="muted">ไม่มีเครื่องที่ตรงเงื่อนไข</p>';
+    if(FV==='list')return`<div class="panel"><div class="tablewrap"><table class="flist"><thead><tr><th></th><th>เครื่อง / จุดวัด</th><th>สถานะ</th><th class="num">รวม (${uv()})</th><th class="num">X / Y / Z</th><th class="num">อุณหภูมิ</th><th class="num">แบต</th><th>อัปเดต</th><th>หมายเหตุ</th></tr></thead><tbody>
+      ${sections.map(x=>(x.multi?`<tr class="fl-group"><td colspan="9"><div class="mg-head">${mHead(x.g)}</div></td></tr>`:x.title?`<tr class="fl-group"><td colspan="9"><b>${esc(x.title)}</b> (${x.items.length})</td></tr>`:'')+x.items.map(i=>lrow(i,x.multi)).join('')).join('')}</tbody></table></div></div>`;
+    if(FV==='tile')return sections.map(x=>(x.multi?`<div class="mg-head ft-head">${mHead(x.g)}</div>`:x.title?`<div class="sub-h" style="margin:12px 0 6px">${esc(x.title)} (${x.items.length})</div>`:'')+`<div class="tgrid">${x.items.map(i=>tile(i,x.multi)).join('')}</div>`).join('');
+    if(sort==='machine')return`<div class="mgrid">${sections.map(x=>x.multi?`<div class="panel mgroup"><div class="mg-head">${mHead(x.g)}</div><div class="fgrid">${x.items.map(i=>card(i,true)).join('')}</div></div>`:card(x.items[0])).join('')}</div>`;
+    return sections.map(x=>`${x.title?`<div class="sub-h" style="margin:12px 0 6px">${esc(x.title)} (${x.items.length})</div>`:''}<div class="fgrid">${x.items.map(i=>card(i)).join('')}</div>`).join('');
+  }
   p.innerHTML=`${dupBannerHtml()}${pmPanelHtml()}<div class="mainhead"><h2>ทุกเครื่อง</h2>
     <div class="row">${sort==='machine'?'<button type="button" class="btn sm" id="flGroup" title="รวมเซนเซอร์ที่ติดบนเครื่องเดียวกันเป็น 1 เครื่อง">+ จัดกลุ่มเซนเซอร์เป็นเครื่อง</button>':''}<div class="seg" id="flF">${[['all','ทั้งหมด'],['need','ต้องดู'],['critA','สำคัญ A'],['pm','PM ถึงกำหนด'],['stale','ข้อมูลเก่า > 3 วัน']].map(([v,l])=>`<button data-v="${v}" class="${F===v?'on':''}">${l}</button>`).join('')}</div>
+    <div class="seg" id="flView" title="รูปแบบการแสดง">${[['card','▦ การ์ด'],['list','☰ รายการ'],['tile','▪ ไทล์']].map(([v,l])=>`<button data-v="${v}" class="${(S.fleetView||'card')===v?'on':''}">${l}</button>`).join('')}</div>
     <select id="flSort"><option value="machine">เครื่องจักร → เซนเซอร์</option><option value="risk">เซนเซอร์ เรียงตามความเสี่ยง</option><option value="crit">เรียงตามความสำคัญ</option><option value="name">เรียงตามชื่อ</option><option value="area">จัดกลุ่มตามพื้นที่</option><option value="machine">จัดกลุ่มตามเครื่อง (หลายจุดวัด)</option></select></div></div>
   <div class="kpis">${(()=>{if(sort!=='machine')return kpi('ปกติ',cnt('A')+cnt('B'),'เซนเซอร์','','hero zA')+kpi('เฝ้าระวัง',cnt('C'),'เซนเซอร์','','hero zC')+kpi('อันตราย',cnt('D'),'เซนเซอร์','','hero zD');
     const ms=[...new Set(items.map(i=>machineOf(i.a)))].map(m=>worstZone(pointsOf(m))),mc=k=>ms.filter(z=>z===k).length;
     return kpi('ปกติ',mc('A')+mc('B'),'เครื่อง',`${ms.length} เครื่อง · ${items.length} เซนเซอร์`,'hero zA')+kpi('เฝ้าระวัง',mc('C'),'เครื่อง',cnt('C')?cnt('C')+' เซนเซอร์':'','hero zC')+kpi('อันตราย',mc('D'),'เครื่อง',cnt('D')?cnt('D')+' เซนเซอร์':'','hero zD')})()}${kpi('ข้อมูลเก่า',items.filter(i=>i.stale).length,'เครื่อง','ไม่ได้ดึงเกิน 3 วัน')}</div>
-  ${sort==='machine'?(mGroups.length?`<div class="mgrid">${mGroups.map(g=>g.all.length<2?card(g.its[0]):`<div class="panel mgroup"><div class="mg-head"><span class="dot z${g.wz||''}"></span><b>${esc(g.m)}</b>${g.crit?`<span class="crit ${g.crit}" title="ความสำคัญ">${g.crit}</span>`:''}${g.wz?`<span class="tag z${g.wz}">${ZL[g.wz]}</span>`:''}
-      <span class="muted">${g.all.length} เซนเซอร์${g.its.length<g.all.length?` (แสดง ${g.its.length})`:''}</span>${g.pm?`<span class="up">🔧 PM ถึงกำหนด ${g.pm}</span>`:''}
-      <span class="mg-act"><button type="button" class="btn sm" data-mach="${esc(g.its[0].a)}">ภาพรวมทั้งเครื่อง</button></span></div>
-      <div class="fgrid">${g.its.map(i=>card(i,true)).join('')}</div></div>`).join('')}</div>`:'<p class="muted">ไม่มีเครื่องที่ตรงเงื่อนไข</p>')
-    :groups.map(([g,l])=>`${g?`<div class="sub-h" style="margin:12px 0 6px">${esc(g)} (${l.length})</div>`:''}<div class="fgrid">${l.map(i=>card(i)).join('')}</div>`).join('')||'<p class="muted">ไม่มีเครื่องที่ตรงเงื่อนไข</p>'}`;
+  ${fleetBody()}`;
   $('#flSort').value=sort;
   p.querySelectorAll('#flF button').forEach(b=>b.onclick=()=>{S.fleetF=b.dataset.v;save();render()});
   $('#flSort').onchange=e=>{S.fleetSort=e.target.value;save();render()};
+  p.querySelectorAll('#flView button').forEach(b=>b.onclick=()=>{S.fleetView=b.dataset.v;save();render()});
+  p.querySelectorAll('.frow').forEach(r=>{r.onclick=e=>{if(e.target.closest('[data-act]'))return;S.sel=r.dataset.a;setView('overview')};r.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();r.click()}}});
   if($('#flGroup'))$('#flGroup').onclick=()=>{const one=names().find(n=>pointsOf(machineOf(n)).length<2);if(!one)return toast('ทุกเซนเซอร์อยู่ในกลุ่มเครื่องแล้ว');S.sel=one;setView('mach')};
   p.querySelectorAll('[data-mach]').forEach(b=>b.onclick=e=>{e.stopPropagation();S.sel=b.dataset.mach;setView('mach')});
   p.querySelectorAll('.fcard').forEach(b=>{b.onclick=()=>{S.sel=b.dataset.a;setView('overview')};b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();b.click()}}});
