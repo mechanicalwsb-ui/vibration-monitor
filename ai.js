@@ -207,6 +207,7 @@ function renderAIPage(){
   p.innerHTML=`<div class="mainhead"><h2>วิเคราะห์ด้วย AI · ${esc(a)}</h2><span class="muted" style="font-size:12px">โมเดล ${esc(cf.model)}</span></div>
   <div class="panel pbody">
     <div class="row">${Object.entries(AI_TASKS).map(([k,t])=>`<button class="btn ${k==='machine'?'primary':''}" data-task="${k}" ${AI.busy?'disabled':''}>${t.label}</button>`).join('')}
+      ${pointsOf(machineOf(a)).length>1?`<button class="btn" id="aiMachine" ${AI.busy?'disabled':''}>วิเคราะห์ทั้งเครื่อง ${esc(machineOf(a))} (${pointsOf(machineOf(a)).length} จุด)</button>`:''}
       <button class="btn" id="aiFleet" ${AI.busy?'disabled':''}>สรุปทุกเครื่อง (${ns.length})</button>
       ${AI.busy?'<button class="btn danger" id="aiStop">หยุด</button>':''}
       <button class="btn sm" id="aiCtx" style="margin-left:auto">${AI.showCtx?'ซ่อน':'ดู'}ข้อมูลที่จะส่ง</button></div>
@@ -222,6 +223,7 @@ function renderAIPage(){
       :'<p class="muted" style="margin:0">ยังไม่มี · ผลที่บันทึกจะแสดงในรายงาน PDF ได้</p>'}</div></div>`;
   p.querySelectorAll('[data-task]').forEach(b=>b.onclick=()=>aiRunTask(a,b.dataset.task));
   $('#aiFleet').onclick=()=>aiRunFleet(a);
+  if($('#aiMachine'))$('#aiMachine').onclick=()=>aiRunMachine(a);
   if($('#aiStop'))$('#aiStop').onclick=()=>{if(AI.ctrl)AI.ctrl.abort()};
   $('#aiCtx').onclick=()=>{AI.showCtx=!AI.showCtx;renderAIPage()};
   if(AI.showCtx)buildAIContext(a).then(c=>{const el=$('#aiCtxBox');if(el)el.textContent=JSON.stringify(c,null,1)});

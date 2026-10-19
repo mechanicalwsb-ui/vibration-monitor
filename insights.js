@@ -161,7 +161,10 @@ function checkAlerts(asset,recs){
     if(al.riseRef==='baseline'&&c.baseline)ref=vmax(c.baseline.mean.filter(x=>x!=null));
     else{const w=series(asset).filter(r=>r.t<last.t-864e5&&r.t>=last.t-8*864e5&&isRunning(r,c)!==false).map(overall).filter(v=>v!=null);if(w.length)ref=w.reduce((a,b)=>a+b,0)/w.length}
     if(ref>0&&ov>ref*(1+al.risePct/100))notify(asset+'|rise','📈 เพิ่มขึ้นเร็ว: '+asset,`${fv(ov)} ${uv()} สูงกว่า${al.riseRef==='baseline'?' baseline':'ค่าเฉลี่ย 7 วัน'} ${Math.round((ov/ref-1)*100)}% (เกณฑ์ ${al.risePct}%)`,asset)}
-  if((z==='C'||z==='D')&&held)notify(asset+'|'+z,`${z==='D'?'⛔ อันตราย':'⚠ เฝ้าระวัง'}: ${asset}`,
+  const mpts=typeof pointsOf==='function'?pointsOf(machineOf(asset)):[];
+  if((z==='C'||z==='D')&&held&&mpts.length>1){const m=machineOf(asset);
+    notify(m+'|'+z,`${z==='D'?'⛔ อันตราย':'⚠ เฝ้าระวัง'}: ${m} · ${pointLabel(asset)}`,mpts.map(p=>{const r=lastOf(p),s=status(r,cfg(p));return`${pointLabel(p)}: ${s?ZL[s]:'–'} ${fv(overall(r))}`}).join(' · ')+` ${uv()}`,asset)}
+  else if((z==='C'||z==='D')&&held)notify(asset+'|'+z,`${z==='D'?'⛔ อันตราย':'⚠ เฝ้าระวัง'}: ${asset}`,
     `Velocity ${fv(overall(last))} ${uv()} · อุณหภูมิ ${last.temp!=null?last.temp.toFixed(1)+' °C':'–'} (${dFull(last.t)})`,asset);
   const f=forecast(series(asset),c,'ov');
   if(f.ok&&f.dAlarm!=null&&f.dAlarm>0&&f.dAlarm<14)notify(asset+'|fc','📈 แนวโน้มเพิ่มขึ้น: '+asset,`คาดว่าจะถึงระดับอันตราย${fmtDays(f.dAlarm)}`,asset);

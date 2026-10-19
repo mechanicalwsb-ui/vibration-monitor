@@ -121,7 +121,7 @@ function actRecords(evs){
 // readings per machine and the page-wide settings, compared with the last save
 let actSnap=null;
 const ACT_SKIP=new Set(['view','sel','range','logOpen','fleetF','fleetSort','stPer','cmp','rep','showFc','wfSel','wfCollapsed','lastBackup','lastMeasure','tomb','renames','favT',
-  'assets','sensors','routes','brgDb','fftNotes','routeRun','readings','maint','health','ai','failures','gw']);
+  'assets','sensors','routes','brgDb','fftNotes','routeRun','readings','maint','health','ai','failures','gw','machines']);
 function actSnapshot(mark){
   const cnt=new Map();for(const r of S.readings||[])cnt.set(r.asset,(cnt.get(r.asset)||0)+1);
   const set={};for(const k in S)if(!ACT_SKIP.has(k)&&k[0]!=='_'){try{set[k]=JSON.stringify(S[k])}catch(e){}}

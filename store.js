@@ -34,6 +34,7 @@ function persistBig(now){
 const STAMP=new Map();
 // The same comparison feeds the activity log (activity.js): new / edited / deleted records at each save.
 function stampChanges(mark){
+  if(typeof machineShareSync==='function')try{machineShareSync(mark,STAMP)}catch(e){console.warn(e)} // shared machine settings to every point
   const now=Date.now(),evs=[],seen=new Set();
   const one=(k,o)=>{if(!o||typeof o!=='object')return;seen.add(k);const{mt,...rest}=o;let h;try{h=JSON.stringify(rest)}catch(e){return}
     const p=STAMP.get(k);
@@ -252,6 +253,7 @@ async function mergeState(st,fft){
   {S.ai=S.ai||{};const deadA=T('ai');
     for(const[a0,list]of Object.entries(st.ai||{})){const a=fix(a0),cur=S.ai[a]||(S.ai[a]=[]),ids=new Set(cur.map(h=>h.id));for(const h of list)if(!ids.has(h.id)&&!dead(a,h.t))cur.push(h)}
     for(const[a,list]of Object.entries(S.ai)){if(fix(a)!==a){S.ai[fix(a)]=[...(S.ai[fix(a)]||[]),...list];delete S.ai[a];continue}S.ai[a]=list.filter(h=>!deadA.has(h.id))}}
+  if(st.machines){S.machines=S.machines||{};for(const[k,v]of Object.entries(st.machines))if(!S.machines[k]||newer(v,S.machines[k]))S.machines[k]=v}
   if(st.machTpl){S.machTpl=S.machTpl||{};for(const[k,v]of Object.entries(st.machTpl))if(!S.machTpl[k]||newer(v,S.machTpl[k]))S.machTpl[k]=v}
   if(st.brgDb){S.brgDb=S.brgDb||{};for(const[k,v]of Object.entries(st.brgDb))if(!S.brgDb[k]||newer(v,S.brgDb[k]))S.brgDb[k]=v}
   // favourites: the later star/unstar wins (equal or unknown times: kept if either device has it)

@@ -100,7 +100,7 @@ function pmStatus(a){
   const c=cfg(a),s=specOf(c);return(s.pm||[]).map(t=>{const last=t.last||t.created||Date.now();
     const used=t.unit==='runh'?runHoursSince(a,last):(Date.now()-last)/864e5,left=t.every-used;
     return{a,t,left,used,due:left<=0,soon:left>0&&left<=t.every*0.1,u:t.unit==='runh'?'ชม.เดิน':'วัน'}})}
-function pmAll(){return names().flatMap(pmStatus)}
+function pmAll(){const seen=new Set();return names().filter(a=>{const m=(cfg(a).machine||'').trim();if(!m)return true;if(seen.has(m))return false;seen.add(m);return true}).flatMap(pmStatus)} // a machine's shared tasks once
 function pmDone(a,id){
   const c=cfg(a),s=specOf(c),t=(s.pm||[]).find(x=>x.id===id);if(!t)return;
   t.last=Date.now();if(t.lube){s.lube=s.lube||{};s.lube[t.lube]=Object.assign(s.lube[t.lube]||{},{last:Date.now()})}
@@ -285,6 +285,7 @@ function renderSetupPage(){
     <p class="muted" style="font-size:12px">แม่แบบเก็บประเภท มอเตอร์ เครื่องถูกขับ การส่งกำลัง bearing เกณฑ์ กฎเตือน และงาน PM (ไม่รวม tag พื้นที่ รูป อะไหล่ เอกสาร) · ซิงก์ไปทุกเครื่อง</p>`}
   p.innerHTML=`<div class="mainhead"><h2>${favBtn(a)}ตั้งค่าเครื่องจักร · ${esc(a)}</h2>
       <div class="ms-done" title="${esc(cp.missing.join(' · '))}"><span class="ms-bar"><i style="width:${cp.pct}%"></i></span> ข้อมูลครบ ${cp.pct}%</div></div>
+    ${sharedWith(a).length?`<div class="panel banner ms-share"><span>🔗 ใช้ร่วมกับทุกจุดวัดของเครื่อง <b>${esc(c.machine)}</b> (${sharedWith(a).map(x=>esc(pointLabel(x))).join(', ')}): แก้ที่จุดไหนก็เปลี่ยนทุกจุด · <b>เฉพาะจุดนี้</b>: bearing ตรงจุดวัด, ทิศแกน/ตำแหน่ง/วิธีติดเซนเซอร์, รอบเพลาที่จุดวัด, เซนเซอร์ติดฝั่งไหน, เกณฑ์และ baseline</span></div>`:''}
     ${cp.missing.length&&MS.tab!=='reg'?`<div class="panel banner"><span>ยังขาด: ${cp.missing.map(esc).join(' · ')}</span></div>`:''}
     <div class="seg ms-tabs" id="msTabs">${MS_TABS.map(([k,l])=>`<button data-v="${k}" class="${MS.tab===k?'on':''}">${l}</button>`).join('')}</div>
     <div class="panel pbody ms-body">${body}</div>`;

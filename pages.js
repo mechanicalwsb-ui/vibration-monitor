@@ -48,7 +48,7 @@ function renderFleet(){
     return{a,c,r,z,stale,batt:h&&h.batt,batLow:h&&h.batLow,fc,area:(c.profile&&c.profile.area)||'ไม่ระบุพื้นที่'}});
   const cnt=k=>items.filter(i=>i.z===k).length;
   const F=S.fleetF||'all',sort=S.fleetSort||'risk';
-  let list=items.filter(i=>F==='all'||(F==='need'&&(i.z==='C'||i.z==='D'||i.batLow||(i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<30)))||(F==='stale'&&i.stale)||(F==='critA'&&critOf(i.c)==='A')||(F==='pm'&&pmStatus(i.a).some(x=>x.due)));
+  let list=items.filter(i=>F==='all'||(F==='need'&&(i.z==='C'||i.z==='D'||i.batLow||(i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<30)))||(F==='stale'&&i.stale)||(F==='critA'&&critOf(i.c)==='A')||(F==='pm'&&pmAll().some(x=>x.a===i.a&&x.due)));
   const rank={D:0,C:1,B:2,A:3,null:4};
   const critRank={A:0,B:1,C:2},cmpBy=(x,y)=>sort==='crit'?((critRank[critOf(x.c)]??3)-(critRank[critOf(y.c)]??3))||(rank[x.z]-rank[y.z])||x.a.localeCompare(y.a,'th'):sort==='name'||sort==='machine'?x.a.localeCompare(y.a,'th'):sort==='area'?x.area.localeCompare(y.area,'th')||x.a.localeCompare(y.a,'th'):(rank[x.z]-rank[y.z])||x.a.localeCompare(y.a,'th');
   list.sort((x,y)=>(isFav(y.a)-isFav(x.a))||cmpBy(x,y));
@@ -59,7 +59,7 @@ function renderFleet(){
       <div class="fc-v num">${fv(overall(i.r))}<small> ${uv()}</small></div>
       <canvas class="spark" data-a="${esc(i.a)}" width="220" height="44"></canvas>
       <div class="fc-sub">${i.stale?'<span class="up">ข้อมูลเก่า</span> · ':''}${ago(i.r.t)}${i.batt?` · แบต ${i.batt.toFixed(2)} V${i.batLow?' ⚠':''}`:''}</div>
-      ${pmStatus(i.a).some(x=>x.due)?`<div class="fc-sub up">🔧 งาน PM ถึงกำหนด ${pmStatus(i.a).filter(x=>x.due).length} งาน</div>`:''}
+      ${pmAll().some(x=>x.a===i.a&&x.due)?`<div class="fc-sub up">🔧 งาน PM ถึงกำหนด ${pmStatus(i.a).filter(x=>x.due).length} งาน</div>`:''}
       ${openFailures(i.a).length?`<div class="fc-sub up">รายงานความผิดปกติเปิดอยู่ ${openFailures(i.a).length} เรื่อง</div>`:''}
       ${i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60?`<div class="fc-sub up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</div>`:''}</div>`;
   p.innerHTML=`${dupBannerHtml()}${pmPanelHtml()}<div class="mainhead"><h2>ทุกเครื่อง</h2>
@@ -443,7 +443,7 @@ function renderReport(){
   p.innerHTML=`<div class="mainhead"><h2>รายงาน</h2></div>
   <div class="pgrid"><div class="panel"><div class="ph"><h3>ตั้งค่ารายงาน</h3></div><div class="form" id="repForm">
     <label class="full">ชื่อหน่วยงาน (หัวรายงาน)<input name="org" value="${esc(R.org||'')}" placeholder="เช่น แผนกซ่อมบำรุง โรงงาน ..."></label>
-    <label>เครื่องจักร<select name="scope"><option value="one" ${R.scope==='one'?'selected':''}>เฉพาะ ${esc(S.sel||'-')}</option><option value="all" ${R.scope==='all'?'selected':''}>ทุกเครื่อง (${ns.length})</option></select></label>
+    <label>เครื่องจักร<select name="scope"><option value="one" ${R.scope==='one'?'selected':''}>เฉพาะ ${esc(S.sel||'-')}</option>${S.sel&&pointsOf(machineOf(S.sel)).length>1?`<option value="machine" ${R.scope==='machine'?'selected':''}>ทั้งเครื่อง ${esc(machineOf(S.sel))} (${pointsOf(machineOf(S.sel)).length} จุดวัด)</option>`:''}<option value="all" ${R.scope==='all'?'selected':''}>ทุกเครื่อง (${ns.length})</option></select></label>
     <label>ช่วงเวลา<select name="days">${[[7,'7 วัน'],[30,'30 วัน (รายเดือน)'],[90,'90 วัน'],[365,'1 ปี']].map(([d,l])=>`<option value="${d}" ${+R.days===d?'selected':''}>${l}</option>`).join('')}</select></label>
     <div class="full row">${[['sum','สรุปสถานะ'],['mach','ข้อมูลเครื่องและความถี่'],['trend','กราฟแนวโน้ม'],['alarm','ตาราง alarm'],['fft','FFT ล่าสุด + วิเคราะห์'],['fc','พยากรณ์'],['maint','บันทึกซ่อม'],['bands','Bands report + ดัชนีความผิดปกติ'],['fail','รายงานความผิดปกติที่เปิดอยู่'],['ai','ความเห็นจาก AI (ที่บันทึกไว้)'],['sign','ช่องลายเซ็น']].map(([k,l])=>`<label class="check"><input type="checkbox" data-sec="${k}" ${R.sec[k]?'checked':''}> ${l}</label>`).join('')}</div>
     <div class="full row"><button class="btn primary" id="repGo">สร้างรายงานและพิมพ์ / บันทึก PDF</button></div>
@@ -457,7 +457,7 @@ function renderReport(){
     finally{$('#repGo').disabled=false;$('#repGo').textContent='สร้างรายงานและพิมพ์ / บันทึก PDF'}};
 }
 async function buildReport(R){
-  const ns=R.scope==='all'?names():[S.sel].filter(Boolean),now=Date.now(),from=now-R.days*DAY;
+  const ns=R.scope==='all'?names():R.scope==='machine'&&S.sel?pointsOf(machineOf(S.sel)):[S.sel].filter(Boolean),now=Date.now(),from=now-R.days*DAY;
   const P={x:'#2f6fdb',y:'#e07b1f',z:'#14928a',t:'#c2410c',warn:'#c98205',bad:'#d1342f',grid:'#e2e5e9',ink:'#15191e'};
   const lineCfg=(ds,yT)=>()=>({type:'line',data:{datasets:ds},options:{responsive:false,animation:false,devicePixelRatio:2,plugins:{legend:{labels:{boxWidth:10,color:P.ink}}},
     scales:{x:{type:'linear',ticks:{maxTicksLimit:8,callback:v=>dShort(v),color:P.ink},grid:{color:P.grid}},y:{beginAtZero:true,title:{display:true,text:yT},ticks:{color:P.ink},grid:{color:P.grid}}}}});
@@ -468,6 +468,8 @@ async function buildReport(R){
     <div class="rp-meta">ช่วงข้อมูล ${new Date(from).toLocaleDateString('th-TH')} – ${new Date(now).toLocaleDateString('th-TH')}<br>ออกรายงาน ${new Date().toLocaleString('th-TH')}<br>Vibration Monitor ${esc($('#appVer').textContent)}</div></div>`;
   if(R.sec.sum)html+=`<h2>สรุปสถานะ</h2><table class="rp"><thead><tr><th>เครื่องจักร</th><th>สถานะ</th><th>Velocity ล่าสุด (${uv()})</th><th>อุณหภูมิ (${ut()})</th><th>ค่าล่าสุดเมื่อ</th><th>แนวโน้ม</th></tr></thead><tbody>
     ${sumRows.map(s=>`<tr><td>${esc(s.a)}</td><td>${zTxt(s.z)}</td><td>${fv(overall(s.r))}</td><td>${ft(s.r.temp)}</td><td>${dFull(s.r.t)}</td><td>${s.fc.ok?(s.fc.dAlarm!=null?'ถึงอันตราย'+fmtDays(s.fc.dAlarm):s.fc.perWeek>0?'เพิ่มขึ้นช้า ๆ':'ทรงตัว/ลดลง'):'–'}</td></tr>`).join('')}</tbody></table>`;
+  if(R.scope==='machine'&&ns.length>1){const L=await machineDiag(machineOf(ns[0]));
+    html+=`<h2>วิเคราะห์ข้ามจุดวัด · ${esc(machineOf(ns[0]))}</h2><ul>${L.map(d=>`<li><b>${esc(d.t)}</b> — ${esc(d.why)}</li>`).join('')}</ul>`}
   for(const s of sumRows){
     const{a,c}=s,rs=series(a).filter(r=>r.t>=from),pr=c.profile||{};
     html+=`<section class="rp-asset"><h2>${esc(a)} ${zTxt(s.z)}</h2><p class="rp-sub">${[pr.type,pr.kw?pr.kw+' kW':'',c.rpm?c.rpm+' RPM':'',pr.loc,pr.tag].filter(Boolean).map(esc).join(' · ')||''}</p>`;

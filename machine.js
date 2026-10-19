@@ -43,7 +43,7 @@ function pointsStripHtml(a){
   const m=machineOf(a),pts=pointsOf(m);if(pts.length<2)return'';
   return`<div class="pstrip"><span class="muted" style="font-size:12.5px;align-self:center">จุดวัดของ <b>${esc(m)}</b>:</span>${pts.map(p=>{const z=status(lastOf(p),cfg(p));
     return`<button class="tag ${z?'z'+z:''}" style="cursor:pointer;${p===a?'outline:2px solid var(--accent)':''}" data-act="sel" data-v="${esc(p)}"><span class="dot z${z||''}"></span>${esc(pointLabel(p))} ${fv(overall(lastOf(p)))}</button>`}).join('')}
-    <button class="btn sm" onclick="S.cmp={assets:${esc(JSON.stringify(pts))},mode:'assets'};setView('stats')">เปรียบเทียบจุดวัด</button></div>`;
+    <button class="btn sm primary" onclick="setView('mach')">ภาพรวมทั้งเครื่อง</button><button class="btn sm" onclick="S.cmp={assets:${esc(JSON.stringify(pts))},mode:'assets'};setView('stats')">เปรียบเทียบจุดวัด</button></div>`;
 }
 
 // ---------- buttons that act on a machine name or record id ----------
