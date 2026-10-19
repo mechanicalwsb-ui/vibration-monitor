@@ -147,7 +147,7 @@ function regExport(){
     if(k==='name')return a;if(k==='gear_stages')return((s.trans||{}).stages||[]).map(g=>`${g.z1||''}:${g.z2||''}`).join(';');
     if(k.startsWith('brg_')){const pos={brg_motor_de:'m_de',brg_motor_nde:'m_nde',brg_driven_de:'d_de',brg_driven_nde:'d_nde'}[k];return(brgAt(c,pos)||{}).code||''}
     if(k==='axes')return`${ax.x}/${ax.y}/${ax.z}`;const v=getPath(c,p);return typeof v==='boolean'?(v?'1':'0'):v}).map(q).join(',')});
-  download(`machine-registry-${new Date().toISOString().slice(0,10)}.csv`,new Blob(['﻿'+[REG_COLS.map(x=>x[0]).join(','),...rows].join('\n')],{type:'text/csv'}));
+  download('machine-registry.csv',new Blob(['﻿'+[REG_COLS.map(x=>x[0]).join(','),...rows].join('\n')],{type:'text/csv'}));
   appLog('data',`ส่งออกทะเบียนเครื่องจักร ${rows.length} เครื่อง`);
 }
 async function regImport(file){

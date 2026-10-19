@@ -47,15 +47,19 @@ function renderFleet(){
     const fc=forecast(series(a),c,'ov');
     return{a,c,r,z,stale,batt:h&&h.batt,batLow:h&&h.batLow,fc,area:(c.profile&&c.profile.area)||'ไม่ระบุพื้นที่'}});
   const cnt=k=>items.filter(i=>i.z===k).length;
-  const F=S.fleetF||'all',sort=S.fleetSort||'risk';
+  const F=S.fleetF||'all',sort=S.fleetSort||'machine';
   let list=items.filter(i=>F==='all'||(F==='need'&&(i.z==='C'||i.z==='D'||i.batLow||(i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<30)))||(F==='stale'&&i.stale)||(F==='critA'&&critOf(i.c)==='A')||(F==='pm'&&pmAll().some(x=>x.a===i.a&&x.due)));
   const rank={D:0,C:1,B:2,A:3,null:4};
   const critRank={A:0,B:1,C:2},cmpBy=(x,y)=>sort==='crit'?((critRank[critOf(x.c)]??3)-(critRank[critOf(y.c)]??3))||(rank[x.z]-rank[y.z])||x.a.localeCompare(y.a,'th'):sort==='name'||sort==='machine'?x.a.localeCompare(y.a,'th'):sort==='area'?x.area.localeCompare(y.area,'th')||x.a.localeCompare(y.a,'th'):(rank[x.z]-rank[y.z])||x.a.localeCompare(y.a,'th');
   list.sort((x,y)=>(isFav(y.a)-isFav(x.a))||cmpBy(x,y));
+  // machine -> sensors: one panel per machine (worst point first), its sensors inside
+  const mGroups=sort!=='machine'?[]:[...new Set(list.map(i=>machineOf(i.a)))].map(m=>{const all=pointsOf(m),its=list.filter(i=>machineOf(i.a)===m);
+    return{m,all,its,wz:worstZone(all),crit:critOf(cfg(all[0])),fav:all.some(isFav),pm:pmAll().filter(x=>all.includes(x.a)&&x.due).length}})
+    .sort((x,y)=>(y.fav-x.fav)||(rank[x.wz]-rank[y.wz])||((critRank[x.crit]??3)-(critRank[y.crit]??3))||x.m.localeCompare(y.m,'th'));
   const groups=sort==='area'?[...new Set(list.map(i=>i.area))].map(g=>[g,list.filter(i=>i.area===g)])
-    :sort==='machine'?[...new Set(list.map(i=>machineOf(i.a)))].map(g=>[g+(pointsOf(g).length>1?` · สถานะรวม: ${ZL[worstZone(pointsOf(g))]||'-'}`:''),list.filter(i=>machineOf(i.a)===g)]):[['',list]];
-  const card=i=>`<div role="button" tabindex="0" class="panel fcard z${i.z||''}" data-a="${esc(i.a)}">
-      <div class="fc-top">${favBtn(i.a)}<span class="dot z${i.z||''}"></span><b>${esc(i.a)}</b>${critOf(i.c)?`<span class="crit ${critOf(i.c)}" title="ความสำคัญ">${critOf(i.c)}</span>`:''}${i.z?`<span class="tag z${i.z}">${ZL[i.z]}</span>`:''}</div>
+    :[['',list]];
+  const card=(i,pt)=>`<div role="button" tabindex="0" class="panel fcard z${i.z||''}" data-a="${esc(i.a)}">
+      <div class="fc-top">${favBtn(i.a)}<span class="dot z${i.z||''}"></span><b>${esc(pt?pointLabel(i.a):i.a)}</b>${pt&&pointLabel(i.a)!==i.a?`<small class="muted fc-sensor">${esc(i.a)}</small>`:''}${!pt&&critOf(i.c)?`<span class="crit ${critOf(i.c)}" title="ความสำคัญ">${critOf(i.c)}</span>`:''}${i.z?`<span class="tag z${i.z}">${ZL[i.z]}</span>`:''}</div>
       <div class="fc-v num">${fv(overall(i.r))}<small> ${uv()}</small></div>
       <canvas class="spark" data-a="${esc(i.a)}" width="220" height="44"></canvas>
       <div class="fc-sub">${i.stale?'<span class="up">ข้อมูลเก่า</span> · ':''}${ago(i.r.t)}${i.batt?` · แบต ${i.batt.toFixed(2)} V${i.batLow?' ⚠':''}`:''}</div>
@@ -63,13 +67,21 @@ function renderFleet(){
       ${openFailures(i.a).length?`<div class="fc-sub up">รายงานความผิดปกติเปิดอยู่ ${openFailures(i.a).length} เรื่อง</div>`:''}
       ${i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60?`<div class="fc-sub up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</div>`:''}</div>`;
   p.innerHTML=`${dupBannerHtml()}${pmPanelHtml()}<div class="mainhead"><h2>ทุกเครื่อง</h2>
-    <div class="row"><div class="seg" id="flF">${[['all','ทั้งหมด'],['need','ต้องดู'],['critA','สำคัญ A'],['pm','PM ถึงกำหนด'],['stale','ข้อมูลเก่า > 3 วัน']].map(([v,l])=>`<button data-v="${v}" class="${F===v?'on':''}">${l}</button>`).join('')}</div>
-    <select id="flSort"><option value="risk">เรียงตามความเสี่ยง</option><option value="crit">เรียงตามความสำคัญ</option><option value="name">เรียงตามชื่อ</option><option value="area">จัดกลุ่มตามพื้นที่</option><option value="machine">จัดกลุ่มตามเครื่อง (หลายจุดวัด)</option></select></div></div>
-  <div class="kpis">${kpi('ปกติ',cnt('A')+cnt('B'),'เครื่อง','','hero zA')}${kpi('เฝ้าระวัง',cnt('C'),'เครื่อง','','hero zC')}${kpi('อันตราย',cnt('D'),'เครื่อง','','hero zD')}${kpi('ข้อมูลเก่า',items.filter(i=>i.stale).length,'เครื่อง','ไม่ได้ดึงเกิน 3 วัน')}</div>
-  ${groups.map(([g,l])=>`${g?`<div class="sub-h" style="margin:12px 0 6px">${esc(g)} (${l.length})</div>`:''}<div class="fgrid">${l.map(card).join('')}</div>`).join('')||'<p class="muted">ไม่มีเครื่องที่ตรงเงื่อนไข</p>'}`;
+    <div class="row">${sort==='machine'?'<button type="button" class="btn sm" id="flGroup" title="รวมเซนเซอร์ที่ติดบนเครื่องเดียวกันเป็น 1 เครื่อง">+ จัดกลุ่มเซนเซอร์เป็นเครื่อง</button>':''}<div class="seg" id="flF">${[['all','ทั้งหมด'],['need','ต้องดู'],['critA','สำคัญ A'],['pm','PM ถึงกำหนด'],['stale','ข้อมูลเก่า > 3 วัน']].map(([v,l])=>`<button data-v="${v}" class="${F===v?'on':''}">${l}</button>`).join('')}</div>
+    <select id="flSort"><option value="machine">เครื่องจักร → เซนเซอร์</option><option value="risk">เซนเซอร์ เรียงตามความเสี่ยง</option><option value="crit">เรียงตามความสำคัญ</option><option value="name">เรียงตามชื่อ</option><option value="area">จัดกลุ่มตามพื้นที่</option><option value="machine">จัดกลุ่มตามเครื่อง (หลายจุดวัด)</option></select></div></div>
+  <div class="kpis">${(()=>{if(sort!=='machine')return kpi('ปกติ',cnt('A')+cnt('B'),'เซนเซอร์','','hero zA')+kpi('เฝ้าระวัง',cnt('C'),'เซนเซอร์','','hero zC')+kpi('อันตราย',cnt('D'),'เซนเซอร์','','hero zD');
+    const ms=[...new Set(items.map(i=>machineOf(i.a)))].map(m=>worstZone(pointsOf(m))),mc=k=>ms.filter(z=>z===k).length;
+    return kpi('ปกติ',mc('A')+mc('B'),'เครื่อง',`${ms.length} เครื่อง · ${items.length} เซนเซอร์`,'hero zA')+kpi('เฝ้าระวัง',mc('C'),'เครื่อง',cnt('C')?cnt('C')+' เซนเซอร์':'','hero zC')+kpi('อันตราย',mc('D'),'เครื่อง',cnt('D')?cnt('D')+' เซนเซอร์':'','hero zD')})()}${kpi('ข้อมูลเก่า',items.filter(i=>i.stale).length,'เครื่อง','ไม่ได้ดึงเกิน 3 วัน')}</div>
+  ${sort==='machine'?(mGroups.length?`<div class="mgrid">${mGroups.map(g=>g.all.length<2?card(g.its[0]):`<div class="panel mgroup"><div class="mg-head"><span class="dot z${g.wz||''}"></span><b>${esc(g.m)}</b>${g.crit?`<span class="crit ${g.crit}" title="ความสำคัญ">${g.crit}</span>`:''}${g.wz?`<span class="tag z${g.wz}">${ZL[g.wz]}</span>`:''}
+      <span class="muted">${g.all.length} เซนเซอร์${g.its.length<g.all.length?` (แสดง ${g.its.length})`:''}</span>${g.pm?`<span class="up">🔧 PM ถึงกำหนด ${g.pm}</span>`:''}
+      <span class="mg-act"><button type="button" class="btn sm" data-mach="${esc(g.its[0].a)}">ภาพรวมทั้งเครื่อง</button></span></div>
+      <div class="fgrid">${g.its.map(i=>card(i,true)).join('')}</div></div>`).join('')}</div>`:'<p class="muted">ไม่มีเครื่องที่ตรงเงื่อนไข</p>')
+    :groups.map(([g,l])=>`${g?`<div class="sub-h" style="margin:12px 0 6px">${esc(g)} (${l.length})</div>`:''}<div class="fgrid">${l.map(i=>card(i)).join('')}</div>`).join('')||'<p class="muted">ไม่มีเครื่องที่ตรงเงื่อนไข</p>'}`;
   $('#flSort').value=sort;
   p.querySelectorAll('#flF button').forEach(b=>b.onclick=()=>{S.fleetF=b.dataset.v;save();render()});
   $('#flSort').onchange=e=>{S.fleetSort=e.target.value;save();render()};
+  if($('#flGroup'))$('#flGroup').onclick=()=>{const one=names().find(n=>pointsOf(machineOf(n)).length<2);if(!one)return toast('ทุกเซนเซอร์อยู่ในกลุ่มเครื่องแล้ว');S.sel=one;setView('mach')};
+  p.querySelectorAll('[data-mach]').forEach(b=>b.onclick=e=>{e.stopPropagation();S.sel=b.dataset.mach;setView('mach')});
   p.querySelectorAll('.fcard').forEach(b=>{b.onclick=()=>{S.sel=b.dataset.a;setView('overview')};b.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();b.click()}}});
   const k=css();
   p.querySelectorAll('canvas.spark').forEach(cv_=>{
@@ -408,7 +420,7 @@ function renderRoute(){
 }
 async function printQrLabels(ns){
   const cells=await Promise.all(ns.map(async n=>`<div class="plabel">${await qrSvg(assetUrl(n),5)}<b>${esc(n)}</b><small>${esc(((cfg(n).profile||{}).tag)||'')}</small><small>สแกนเพื่อดูข้อมูลการสั่น</small></div>`));
-  printHtml(`<div class="plabels">${cells.join('')}</div>`);
+  printHtml(`<div class="plabels">${cells.join('')}</div>`,'QR labels');
 }
 async function scanQr(){
   const v=$('#qrVideo');let stream;
@@ -425,10 +437,11 @@ async function scanQr(){
 }
 
 // ================= REPORT (#17) =================
-function printHtml(html){
+function printHtml(html,name){
+  const title0=document.title;document.title=datedName(name||'vibration-report');
   let el=$('#printArea');if(!el){el=document.createElement('div');el.id='printArea';document.body.appendChild(el)}
   el.innerHTML=html;document.body.classList.add('printing');
-  const done=()=>{document.body.classList.remove('printing');el.innerHTML='';removeEventListener('afterprint',done)};
+  const done=()=>{document.body.classList.remove('printing');el.innerHTML='';document.title=title0;removeEventListener('afterprint',done)};
   addEventListener('afterprint',done);
   setTimeout(()=>window.print(),300);
 }
@@ -453,7 +466,7 @@ function renderReport(){
   const sync=()=>{R.org=f.org.value;R.scope=f.scope.value;R.days=+f.days.value;f.querySelectorAll('[data-sec]').forEach(i=>R.sec[i.dataset.sec]=i.checked);save()};
   f.querySelectorAll('input,select').forEach(i=>i.onchange=sync);
   $('#repGo').onclick=async()=>{sync();$('#repGo').disabled=true;$('#repGo').textContent='กำลังสร้างรายงาน…';
-    try{printHtml(await buildReport(R))}catch(e){toast('สร้างรายงานไม่ได้: '+e.message);console.error(e)}
+    try{printHtml(await buildReport(R),`vibration-report ${R.scope==='all'?'ทุกเครื่อง':R.scope==='machine'?machineOf(S.sel):S.sel}`)}catch(e){toast('สร้างรายงานไม่ได้: '+e.message);console.error(e)}
     finally{$('#repGo').disabled=false;$('#repGo').textContent='สร้างรายงานและพิมพ์ / บันทึก PDF'}};
 }
 async function buildReport(R){

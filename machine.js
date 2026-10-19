@@ -151,7 +151,7 @@ function failureHtml(f){
     ${f.chart?`<img class="rp-chart" src="${imgSrc(f.chart)}" style="background:#fff">`:''}${f.photo?`<img src="${imgSrc(f.photo)}" style="max-width:60%;margin-top:8px">`:''}
     <div class="rp-sign"><div>ผู้รายงาน<br><br>.............................................<br>(.............................................)</div><div>ผู้อนุมัติ<br><br>.............................................<br>(.............................................)</div></div>`;
 }
-function printFailure(id){const f=(S.failures||[]).find(x=>x.id===id);if(f)printHtml(failureHtml(f))}
+function printFailure(id){const f=(S.failures||[]).find(x=>x.id===id);if(f)printHtml(failureHtml(f),`failure-report ${f.asset}`)}
 // From an AI answer: first heading/line becomes the title, the rest goes to evidence/action
 function failureFromAI(asset,text){
   const lines=text.split('\n').map(l=>l.replace(/^#+\s*/,'').trim()).filter(Boolean);

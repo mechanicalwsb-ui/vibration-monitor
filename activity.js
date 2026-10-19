@@ -58,7 +58,7 @@ async function actCopy(){
   const head=[`Vibration Monitor ${$('#appVer')?$('#appVer').textContent:''}`,`บันทึกการทำงาน${actFilter==='all'?'':' · '+ACT_CAT[actFilter][0]} (${rows.length} บรรทัด)`,`คัดลอกเมื่อ: ${new Date().toLocaleString('th-TH')}`,''];
   const text=head.concat(rows.slice().reverse().map(e=>`${new Date(e.t).toLocaleString('th-TH')}  [${ACT_CAT[e.c][0]}]  ${e.m}`)).join('\n');
   try{await navigator.clipboard.writeText(text);toast(`คัดลอกบันทึกแล้ว (${rows.length} บรรทัด)`)}
-  catch(e){download(`vibmon-log-${Date.now()}.txt`,new Blob([text],{type:'text/plain'}));toast('คัดลอกไม่ได้ จึงบันทึกเป็นไฟล์แทน')}
+  catch(e){download('vibmon-log.txt',new Blob([text],{type:'text/plain'}));toast('คัดลอกไม่ได้ จึงบันทึกเป็นไฟล์แทน')}
 }
 function actClear(){if(!confirm('ล้างบันทึกการทำงานทั้งหมดในเบราว์เซอร์นี้?'))return;ACT=[];try{localStorage.removeItem(ACT_KEY)}catch(e){}actRenderAll();appLog('sys','ล้างบันทึกการทำงาน')}
 

@@ -254,7 +254,7 @@ function faExportCsv(dec,rec){
   const lines=[`freq_hz,x_${FA.qty==='acc'?'g':uv().replace('/','_')},y,z`].concat(cols[0].map((p,i)=>[p.x.toFixed(3),...cols.map(cc=>cc[i]?cc[i].y:'')].join(',')));
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv'}));
-  a.download=`fft-${S.sel}-${new Date(rec.ts*1000).toISOString().slice(0,16).replace(/[:T]/g,'')}.csv`;a.click();
+  a.download=datedName(`fft ${S.sel} ${new Date(rec.ts*1000).toLocaleString('sv').slice(0,16).replace(/[-: ]/g,'')}.csv`);a.click(); // date = saved day; the name keeps the capture time
 }
 
 // ---- waterfall: newest captures stacked with a vertical offset ----

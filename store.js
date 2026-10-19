@@ -98,8 +98,11 @@ const fmtBytes=b=>b==null?'–':b>=1e9?(b/1e9).toFixed(1)+' GB':b>=1e6?(b/1e6).t
 // ---- backup / restore ----
 function b64(u8){let s='';for(let i=0;i<u8.length;i+=0x8000)s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000));return btoa(s)}
 function unb64(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
+// Every saved file is named "YYMMDD name.ext" (e.g. 261019 vibmon-backup.json); characters Windows does not allow are replaced
+const yymmdd=(d=new Date())=>String(d.getFullYear()%100).padStart(2,'0')+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+const datedName=name=>`${yymmdd()} ${String(name).replace(/[\\/:*?"<>|]+/g,'-').trim()}`;
 function download(name,blob){
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=datedName(name);a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
 async function exportBackup(){
@@ -107,8 +110,7 @@ async function exportBackup(){
   const state={};for(const k in S)if(k[0]!=='_')state[k]=S[k];
   const data={format:'vibmon-backup',version:1,exportedAt:new Date().toISOString(),app:APP_VERSION,
     state,fft:fft.map(r=>({...r,bytes:b64(r.bytes)}))};
-  const d=new Date(),ymd=`${d.getFullYear()+543}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  download(`vibmon-backup-${ymd}.json`,new Blob([JSON.stringify(data)],{type:'application/json'}));
+  download('vibmon-backup.json',new Blob([JSON.stringify(data)],{type:'application/json'}));
   S.lastBackup=Date.now();save();
   if(typeof appLog==='function')appLog('data',`สำรองข้อมูลเป็นไฟล์ (${S.readings.length} ค่า · FFT ${fft.length} ชุด)`);
   toast(`สำรองข้อมูลแล้ว: ${S.readings.length.toLocaleString('th-TH')} ค่า · FFT ${fft.length} ชุด`);
