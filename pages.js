@@ -48,22 +48,23 @@ function renderFleet(){
     return{a,c,r,z,stale,batt:h&&h.batt,batLow:h&&h.batLow,fc,area:(c.profile&&c.profile.area)||'ไม่ระบุพื้นที่'}});
   const cnt=k=>items.filter(i=>i.z===k).length;
   const F=S.fleetF||'all',sort=S.fleetSort||'risk';
-  let list=items.filter(i=>F==='all'||(F==='need'&&(i.z==='C'||i.z==='D'||i.batLow||(i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<30)))||(F==='stale'&&i.stale));
+  let list=items.filter(i=>F==='all'||(F==='need'&&(i.z==='C'||i.z==='D'||i.batLow||(i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<30)))||(F==='stale'&&i.stale)||(F==='critA'&&critOf(i.c)==='A')||(F==='pm'&&pmStatus(i.a).some(x=>x.due)));
   const rank={D:0,C:1,B:2,A:3,null:4};
-  const cmpBy=(x,y)=>sort==='name'||sort==='machine'?x.a.localeCompare(y.a,'th'):sort==='area'?x.area.localeCompare(y.area,'th')||x.a.localeCompare(y.a,'th'):(rank[x.z]-rank[y.z])||x.a.localeCompare(y.a,'th');
+  const critRank={A:0,B:1,C:2},cmpBy=(x,y)=>sort==='crit'?((critRank[critOf(x.c)]??3)-(critRank[critOf(y.c)]??3))||(rank[x.z]-rank[y.z])||x.a.localeCompare(y.a,'th'):sort==='name'||sort==='machine'?x.a.localeCompare(y.a,'th'):sort==='area'?x.area.localeCompare(y.area,'th')||x.a.localeCompare(y.a,'th'):(rank[x.z]-rank[y.z])||x.a.localeCompare(y.a,'th');
   list.sort((x,y)=>(isFav(y.a)-isFav(x.a))||cmpBy(x,y));
   const groups=sort==='area'?[...new Set(list.map(i=>i.area))].map(g=>[g,list.filter(i=>i.area===g)])
     :sort==='machine'?[...new Set(list.map(i=>machineOf(i.a)))].map(g=>[g+(pointsOf(g).length>1?` · สถานะรวม: ${ZL[worstZone(pointsOf(g))]||'-'}`:''),list.filter(i=>machineOf(i.a)===g)]):[['',list]];
   const card=i=>`<div role="button" tabindex="0" class="panel fcard z${i.z||''}" data-a="${esc(i.a)}">
-      <div class="fc-top">${favBtn(i.a)}<span class="dot z${i.z||''}"></span><b>${esc(i.a)}</b>${i.z?`<span class="tag z${i.z}">${ZL[i.z]}</span>`:''}</div>
+      <div class="fc-top">${favBtn(i.a)}<span class="dot z${i.z||''}"></span><b>${esc(i.a)}</b>${critOf(i.c)?`<span class="crit ${critOf(i.c)}" title="ความสำคัญ">${critOf(i.c)}</span>`:''}${i.z?`<span class="tag z${i.z}">${ZL[i.z]}</span>`:''}</div>
       <div class="fc-v num">${fv(overall(i.r))}<small> ${uv()}</small></div>
       <canvas class="spark" data-a="${esc(i.a)}" width="220" height="44"></canvas>
       <div class="fc-sub">${i.stale?'<span class="up">ข้อมูลเก่า</span> · ':''}${ago(i.r.t)}${i.batt?` · แบต ${i.batt.toFixed(2)} V${i.batLow?' ⚠':''}`:''}</div>
+      ${pmStatus(i.a).some(x=>x.due)?`<div class="fc-sub up">🔧 งาน PM ถึงกำหนด ${pmStatus(i.a).filter(x=>x.due).length} งาน</div>`:''}
       ${openFailures(i.a).length?`<div class="fc-sub up">รายงานความผิดปกติเปิดอยู่ ${openFailures(i.a).length} เรื่อง</div>`:''}
       ${i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60?`<div class="fc-sub up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</div>`:''}</div>`;
-  p.innerHTML=`${dupBannerHtml()}<div class="mainhead"><h2>ทุกเครื่อง</h2>
-    <div class="row"><div class="seg" id="flF">${[['all','ทั้งหมด'],['need','ต้องดู'],['stale','ข้อมูลเก่า > 3 วัน']].map(([v,l])=>`<button data-v="${v}" class="${F===v?'on':''}">${l}</button>`).join('')}</div>
-    <select id="flSort"><option value="risk">เรียงตามความเสี่ยง</option><option value="name">เรียงตามชื่อ</option><option value="area">จัดกลุ่มตามพื้นที่</option><option value="machine">จัดกลุ่มตามเครื่อง (หลายจุดวัด)</option></select></div></div>
+  p.innerHTML=`${dupBannerHtml()}${pmPanelHtml()}<div class="mainhead"><h2>ทุกเครื่อง</h2>
+    <div class="row"><div class="seg" id="flF">${[['all','ทั้งหมด'],['need','ต้องดู'],['critA','สำคัญ A'],['pm','PM ถึงกำหนด'],['stale','ข้อมูลเก่า > 3 วัน']].map(([v,l])=>`<button data-v="${v}" class="${F===v?'on':''}">${l}</button>`).join('')}</div>
+    <select id="flSort"><option value="risk">เรียงตามความเสี่ยง</option><option value="crit">เรียงตามความสำคัญ</option><option value="name">เรียงตามชื่อ</option><option value="area">จัดกลุ่มตามพื้นที่</option><option value="machine">จัดกลุ่มตามเครื่อง (หลายจุดวัด)</option></select></div></div>
   <div class="kpis">${kpi('ปกติ',cnt('A')+cnt('B'),'เครื่อง','','hero zA')}${kpi('เฝ้าระวัง',cnt('C'),'เครื่อง','','hero zC')}${kpi('อันตราย',cnt('D'),'เครื่อง','','hero zD')}${kpi('ข้อมูลเก่า',items.filter(i=>i.stale).length,'เครื่อง','ไม่ได้ดึงเกิน 3 วัน')}</div>
   ${groups.map(([g,l])=>`${g?`<div class="sub-h" style="margin:12px 0 6px">${esc(g)} (${l.length})</div>`:''}<div class="fgrid">${l.map(card).join('')}</div>`).join('')||'<p class="muted">ไม่มีเครื่องที่ตรงเงื่อนไข</p>'}`;
   $('#flSort').value=sort;
@@ -235,7 +236,7 @@ function renderAssetPage(){
       <p class="muted bSrc" style="grid-column:1/-1;margin:0;font-size:12px">${esc(b.src||'')}</p></div>`};
   const d=new Date(),nowLocal=new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16);
   const dr=c.drive||{};
-  p.innerHTML=`<div class="mainhead"><h2>${favBtn(a)}ข้อมูลเครื่อง · ${esc(a)}</h2><div class="row"><button class="btn" data-act="wizard" data-v="${esc(a)}">ตั้งค่าด้วยตัวช่วย</button><button class="btn" onclick="openWizard()">+ สร้างเครื่องใหม่</button></div></div>
+  p.innerHTML=`<div class="mainhead"><h2>${favBtn(a)}ข้อมูลเครื่อง · ${esc(a)}</h2><div class="row"><button class="btn primary" onclick="setView('setup')">⚙ ตั้งค่าเครื่องจักร (ครบทุกด้าน)</button><button class="btn" data-act="wizard" data-v="${esc(a)}">ตั้งค่าด้วยตัวช่วย</button><button class="btn" onclick="openWizard()">+ สร้างเครื่องใหม่</button></div></div>
   <datalist id="brgList">${BRG_LIST.map(x=>`<option value="${x}">`).join('')}</datalist>
   <div class="pgrid">
     <div class="panel"><div class="ph"><h3>ข้อมูลเครื่องจักร</h3></div>
@@ -310,7 +311,7 @@ function renderAssetPage(){
     const brg={};p.querySelectorAll('.brow').forEach(row=>{const q=s=>row.querySelector(s).value,num=s=>q(s)===''?null:+q(s);
       const fac=row.dataset.fac?JSON.parse(row.dataset.fac):(br[row.dataset.pos]||{}).fac||null;
       brg[row.dataset.pos]={code:q('.bCode').trim(),n:num('.bN'),d:num('.bd'),D:num('.bD'),ang:num('.bA')||0,fac,src:row.dataset.src||(br[row.dataset.pos]||{}).src||'ใส่เอง'}});
-    pr.brg=brg;pr.brgUse=(p.querySelector('input[name=bUse]:checked')||{}).value||'de';
+    pr.brg=brg;pr.brgUse=(p.querySelector('input[name=bUse]:checked')||{}).value||pr.brgUse||'de';
     const use=brg[pr.brgUse];if(use&&use.fac){c.bearing={fac:use.fac};FA.marks.bearing=true}else if(use&&use.n&&use.d&&use.D){c.bearing={n:use.n,d:use.d,D:use.D,ang:use.ang||0};FA.marks.bearing=true}
     save();toast('บันทึก bearing แล้ว (ใช้ในเมนูวิเคราะห์ FFT)')};
   const mf=$('#mForm'),mv=n=>mf.querySelector(`[name=${n}]`);
@@ -444,7 +445,7 @@ function renderReport(){
     <label class="full">ชื่อหน่วยงาน (หัวรายงาน)<input name="org" value="${esc(R.org||'')}" placeholder="เช่น แผนกซ่อมบำรุง โรงงาน ..."></label>
     <label>เครื่องจักร<select name="scope"><option value="one" ${R.scope==='one'?'selected':''}>เฉพาะ ${esc(S.sel||'-')}</option><option value="all" ${R.scope==='all'?'selected':''}>ทุกเครื่อง (${ns.length})</option></select></label>
     <label>ช่วงเวลา<select name="days">${[[7,'7 วัน'],[30,'30 วัน (รายเดือน)'],[90,'90 วัน'],[365,'1 ปี']].map(([d,l])=>`<option value="${d}" ${+R.days===d?'selected':''}>${l}</option>`).join('')}</select></label>
-    <div class="full row">${[['sum','สรุปสถานะ'],['trend','กราฟแนวโน้ม'],['alarm','ตาราง alarm'],['fft','FFT ล่าสุด + วิเคราะห์'],['fc','พยากรณ์'],['maint','บันทึกซ่อม'],['bands','Bands report + ดัชนีความผิดปกติ'],['fail','รายงานความผิดปกติที่เปิดอยู่'],['ai','ความเห็นจาก AI (ที่บันทึกไว้)'],['sign','ช่องลายเซ็น']].map(([k,l])=>`<label class="check"><input type="checkbox" data-sec="${k}" ${R.sec[k]?'checked':''}> ${l}</label>`).join('')}</div>
+    <div class="full row">${[['sum','สรุปสถานะ'],['mach','ข้อมูลเครื่องและความถี่'],['trend','กราฟแนวโน้ม'],['alarm','ตาราง alarm'],['fft','FFT ล่าสุด + วิเคราะห์'],['fc','พยากรณ์'],['maint','บันทึกซ่อม'],['bands','Bands report + ดัชนีความผิดปกติ'],['fail','รายงานความผิดปกติที่เปิดอยู่'],['ai','ความเห็นจาก AI (ที่บันทึกไว้)'],['sign','ช่องลายเซ็น']].map(([k,l])=>`<label class="check"><input type="checkbox" data-sec="${k}" ${R.sec[k]?'checked':''}> ${l}</label>`).join('')}</div>
     <div class="full row"><button class="btn primary" id="repGo">สร้างรายงานและพิมพ์ / บันทึก PDF</button></div>
     <p class="full muted" style="margin:0;font-size:12px">กดแล้วจะเปิดหน้าพิมพ์ของเบราว์เซอร์ เลือกเครื่องพิมพ์ "บันทึกเป็น PDF" (Save as PDF) เพื่อได้ไฟล์ PDF ขนาด A4</p>
   </div></div></div>`;
@@ -487,6 +488,9 @@ async function buildReport(R){
         html+=`<h3>FFT ล่าสุด (${KIND_LABEL[rec.kind||'alarm']} · ${dFull(rec.ts*1000)})</h3>${fftNote(rec.key)?`<p class="rp-sub">โน้ต: ${esc(fftNote(rec.key))}</p>`:''}<img class="rp-chart" src="${await chartImg(()=>{const g=lineCfg([L('X',P.x,sp('x')),L('Y',P.y,sp('y')),L('Z',P.z,sp('z'))],uv())();g.options.scales.x.ticks.callback=v=>v;g.options.scales.x.title={display:true,text:'Hz'};return g})}">`;
         const f1=speedOf(rec,dec,c),dg=diagnose(dec,f1?f1*60:null,null,c); // same 1X as the FFT page (VFD: this capture's speed)
         html+=`<ul>${dg.items.map(it=>`<li><b>${it.name}</b> (${it.level}) — ${it.why}</li>`).join('')||'<li>ไม่พบรูปแบบความผิดปกติเด่น</li>'}</ul>`}}
+    if(R.sec.mach&&typeof machineSetupSummary==='function'){const s=c.spec||{},f1=(c.rpm||(s.motor&&s.motor.rpm)||0)/60,fr=machineFreqs(c,f1),pr=c.profile||{};
+      html+=`<h3>ข้อมูลเครื่องจักร</h3><p class="rp-sub">${[pr.type,pr.tag&&'Tag '+pr.tag,pr.kw&&pr.kw+' kW',c.rpm&&c.rpm+' RPM',s.crit&&'ความสำคัญ '+s.crit,(s.trans||{}).kind&&'ส่งกำลัง: '+({direct:'ต่อตรง',coupling:'คัปปลิ้ง',belt:'สายพาน',gear:'เกียร์'}[s.trans.kind]),(s.driven||{}).kind&&'เครื่องถูกขับ: '+((DRIVEN.find(x=>x[0]===s.driven.kind)||[])[1]||'')].filter(Boolean).map(esc).join(' · ')}</p>`;
+      if(fr.length)html+=`<table class="rp-t"><thead><tr><th>ความถี่ของเครื่อง</th><th>Hz</th><th>CPM</th></tr></thead><tbody>${fr.filter(r=>r.grp!=='bearing'||r.name.endsWith('BPFO')||r.name.endsWith('BPFI')).slice(0,24).map(r=>`<tr><td>${esc(r.name)}</td><td>${r.hz.toFixed(1)}</td><td>${Math.round(r.hz*60)}</td></tr>`).join('')}</tbody></table>`}
     if(R.sec.maint){const ml=(S.maint||[]).filter(m=>m.asset===a&&m.t>=from).sort((x,y)=>x.t-y.t);
       if(ml.length)html+=`<h3>บันทึกการบำรุงรักษา</h3><table class="rp"><thead><tr><th>วันที่</th><th>งาน</th><th>รายละเอียด</th><th>ผู้ทำ</th></tr></thead><tbody>${ml.map(m=>`<tr><td>${dFull(m.t)}</td><td>${esc(m.type)}</td><td>${esc(m.text||'')}</td><td>${esc(m.by||'')}</td></tr>`).join('')}</tbody></table>`}
     if(R.sec.bands){let list=[];try{list=await FFTDB.list(a)}catch(e){}const rec=list[0],dec=rec&&faDecode(rec);

@@ -63,7 +63,7 @@ async function actCopy(){
 function actClear(){if(!confirm('ล้างบันทึกการทำงานทั้งหมดในเบราว์เซอร์นี้?'))return;ACT=[];try{localStorage.removeItem(ACT_KEY)}catch(e){}actRenderAll();appLog('sys','ล้างบันทึกการทำงาน')}
 
 // ---------- what changed at each save (called by stampChanges in store.js) ----------
-const ACT_FIELD={cls:'ประเภทเครื่อง (ISO)',z:'เกณฑ์ความสั่น',tw:'เกณฑ์อุณหภูมิเฝ้าระวัง',ta:'เกณฑ์อุณหภูมิอันตราย',rpm:'ความเร็วรอบ',vfd:'ใช้ VFD',vanes:'จำนวนใบพัด',
+const ACT_FIELD={spec:'ตั้งค่าเครื่อง',machTpl:'แม่แบบเครื่อง',cls:'ประเภทเครื่อง (ISO)',z:'เกณฑ์ความสั่น',tw:'เกณฑ์อุณหภูมิเฝ้าระวัง',ta:'เกณฑ์อุณหภูมิอันตราย',rpm:'ความเร็วรอบ',vfd:'ใช้ VFD',vanes:'จำนวนใบพัด',
   bands:'แถบความถี่',baseline:'baseline',useBaseline:'ใช้ baseline',thrSrc:'แหล่งเกณฑ์',sensorThr:'เกณฑ์จากเซนเซอร์',profile:'ข้อมูลเครื่อง',drive:'มอเตอร์/เกียร์/สายพาน',
   bearing:'bearing',refFft:'ชุดอ้างอิง FFT',maskMul:'ตัวคูณเส้นอ้างอิง',machine:'กลุ่มเครื่อง',point:'จุดวัด',runMin:'เกณฑ์เครื่องหยุด',
   asset:'ชื่อเครื่อง',scale:'รุ่นเซนเซอร์',sched:'ตารางวัด FFT',cond:'วัด FFT เมื่อเข้าโซน C/D',auto:'ตั้งชื่ออัตโนมัติ',mac:'MAC',
@@ -75,9 +75,22 @@ function actChanges(kind,prev,cur){
   const keys=new Set([...Object.keys(prev||{}),...Object.keys(cur||{})]),out=[];
   for(const k of keys){if((ACT_QUIET[kind]||[]).includes(k))continue;const a=prev?prev[k]:undefined,b=cur?cur[k]:undefined;
     if(JSON.stringify(a)===JSON.stringify(b))continue;
+    if(k==='spec'&&a&&b&&typeof a==='object'&&typeof b==='object'){out.push(...actSpecChanges(a,b));continue}
     const va=actVal(a),vb=actVal(b),lbl=ACT_FIELD[k]||k;out.push(va!=null&&vb!=null&&k!=='photo'&&k!=='chart'?`${lbl} ${va} → ${vb}`:lbl)}
   return out;
 }
+const ACT_SPEC={crit:'ความสำคัญ',standby:'เครื่องสำรอง',hoursDay:'ชม.เดินต่อวัน',note:'หมายเหตุ',motor:'ข้อมูลมอเตอร์',driven:'เครื่องถูกขับ',trans:'การส่งกำลัง',sensorOn:'เซนเซอร์ติดที่',
+  brg2:'bearing เครื่องถูกขับ',lube:'การหล่อลื่น',axes:'ทิศแกนเซนเซอร์',axesOk:'ยืนยันทิศแกน',mountType:'วิธีติดเซนเซอร์',alarm:'กฎการเตือน',pm:'แผน PM',parts:'อะไหล่',docs:'เอกสาร',vertical:'เพลาตั้ง',lubeTemp:'อุณหภูมิ bearing'};
+const ACT_SUB={persist:'เกินติดกัน',risePct:'เพิ่มขึ้นเกิน %',riseRef:'เทียบกับ',notify:'แจ้งเตือน',quietFrom:'ไม่แจ้งตั้งแต่',quietTo:'ถึง',fft:'เตือนจาก FFT',make:'ยี่ห้อ',model:'รุ่น',serial:'serial',volt:'V',amp:'A',rpm:'รอบ',frame:'frame',ie:'IE',hzMin:'Hz ต่ำสุด',hzMax:'Hz สูงสุด',
+  kind:'ชนิด',stages:'จำนวน stage/ชั้นเกียร์',flow:'อัตราไหล',head:'เฮด',npsh:'NPSHr',fluid:'ของเหลว',ftype:'ชนิดพัดลม',overhung:'overhung',ctype:'ชนิด',male:'กลีบ male',female:'กลีบ female',desc:'รายละเอียด',
+  d1:'Ø พูลเลย์ขับ',d2:'Ø พูลเลย์ตาม',len:'ความยาวสายพาน',n:'จำนวนเส้น',coupling:'คัปปลิ้ง',x:'แกน X',y:'แกน Y',z:'แกน Z'};
+function actSpecChanges(a,b){const out=[];for(const k of new Set([...Object.keys(a),...Object.keys(b)])){if(JSON.stringify(a[k])===JSON.stringify(b[k]))continue;
+  const A=a[k],B=b[k],lbl=ACT_SPEC[k]||k;
+  if((A==null||typeof A==='object'&&!Array.isArray(A))&&(B==null||typeof B==='object'&&!Array.isArray(B))&&(A||B)){ // one level deeper: which fields
+    const sub=[];for(const s of new Set([...Object.keys(A||{}),...Object.keys(B||{})])){const x=(A||{})[s],y=(B||{})[s];if(JSON.stringify(x)===JSON.stringify(y))continue;const vx=actVal(x),vy=actVal(y);sub.push(vx!=null&&vy!=null?`${ACT_SUB[s]||s} ${vx} → ${vy}`:(ACT_SUB[s]||s))}
+    out.push(`${lbl}: ${sub.join(', ')}`);continue}
+  if(Array.isArray(A)||Array.isArray(B)){const na=(A||[]).length,nb=(B||[]).length;out.push(nb>na?`${lbl} +${nb-na}`:nb<na?`${lbl} −${na-nb}`:lbl);continue}
+  const va=actVal(A),vb=actVal(B);out.push(va!=null&&vb!=null?`${lbl} ${va} → ${vb}`:lbl)}return out}
 // ev: {kind, act:'new'|'edit'|'del', id, prev, cur}; several of the same kind at once are summed up
 function actRecords(evs){
   const groups=new Map();for(const e of evs){const g=e.kind+'|'+e.act;if(!groups.has(g))groups.set(g,[]);groups.get(g).push(e)}

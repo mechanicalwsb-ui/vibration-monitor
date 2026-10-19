@@ -136,6 +136,7 @@ async function buildAIContext(asset,opt={}){
     if(ml.length)ctx.maintenance=ml.map(m=>({date:new Date(m.t).toLocaleDateString('th-TH'),type:m.type,detail:scrub(m.text||'')}))}
   const fl=openFailures(asset);if(fl.length)ctx.openFailureReports=fl.map(f=>({title:scrub(f.title),status:f.status,action:scrub(f.action)}));
   if(c.machine&&!cf.anon)ctx.machine.group=c.machine,ctx.machine.point=c.point||null;
+  if(typeof machineSetupSummary==='function'){const ms=machineSetupSummary(c,(c.rpm||0)/60);if(cf.anon&&ms.motor){delete ms.motor.make;delete ms.motor.model}ctx.machineSetup=ms}
   const sid=Object.keys(S.sensors).find(id=>S.sensors[id].asset===asset);
   if(sid){const h=healthSummary(sid);if(h.score!=='none')ctx.sensorHealth={battery_V:h.last&&h.last.batt||null,issues:h.issues.map(i=>i[1])}}
   if(opt.fft!==false){let list=[];try{list=await FFTDB.list(asset)}catch(e){}

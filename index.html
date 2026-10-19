@@ -12,17 +12,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.14.0"></script>
-<script src="fft-analysis.js?v=2.14.0"></script>
-<script src="store.js?v=2.14.0"></script>
-<script src="activity.js?v=2.14.0"></script>
-<script src="insights.js?v=2.14.0"></script>
-<script src="pages.js?v=2.14.0"></script>
-<script src="ai.js?v=2.14.0"></script>
-<script src="tools.js?v=2.14.0"></script>
-<script src="machine.js?v=2.14.0"></script>
-<script src="site-config.js?v=2.14.0"></script>
-<script src="gdrive.js?v=2.14.0"></script>
+<script src="ia3-fft.js?v=2.15.0"></script>
+<script src="fft-analysis.js?v=2.15.0"></script>
+<script src="store.js?v=2.15.0"></script>
+<script src="activity.js?v=2.15.0"></script>
+<script src="insights.js?v=2.15.0"></script>
+<script src="pages.js?v=2.15.0"></script>
+<script src="ai.js?v=2.15.0"></script>
+<script src="tools.js?v=2.15.0"></script>
+<script src="machine.js?v=2.15.0"></script>
+<script src="machine-setup.js?v=2.15.0"></script>
+<script src="site-config.js?v=2.15.0"></script>
+<script src="gdrive.js?v=2.15.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -294,6 +295,21 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
 .rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
 .plabel svg{width:38mm;height:38mm}
+.ms-tabs{margin-bottom:10px;flex-wrap:wrap}
+.ms-body .form{padding:0}
+.ms-in{display:flex;gap:4px;align-items:center}.ms-in input,.ms-in select{flex:1;min-width:0}.ms-in em{font-style:normal;color:var(--muted);font-size:12px}
+.ms-done{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.ms-bar{display:inline-block;width:90px;height:7px;border-radius:4px;background:var(--line);overflow:hidden;vertical-align:middle}.ms-bar i{display:block;height:100%;background:var(--accent)}
+.ms-brg{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:10px;margin-bottom:10px}
+.ms-bcard{margin:0}
+.ms-bcard .form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;padding:8px 12px 12px}
+.ms-bcard .form label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+.ms-bcard .form input,.ms-bcard .form select{width:100%;min-width:0}
+.ms-bcard .ms-rl{grid-column:1/-1;font-size:12px;margin:0}
+@media (max-width:700px){.ms-brg{grid-template-columns:minmax(0,1fr)}}
+.ms-t input{width:90px}.ms-t td,.ms-t th{white-space:nowrap;text-align:left}.ms-t td.num,.ms-t th.num{text-align:right}
+.ms-box{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;line-height:1.7}
+.crit{display:inline-block;font-size:10.5px;font-weight:700;border-radius:4px;padding:0 5px;margin-left:4px;color:#fff;background:#64748b}.crit.A{background:#dc2626}.crit.B{background:#ea580c}
 .cmp-ctl{flex:1 1 320px}
 .fa-bar{padding:10px 14px;margin-bottom:12px}
 .fa-bar>.fa-ctl{padding:0;margin:0}
@@ -423,6 +439,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
     <button class="nav-i" data-v="stats"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>สถิติและเปรียบเทียบ</button>
     <button class="nav-i" data-v="ai"><svg viewBox="0 0 24 24"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9zM5 15l.6 1.4L7 17l-1.4.6L5 19l-.6-1.4L3 17l1.4-.6z"/></svg>วิเคราะห์ด้วย AI</button>
     <div class="nav-sec">งานซ่อมบำรุง</div>
+    <button class="nav-i" data-v="setup"><svg viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>ตั้งค่าเครื่องจักร</button>
     <button class="nav-i" data-v="asset"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>ข้อมูลเครื่อง / บันทึกซ่อม</button>
     <button class="nav-i" data-v="route"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z"/></svg>เดินตรวจ / QR</button>
     <button class="nav-i" data-v="report"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></svg>รายงาน</button>
@@ -483,6 +500,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
       <div class="panel span" id="healthPanel"></div>
     </form>
   </main>
+  <main id="setupPage" hidden></main>
   <main id="setPage" hidden></main>
   </div>
   <aside class="log-dock" id="logDock" aria-label="บันทึกการทำงาน">
@@ -520,7 +538,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.14.0',APP_BUILD='2026-10-17T15:42:42+07:00';
+const APP_VERSION='2.15.0',APP_BUILD='2026-10-19T09:33:59+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -744,7 +762,7 @@ function exportCSV(){
 // Pages in the left menu; each has its own <main>. The sensor page is static HTML (it holds the
 // connection log), the others are re-rendered
 const VIEWS={fleet:['fleetPage','ทุกเครื่อง'],overview:['main','ภาพรวมเครื่อง'],fft:['fftPage','วิเคราะห์ FFT'],stats:['statsPage','สถิติและเปรียบเทียบ'],ai:['aiPage','วิเคราะห์ด้วย AI'],
-  asset:['assetPage','ข้อมูลเครื่อง / บันทึกซ่อม'],route:['routePage','เดินตรวจ / QR'],report:['reportPage','รายงาน'],video:['videoPage','ขยายการสั่นจากวิดีโอ'],
+  setup:['setupPage','ตั้งค่าเครื่องจักร'],asset:['assetPage','ข้อมูลเครื่อง / บันทึกซ่อม'],route:['routePage','เดินตรวจ / QR'],report:['reportPage','รายงาน'],video:['videoPage','ขยายการสั่นจากวิดีโอ'],
   sensor:['sensorPage','เซนเซอร์ / เชื่อมต่อ'],settings:['setPage','ตั้งค่าและข้อมูล']};
 function applyTheme(){
   if(S.theme==='light'||S.theme==='dark')document.documentElement.dataset.theme=S.theme;else delete document.documentElement.dataset.theme;
@@ -758,6 +776,7 @@ function render(){
   const ns=names();
   if(ns.length&&!ns.includes(S.sel))S.sel=ns[0];
   const v=VIEWS[S.view]?S.view:'overview';
+  if(typeof applyAxisNames==='function')applyAxisNames(S.sel&&S.assets[S.sel]); // sensor axis directions of this machine
   document.querySelectorAll('#views button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   Object.entries(VIEWS).forEach(([k,[id]])=>$('#'+id).hidden=k!==v);
   $('#mTitle').textContent=VIEWS[v][1];
@@ -765,7 +784,7 @@ function render(){
   if(v!=='overview'){charts.forEach(c=>c.destroy());charts=[]}
   pDestroy();
   try{({overview:()=>renderMain(ns),fft:renderFFTPage,sensor:renderSensorPage,settings:()=>renderSettings(ns),
-    fleet:renderFleet,stats:renderStats,ai:renderAIPage,asset:renderAssetPage,route:renderRoute,report:renderReport,video:renderVideoPage})[v]()}
+    fleet:renderFleet,setup:renderSetupPage,stats:renderStats,ai:renderAIPage,asset:renderAssetPage,route:renderRoute,report:renderReport,video:renderVideoPage})[v]()}
   catch(e){console.error(e);$('#'+VIEWS[v][0]).innerHTML=`<div class="panel empty"><h2>หน้านี้แสดงผลไม่ได้</h2><p>${esc(e.message)}</p>
     <p>ลองกดรีเฟรชแบบล้างแคช (Ctrl+Shift+R) ถ้ายังไม่หาย กดคัดลอกข้อความนี้ส่งมาให้ผู้ดูแล</p><button class="btn" onclick="location.reload()">รีเฟรช</button></div>`}
   if(v!=='sensor')stopScan();
@@ -1705,7 +1724,7 @@ async function renderFFT(){
   $('#fftRec').onchange=e=>{FUI.key=e.target.value;renderFFT()};
   if($('#fftBand'))$('#fftBand').onchange=e=>{FUI.band=e.target.value;renderFFT()};
   el.querySelectorAll('#fftQty button').forEach(b=>b.onclick=()=>{FUI.qty=b.dataset.q;renderFFT()});
-  const c=css(),axes=[['x','X (Vertical)',c.x],['y','Y (Axial)',c.y],['z','Z (Horizontal)',c.z]];
+  const c=css(),axes=AXES.map(([a,l])=>[a,l,c[a]]);
   const thin=(label,color,data)=>({label,data,borderColor:color,backgroundColor:color,borderWidth:1,pointRadius:0,pointHoverRadius:3,tension:0,spanGaps:false});
   const fds=axes.map(([a,l,col])=>thin(l,col,specPoints(dec,band,FUI.qty,a)));
   const ys=fds.flatMap(d=>d.data.map(p=>p.y).filter(Number.isFinite));

@@ -3,7 +3,7 @@
 // specPoints, twfPoints, diagnose, diagHtml, opts, css, cv, uv, fv, dFull, ble, toast, KIND_LABEL).
 
 const FA={keyA:null,keyB:'',cmp:[],cmpView:'split',mode:'spectrum',axis:'all',qty:'vel',band:'low',logY:false,fmin:null,fmax:null,
-  marks:{harm:true,bearing:false,vane:false,line:false,drive:true},cur:{mode:'off',pts:[]},xu:'hz'};
+  marks:{mach:true,harm:true,bearing:false,vane:false,line:false,drive:true},cur:{mode:'off',pts:[]},xu:'hz'};
 let faCharts=[];
 const faDecCache=new Map();
 function faDecode(r){
@@ -50,6 +50,7 @@ function faMarkers(f1,c,fmax){
   const bf=FA.marks.bearing?bearingFreqs(f1,c.bearing):null;
   if(bf)for(const[name,f]of Object.entries(bf))for(let h=1;h<=3&&h*f<=fmax;h++)L.push({x:h*f,label:h>1?`${h}×${name}`:name,color:k.zd});
   if(FA.marks.drive)L.push(...machineMarks(f1,c,fmax,k));
+  if(FA.marks.mach&&typeof machineSetupMarks==='function')L.push(...machineSetupMarks(f1,c,fmax,k));
   L.push(...cursorLines(k));
   return L;
 }
@@ -131,6 +132,7 @@ async function renderFFTPage(){
     </div>
     <div class="fa-more" ${FA.more?'':'hidden'}>
       <div class="fa-group fa-marks"><span class="sub-h">เส้นบอกความถี่</span>
+        <label class="check"><input type="checkbox" data-m="mach" ${FA.marks.mach?'checked':''}> ความถี่จากตั้งค่าเครื่อง (เกียร์ทุกชั้น, สายพาน, ใบพัด, bearing ทุกตำแหน่ง)</label>
         <label class="check"><input type="checkbox" data-m="harm" ${FA.marks.harm?'checked':''}> Harmonics 1X–10X</label>
         <label class="check"><input type="checkbox" data-m="line" ${FA.marks.line?'checked':''}> ไฟฟ้า 50/100 Hz</label>
         <label class="check"><input type="checkbox" data-m="vane" ${FA.marks.vane?'checked':''}> Vane pass <input type="number" id="faVanes" value="${c.vanes||''}" placeholder="ใบ" style="width:64px"></label>

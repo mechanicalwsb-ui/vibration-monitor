@@ -134,6 +134,7 @@ async function notify(key,title,body,asset){
   if(Date.now()-(S.notified[key]||0)<gap)return;
   S.notified[key]=Date.now();save();
   toast(title+' — '+body);bleLog('แจ้งเตือน: '+title+' — '+body);
+  if(asset&&typeof quietNow==='function'&&quietNow(S.assets[asset])){appLog('sys','ช่วงไม่แจ้งเตือนของ '+asset+': ไม่ส่งการแจ้งเตือน');return}
   if(!S.notify||!S.notify.on)return;
   if(S.notify.sound!==false)beep();
   if(!('Notification' in window)||Notification.permission!=='granted')return;
@@ -151,8 +152,16 @@ async function enableNotifications(on){
 }
 function checkAlerts(asset,recs){
   const c=cfg(asset),last=recs.slice().sort((a,b)=>a.t-b.t).at(-1);if(!last)return;
+  const al=(c.spec&&c.spec.alarm)||{};if(al.notify===false)return; // switched off for this machine
   const z=status(last,c);
-  if(z==='C'||z==='D')notify(asset+'|'+z,`${z==='D'?'⛔ อันตราย':'⚠ เฝ้าระวัง'}: ${asset}`,
+  // only after N readings in a row are in C/D (N from the rule or the machine's criticality), so one spike does not alarm
+  const n=typeof alarmPersist==='function'?alarmPersist(c):1,lastN=series(asset).filter(r=>!r.live).slice(-n);
+  const held=lastN.length>=n&&lastN.every(r=>{const s=status(r,c);return s==='C'||s==='D'});
+  if(al.risePct>0){const ov=overall(last);let ref=null;
+    if(al.riseRef==='baseline'&&c.baseline)ref=vmax(c.baseline.mean.filter(x=>x!=null));
+    else{const w=series(asset).filter(r=>r.t<last.t-864e5&&r.t>=last.t-8*864e5&&isRunning(r,c)!==false).map(overall).filter(v=>v!=null);if(w.length)ref=w.reduce((a,b)=>a+b,0)/w.length}
+    if(ref>0&&ov>ref*(1+al.risePct/100))notify(asset+'|rise','📈 เพิ่มขึ้นเร็ว: '+asset,`${fv(ov)} ${uv()} สูงกว่า${al.riseRef==='baseline'?' baseline':'ค่าเฉลี่ย 7 วัน'} ${Math.round((ov/ref-1)*100)}% (เกณฑ์ ${al.risePct}%)`,asset)}
+  if((z==='C'||z==='D')&&held)notify(asset+'|'+z,`${z==='D'?'⛔ อันตราย':'⚠ เฝ้าระวัง'}: ${asset}`,
     `Velocity ${fv(overall(last))} ${uv()} · อุณหภูมิ ${last.temp!=null?last.temp.toFixed(1)+' °C':'–'} (${dFull(last.t)})`,asset);
   const f=forecast(series(asset),c,'ov');
   if(f.ok&&f.dAlarm!=null&&f.dAlarm>0&&f.dAlarm<14)notify(asset+'|fc','📈 แนวโน้มเพิ่มขึ้น: '+asset,`คาดว่าจะถึงระดับอันตราย${fmtDays(f.dAlarm)}`,asset);

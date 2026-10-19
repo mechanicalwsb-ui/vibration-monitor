@@ -285,7 +285,7 @@ function faMotion(decA,decB,recA,recB,list,f1,c){
   const X=filt('x'),Y=filt('y'),Z=filt('z'),g2mm=v=>v*9806.65/(2*Math.PI*f)*1000/(2*Math.PI*f); // g → µm (displacement)
   const orbit=X.s.map((v,i)=>({x:Z.s[i],y:v}));
   const lim=Math.max(...orbit.map(p=>Math.max(Math.abs(p.x),Math.abs(p.y))))*1.15||1;
-  const o=opts('X (Vertical)');o.scales={x:{type:'linear',min:-lim,max:lim,title:{display:true,text:'Z (Horizontal)',color:k.muted},ticks:{display:false},grid:{color:k.line}},y:{min:-lim,max:lim,title:{display:true,text:'X (Vertical)',color:k.muted},ticks:{display:false},grid:{color:k.line}}};
+  const o=opts(AXES[0][1]);o.scales={x:{type:'linear',min:-lim,max:lim,title:{display:true,text:AXES[2][1],color:k.muted},ticks:{display:false},grid:{color:k.line}},y:{min:-lim,max:lim,title:{display:true,text:'X (Vertical)',color:k.muted},ticks:{display:false},grid:{color:k.line}}};
   o.aspectRatio=1;o.maintainAspectRatio=true;$('#faChart').parentElement.style.height='auto';
   faCharts.push(new Chart($('#faChart'),{type:'scatter',data:{datasets:[{label:`วงโคจร X–Z ที่ ${f.toFixed(1)} Hz`,data:orbit,showLine:true,borderColor:k.x,backgroundColor:k.x,borderWidth:1.6,pointRadius:0}]},options:o}));
   const dphi=(a,b)=>{let d=(a.ph-b.ph)*180/Math.PI;while(d>180)d-=360;while(d<-180)d+=360;return d};
@@ -389,6 +389,7 @@ function faBands(decA,decB,recA,recB,list,f1,c){
 
 // ---------- new-capture checks: band alarms, mask, fault indices -> notification ----------
 async function onFftSaved(rec){
+  {const al=((S.assets[rec.asset]||{}).spec||{}).alarm||{};if(al.notify===false||al.fft===false){appLog('data',`ได้ FFT ใหม่ · ${rec.asset} (ปิดการเตือนจาก FFT ของเครื่องนี้)`);return}}
   appLog('data',`ได้ FFT ใหม่ (${KIND_LABEL[rec.kind||'alarm']||rec.kind}) · ${rec.asset} · วัดเมื่อ ${dFull(rec.ts*1000)}`);
   try{
     const c=cfg(rec.asset),d=faDecode(rec);if(!d)return;const f1=speedOf(rec,d,c),msgs=[];

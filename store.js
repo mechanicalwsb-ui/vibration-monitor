@@ -252,6 +252,7 @@ async function mergeState(st,fft){
   {S.ai=S.ai||{};const deadA=T('ai');
     for(const[a0,list]of Object.entries(st.ai||{})){const a=fix(a0),cur=S.ai[a]||(S.ai[a]=[]),ids=new Set(cur.map(h=>h.id));for(const h of list)if(!ids.has(h.id)&&!dead(a,h.t))cur.push(h)}
     for(const[a,list]of Object.entries(S.ai)){if(fix(a)!==a){S.ai[fix(a)]=[...(S.ai[fix(a)]||[]),...list];delete S.ai[a];continue}S.ai[a]=list.filter(h=>!deadA.has(h.id))}}
+  if(st.machTpl){S.machTpl=S.machTpl||{};for(const[k,v]of Object.entries(st.machTpl))if(!S.machTpl[k]||newer(v,S.machTpl[k]))S.machTpl[k]=v}
   if(st.brgDb){S.brgDb=S.brgDb||{};for(const[k,v]of Object.entries(st.brgDb))if(!S.brgDb[k]||newer(v,S.brgDb[k]))S.brgDb[k]=v}
   // favourites: the later star/unstar wins (equal or unknown times: kept if either device has it)
   if(st.fav||st.favT){const lt=S.favT||{},rtT=st.favT||{},lf=new Set(S.fav||[]),rf=new Set(st.fav||[]),out=new Set(),FT={};
