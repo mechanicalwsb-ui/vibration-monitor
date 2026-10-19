@@ -12,18 +12,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.15.0"></script>
-<script src="fft-analysis.js?v=2.15.0"></script>
-<script src="store.js?v=2.15.0"></script>
-<script src="activity.js?v=2.15.0"></script>
-<script src="insights.js?v=2.15.0"></script>
-<script src="pages.js?v=2.15.0"></script>
-<script src="ai.js?v=2.15.0"></script>
-<script src="tools.js?v=2.15.0"></script>
-<script src="machine.js?v=2.15.0"></script>
-<script src="machine-setup.js?v=2.15.0"></script>
-<script src="site-config.js?v=2.15.0"></script>
-<script src="gdrive.js?v=2.15.0"></script>
+<script src="ia3-fft.js?v=2.15.1"></script>
+<script src="fft-analysis.js?v=2.15.1"></script>
+<script src="store.js?v=2.15.1"></script>
+<script src="activity.js?v=2.15.1"></script>
+<script src="insights.js?v=2.15.1"></script>
+<script src="pages.js?v=2.15.1"></script>
+<script src="ai.js?v=2.15.1"></script>
+<script src="tools.js?v=2.15.1"></script>
+<script src="machine.js?v=2.15.1"></script>
+<script src="machine-setup.js?v=2.15.1"></script>
+<script src="site-config.js?v=2.15.1"></script>
+<script src="gdrive.js?v=2.15.1"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -538,7 +538,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.15.0',APP_BUILD='2026-10-19T09:33:59+07:00';
+const APP_VERSION='2.15.1',APP_BUILD='2026-10-19T10:01:07+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -1987,11 +1987,20 @@ function renderSensorPage(){
 // Sensor health (#10) and the optional FFT schedule (#20), one card per remembered sensor
 function renderHealth(){
   const el=$('#healthPanel');if(!el)return;
-  const ids=Object.keys(S.sensors);
+  // One card per physical sensor. Each browser/tablet that connected stores the sensor under its own id
+  // (Chrome gives every browser a different id), and the gateway adds one more, so group the records by MAC
+  // and show this browser's own record (its schedule switches are the ones that run here).
+  const groups=new Map();
+  for(const id of Object.keys(S.sensors)){const sv=S.sensors[id],k=sv.mac?'mac:'+sv.mac:'id:'+id;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(id)}
+  const macAssets=new Set(Object.values(S.sensors).filter(v=>v.mac).map(v=>v.asset));
+  for(const[k,list]of[...groups])if(k.startsWith('id:')&&macAssets.has(S.sensors[list[0]].asset))groups.delete(k); // old copy from before the MAC was read
+  const mine=id=>(scan.known&&scan.known.has(id))||(ble.device&&ble.device.id===id);
+  const reps=[...groups.values()].map(list=>({id:list.find(mine)||list.find(x=>!x.startsWith('gw:'))||list[0],n:list.length}));
+  const ids=reps.map(r=>r.id),copies=Object.fromEntries(reps.map(r=>[r.id,r.n]));
   const sc={ok:['zA','ปกติ'],warn:['zC','ควรดู'],bad:['zD','ต้องแก้'],none:['','ยังไม่มีประวัติ']};
   el.innerHTML=`<div class="ph"><h3>สุขภาพเซนเซอร์ (${ids.length})</h3></div><div class="pbody">${ids.map(id=>{
     const sv=S.sensors[id],h=healthSummary(id),l=h.last||{},sch=sv.sched||{};
-    return`<div class="hcard"><h4>${esc(sv.asset)} <span class="tag ${sc[h.score][0]}">${sc[h.score][1]}</span>${sv.mac?`<span class="muted mono" style="font-size:12px">${sv.mac}</span>`:''}</h4>
+    return`<div class="hcard"><h4>${esc(sv.asset)} <span class="tag ${sc[h.score][0]}">${sc[h.score][1]}</span>${sv.mac?`<span class="muted mono" style="font-size:12px">${esc(sv.mac)}</span>`:''}${copies[id]>1?`<span class="muted" style="font-size:11.5px" title="เซนเซอร์ตัวเดียวกันที่เชื่อมต่อจากหลายเบราว์เซอร์/แท็บเล็ต หรือผ่าน Gateway"> · พบจาก ${copies[id]} อุปกรณ์</span>`:''}</h4>
       <div class="hgrid">
         <div>แบตเตอรี่<b>${l.batt?l.batt.toFixed(2)+' V':'–'}${h.bars?' · '+'▮'.repeat(h.bars)+'▯'.repeat(4-h.bars):''}</b>${h.bars?`เต็ม &gt; ${h.cut[2].toFixed(2)} V · เปลี่ยนเมื่อ ≤ ${h.cut[0].toFixed(2)} V<br>`:''}${h.bpts&&h.bpts.length?`≈ ${Math.round(h.bpts.at(-1).pct)}%`:''}</div>
         <div>นาฬิกาเซนเซอร์<b>${l.drift==null?'–':h.clockBad?'ไม่ได้ตั้งเวลา':(l.fixed||(l.fixed==null&&l.reset&&Math.abs(l.drift)<=86400))?'ตั้งเวลาแล้ว ✓':fmtDrift(l.drift)}</b>รีสตาร์ท ${h.resets?h.resets.length:0} ครั้ง</div>
