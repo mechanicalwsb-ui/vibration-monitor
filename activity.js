@@ -69,7 +69,7 @@ const ACT_FIELD={spec:'ตั้งค่าเครื่อง',machTpl:'แ�
   asset:'ชื่อเครื่อง',scale:'รุ่นเซนเซอร์',sched:'ตารางวัด FFT',cond:'วัด FFT เมื่อเข้าโซน C/D',auto:'ตั้งชื่ออัตโนมัติ',mac:'MAC',
   type:'ประเภท',text:'รายละเอียด',t:'วันที่',title:'หัวข้อ',status:'สถานะ',action:'การแก้ไข',photo:'รูป',chart:'ภาพกราฟ',name:'ชื่อ',assets:'รายการเครื่อง',
   unit:'หน่วยความสั่น',tunit:'หน่วยอุณหภูมิ',theme:'ธีม',fcDays:'ช่วงข้อมูลคาดการณ์',gw:'Gateway',dupIgnore:'คู่ชื่อซ้ำที่ซ่อนไว้',notify:'การแจ้งเตือน',fav:'ปักหมุด'};
-const ACT_QUIET={s:['schedLog','tsAuto','schedFail','names','mt','auto'],a:['mt','sensorThr'],m:['mt'],r:['mt'],b:['mt'],f:['mt'],n:['mt']};
+const ACT_QUIET={s:['schedLog','tsAuto','schedFail','names','mt','auto','sysRaw'],a:['mt','sensorThr'],m:['mt'],r:['mt'],b:['mt'],f:['mt'],n:['mt']};
 const actVal=v=>v==null||v===''?'(ว่าง)':typeof v==='boolean'?(v?'เปิด':'ปิด'):typeof v==='number'?String(+v.toFixed(3)):typeof v==='string'?(v.length>40?v.slice(0,40)+'…':v):Array.isArray(v)&&v.length<=4&&v.every(x=>typeof x==='number')?v.map(x=>+x.toFixed(2)).join(' / '):null;
 function actChanges(kind,prev,cur){
   const keys=new Set([...Object.keys(prev||{}),...Object.keys(cur||{})]),out=[];

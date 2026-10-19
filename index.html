@@ -12,19 +12,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.16.0"></script>
-<script src="fft-analysis.js?v=2.16.0"></script>
-<script src="store.js?v=2.16.0"></script>
-<script src="activity.js?v=2.16.0"></script>
-<script src="insights.js?v=2.16.0"></script>
-<script src="pages.js?v=2.16.0"></script>
-<script src="ai.js?v=2.16.0"></script>
-<script src="tools.js?v=2.16.0"></script>
-<script src="machine.js?v=2.16.0"></script>
-<script src="machine-setup.js?v=2.16.0"></script>
-<script src="machine-level.js?v=2.16.0"></script>
-<script src="site-config.js?v=2.16.0"></script>
-<script src="gdrive.js?v=2.16.0"></script>
+<script src="ia3-fft.js?v=2.17.0"></script>
+<script src="fft-analysis.js?v=2.17.0"></script>
+<script src="store.js?v=2.17.0"></script>
+<script src="activity.js?v=2.17.0"></script>
+<script src="insights.js?v=2.17.0"></script>
+<script src="pages.js?v=2.17.0"></script>
+<script src="ai.js?v=2.17.0"></script>
+<script src="tools.js?v=2.17.0"></script>
+<script src="machine.js?v=2.17.0"></script>
+<script src="machine-setup.js?v=2.17.0"></script>
+<script src="machine-level.js?v=2.17.0"></script>
+<script src="sensor-config.js?v=2.17.0"></script>
+<script src="site-config.js?v=2.17.0"></script>
+<script src="gdrive.js?v=2.17.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -296,6 +297,8 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 .ai-ctx{background:var(--soft);border-radius:8px;padding:10px;font-size:11.5px;max-height:300px;overflow:auto;white-space:pre-wrap;margin:8px 0 0}
 .rp-ai{font-size:10.5pt;border-left:3px solid #1f6feb;padding-left:8px}.rp-ai h3,.rp-ai h4,.rp-ai h5{font-size:11pt;margin:6px 0 2px}
 .plabel svg{width:38mm;height:38mm}
+.sc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px 18px}.sc-grid h4{margin:6px 0 4px;font-size:13px}
+.sc-raw{font-size:11px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;overflow:auto;max-height:200px}
 .md-list{margin:0;padding-left:0;list-style:none;display:grid;gap:8px;font-size:13px}.md-list li{border-left:3px solid var(--line);padding:2px 0 2px 10px}
 .md-list li.md-warn{border-color:#ea580c}.md-list li.md-info{border-color:#2563eb}.md-list li.md-ok{border-color:#16a34a}
 .mg-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:6px 14px;margin:10px 0}.mg-pick .mg-pt{margin-left:auto;width:140px}
@@ -545,7 +548,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.16.0',APP_BUILD='2026-10-19T10:15:51+07:00';
+const APP_VERSION='2.17.0',APP_BUILD='2026-10-19T11:29:21+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -1206,7 +1209,7 @@ function parseSys(dv,fallbackScale){
     kurt:[180,182,184].map(o=>u16(o)/100),
     checkV:[194,196,198].map(o=>r4(u16(o)/scale*25.4)),
     checkG:[200,202,204].map(o=>r4(u16(o)/scale)),
-    battV:u16(206)/1000,runH:u32(76)/3600,trendSec:u16(12),wakeSec:u16(10)};
+    battV:u16(206)/1000,runH:u32(76)/3600,trendSec:u16(12),wakeSec:u16(10),_dv:dv};
 }
 // Clock usable = within a day of this computer (status bit 4 "time sync done" is checked before writes)
 const clockOk=s=>Math.abs(s.clock-Date.now()/1000)<=86400;
@@ -1816,6 +1819,7 @@ function diagHtml(d){
 const LIVE_MS=15000;
 function applySys(s){
   if(!s||!ble.cfg)return;
+  if(ble.device&&s._dv&&typeof keepSysRaw==='function')try{keepSysRaw(ble.device.id,s._dv)}catch(e){} // what is set in the sensor, kept for viewing
   ble.live={sys:s,at:Date.now()};
   if((s.devType===8||s.devType===9)&&ble.cfg.scale!==s.scale){
     bleLog(`เซนเซอร์แจ้งว่าเป็นรุ่น ${s.devType===9?'Digital Accelerometer':'มาตรฐาน'} ปรับการแปลงค่าให้แล้ว`);
@@ -2008,6 +2012,7 @@ function renderHealth(){
   el.innerHTML=`<div class="ph"><h3>สุขภาพเซนเซอร์ (${ids.length})</h3></div><div class="pbody">${ids.map(id=>{
     const sv=S.sensors[id],h=healthSummary(id),l=h.last||{},sch=sv.sched||{};
     return`<div class="hcard"><h4>${esc(sv.asset)} <span class="tag ${sc[h.score][0]}">${sc[h.score][1]}</span>${sv.mac?`<span class="muted mono" style="font-size:12px">${esc(sv.mac)}</span>`:''}${copies[id]>1?`<span class="muted" style="font-size:11.5px" title="เซนเซอร์ตัวเดียวกันที่เชื่อมต่อจากหลายเบราว์เซอร์/แท็บเล็ต หรือผ่าน Gateway"> · พบจาก ${copies[id]} อุปกรณ์</span>`:''}</h4>
+      ${sysRawFor(sv.asset)?`<button type="button" class="btn sm" style="margin:0 0 6px" onclick="openSensorConfig(this.dataset.a)" data-a="${esc(sv.asset)}">⚙ ดูค่าที่ตั้งในเซนเซอร์</button>`:''}
       <div class="hgrid">
         <div>แบตเตอรี่<b>${l.batt?l.batt.toFixed(2)+' V':'–'}${h.bars?' · '+'▮'.repeat(h.bars)+'▯'.repeat(4-h.bars):''}</b>${h.bars?`เต็ม &gt; ${h.cut[2].toFixed(2)} V · เปลี่ยนเมื่อ ≤ ${h.cut[0].toFixed(2)} V<br>`:''}${h.bpts&&h.bpts.length?`≈ ${Math.round(h.bpts.at(-1).pct)}%`:''}</div>
         <div>นาฬิกาเซนเซอร์<b>${l.drift==null?'–':h.clockBad?'ไม่ได้ตั้งเวลา':(l.fixed||(l.fixed==null&&l.reset&&Math.abs(l.drift)<=86400))?'ตั้งเวลาแล้ว ✓':fmtDrift(l.drift)}</b>รีสตาร์ท ${h.resets?h.resets.length:0} ครั้ง</div>

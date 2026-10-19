@@ -240,6 +240,7 @@ function renderSetupPage(){
     const axSel=k=>`<label>แกน ${k.toUpperCase()} ของเซนเซอร์<select data-ax="${k}">${Object.entries(AXN).map(([v,l])=>`<option value="${v}" ${ax[k]===v?'selected':''}>${l}${v==='V'?' (แนวตั้ง)':v==='H'?' (แนวนอน)':' (แนวเพลา)'}</option>`).join('')}</select></label>`;
     body=`<div class="form">${axSel('x')}${axSel('y')}${axSel('z')}
     ${F('ตรวจทิศแกนกับของจริงแล้ว','spec.axesOk',{check:1})}
+    ${typeof sysRawFor==='function'&&sysRawFor(a)?(()=>{const cf=sensorConfig(sysRawFor(a).r.hex);return cf?`<div class="full ms-box"><b>ตามที่ตั้งในเซนเซอร์ (แอป i-ALERT):</b> ${['x','y','z'].map(k=>k.toUpperCase()+' = '+(AXN[cf.set.oriAxes[k]]||'?')).join(' · ')} · trend ทุก ${fmtSec(cf.s.trendSec)} · เกณฑ์ warning ${cf.s.thr.warn.map(v=>v==null?'–':fv(v)).join('/')} ${uv()} <button type="button" class="btn sm" onclick="openSensorConfig(S.sel)">ดูค่าทั้งหมดในเซนเซอร์</button></div>`:''})():''}
     <p class="full muted" style="margin:0;font-size:12px">ค่าเริ่มต้นของ i-ALERT3: X = Vertical, Y = Axial, Z = Horizontal (ติดบนฝาครอบ bearing แนวตั้ง) ถ้าติดด้านข้างหรือแนวเพลา ให้เปลี่ยนตามจริง ชื่อแกนในกราฟจะเปลี่ยนตาม</p>
     ${F('ตำแหน่งติดเซนเซอร์','profile.mount',{full:1,ph:'เช่น ฝาครอบ bearing มอเตอร์ DE ด้านบน'})}
     ${F('วิธีติด','spec.mountType',{sel:[['',''],['stud','สกรู (stud)'],['magnet','แม่เหล็ก'],['adhesive','กาว/epoxy']]})}
