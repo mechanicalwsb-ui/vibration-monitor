@@ -102,7 +102,7 @@ async function gdUpload(folder,name,obj,file){
   await gdFetch(`${GD_UP}files?uploadType=multipart&fields=id`,{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+b},
     body:`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--`});
 }
-function syncState(){const st={};for(const k in S)if(k[0]!=='_'&&!['view','sel','range','unit','tunit','theme','fleetF','fleetSort','stPer','cmp','rep','showFc','wfSel','wfCollapsed','spotRun'].includes(k))st[k]=S[k];return st}
+function syncState(){const st={};for(const k in S)if(k[0]!=='_'&&!['view','sel','range','unit','tunit','theme','fleetF','fleetSort','stPer','cmp','rep','showFc','wfSel','wfCollapsed','spotRun','mmRun'].includes(k))st[k]=S[k];return st}
 // ---- sync ----
 async function gdSync(interactive){
   const c=gdCfg();if(GD.busy||!c.clientId||!c.email)return;

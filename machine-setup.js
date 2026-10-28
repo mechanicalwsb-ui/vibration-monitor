@@ -307,7 +307,7 @@ function renderSetupPage(){
     <div class="tablewrap"><table class="ms-t"><thead><tr><th>เครื่อง</th><th>Tag</th><th>พื้นที่</th><th>ชนิด</th><th class="num">kW</th><th class="num">RPM</th><th>สำคัญ</th><th>ความครบ</th><th>PM</th></tr></thead><tbody>
       ${ns.map(n=>{const cc=cfg(n),q=completeness(n),pm=pmStatus(n).filter(x=>x.due).length;return`<tr data-reg="${esc(n)}" style="cursor:pointer"><td>${esc(n)}</td><td>${esc((cc.profile||{}).tag||'')}</td><td>${esc((cc.profile||{}).area||'')}</td><td>${esc((cc.profile||{}).type||'')}</td><td class="num">${(cc.profile||{}).kw??''}</td><td class="num">${cc.rpm??''}</td><td>${critOf(cc)}</td><td><span class="ms-bar"><i style="width:${q.pct}%"></i></span> ${q.pct}%</td><td class="${pm?'up':''}">${pm?pm+' งาน':''}</td></tr>`}).join('')}
     </tbody></table></div>
-    <div class="row" style="margin:6px 0 14px"><button type="button" class="btn sm" id="regExp">ส่งออก CSV (เปิดใน Excel)</button><button type="button" class="btn sm" id="regImp">นำเข้า CSV</button><span class="muted" style="font-size:12px">แก้ไฟล์ใน Excel แล้วนำเข้ากลับ จับคู่ด้วยชื่อเครื่อง</span></div>
+    <div class="row" style="margin:6px 0 14px"><button type="button" class="btn sm" id="mlExp" title="1 แถวต่อ 1 เครื่องจักร (ค่าที่ทุกจุดวัดของเครื่องใช้ร่วมกัน)">ส่งออกรายชื่อเครื่องจักร</button><button type="button" class="btn sm" id="mlImp">นำเข้ารายชื่อเครื่องจักร</button><button type="button" class="btn sm" id="regExp">ส่งออก CSV (เปิดใน Excel)</button><button type="button" class="btn sm" id="regImp">นำเข้า CSV</button><span class="muted" style="font-size:12px">แก้ไฟล์ใน Excel แล้วนำเข้ากลับ จับคู่ด้วยชื่อเครื่อง</span></div>
     <b style="font-size:13px">แม่แบบเครื่อง</b>
     <div class="row" style="margin:4px 0"><input id="tplName" placeholder="ชื่อแม่แบบ เช่น ปั๊มน้ำ 30 kW 2 pole" style="flex:1;min-width:200px"><button type="button" class="btn sm primary" id="tplSave">บันทึก "${esc(a)}" เป็นแม่แบบ</button></div>
     <div class="tablewrap"><table class="ms-t"><tbody>${Object.entries(tpl).map(([id,t])=>`<tr><td>${esc(t.name)}</td><td class="muted">${t.mt?dShort(t.mt):''}</td><td class="row" style="flex-wrap:nowrap"><button type="button" class="btn sm" data-tplapply="${esc(id)}">ใช้กับ "${esc(a)}"</button><button type="button" class="btn sm" data-tpldel="${esc(id)}">×</button></td></tr>`).join('')||'<tr><td class="muted">ยังไม่มีแม่แบบ</td></tr>'}</tbody></table></div>
@@ -374,6 +374,8 @@ function msBind(a,c){
   // registry and templates
   p.querySelectorAll('[data-reg]').forEach(tr=>tr.onclick=()=>{S.sel=tr.dataset.reg;MS.tab='gen';save();render()});
   if($('#regExp'))$('#regExp').onclick=regExport;
+  if($('#mlExp'))$('#mlExp').onclick=machineListExport;
+  if($('#mlImp'))$('#mlImp').onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='.csv,text/csv';i.onchange=()=>{if(i.files[0])machineListImport(i.files[0])};i.click()};
   if($('#regImp'))$('#regImp').onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='.csv,text/csv';i.onchange=()=>{if(i.files[0])regImport(i.files[0])};i.click()};
   if($('#tplSave'))$('#tplSave').onclick=()=>{const name=$('#tplName').value.trim()||a;S.machTpl=S.machTpl||{};S.machTpl[uid()]={name,mt:Date.now(),data:tplData(c)};save();re();toast('บันทึกแม่แบบแล้ว')};
   p.querySelectorAll('[data-tplapply]').forEach(b=>b.onclick=()=>{const t=(S.machTpl||{})[b.dataset.tplapply];if(!t||!confirm(`ใช้แม่แบบ "${t.name}" กับ "${a}"?\nค่าในแม่แบบจะเขียนทับค่าเดิมของเครื่องนี้ (tag พื้นที่ รูป อะไหล่ เอกสาร คงเดิม)`))return;

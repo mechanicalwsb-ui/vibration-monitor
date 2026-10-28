@@ -63,7 +63,7 @@ function setSensorMode(id,mode){
 }
 // battery: the manual rates battery life for 1 connection a day and 1 tri-axial FFT per 14 days
 function portableBudgetHtml(id){
-  const sv=S.sensors[id]||{},key=sv.mac||id,since=Date.now()-30*DAY,conn=(S.health[key]||[]).filter(h=>h.t>=since).length,fft=(sv.fftLog||[]).filter(t=>t>=since).length;
+  const sv=S.sensors[id]||{},key=sv.mac||id,since=Date.now()-30*DAY,conn=(S.health[key]||[]).filter(h=>h.t>=since).length,fft=fftTimesOf(id).filter(t=>t>=since).length;
   const hi=conn>90||fft>6;
   return`<span class="tag ${hi?'zC':''}" title="คู่มือคิดอายุแบตที่ เชื่อมต่อวันละ 1 ครั้ง (~30/เดือน) และ FFT 3 แกน 1 ครั้งต่อ 14 วัน (~2/เดือน) ใช้มากกว่านี้แบตจะหมดเร็วขึ้น">30 วัน: เชื่อมต่อ ${conn} · FFT ${fft}${hi?' · ใช้แบตมาก':''}</span>`;
 }
@@ -107,6 +107,7 @@ function spotMachines(){
   const ms=new Map();
   for(const a of allPoints()){const m=machineOf(a);if(!ms.has(m))ms.set(m,[]);ms.get(m).push(a)}
   if(SPOT.newMachine&&!ms.has(SPOT.newMachine))ms.set(SPOT.newMachine,[]);
+  if(typeof machineCatalog==='function')for(const m of machineCatalog())if(!ms.has(m))ms.set(m,[]);
   const rank={over:0,never:1,due:2,ok:3};
   return[...ms].map(([m,pts])=>{const sp=pts.filter(isSpotPoint),dues=sp.map(spotDue),worst=dues.sort((x,y)=>rank[x.state]-rank[y.state])[0]||null;
       const last=Math.max(0,...pts.map(a=>(series(a).at(-1)||{}).t||0));
@@ -129,14 +130,24 @@ function openSpot(point,opt={}){if(!SPOT.done)spotRestore();SPOT.fromRoute=!!opt
 
 // the connected device, if it is a portable sensor
 const portableNow=()=>ble.device&&isPortable(ble.device.id)?ble.device:null;
+// A sensor picked from this page and still set as fixed is offered as the portable one (one confirm),
+// so "connected but the spot page says not connected" cannot happen silently.
+function askPortable(id){
+  const sv=S.sensors[id];if(!sv||isPortable(id))return true;
+  if(!confirm('เซนเซอร์ที่เชื่อมต่อ ('+(sv.mac||sv.asset)+') ตั้งไว้เป็น "ติดตั้งถาวร" ที่จุด "'+sv.asset+'"\n\nใช้ตัวนี้เป็นเซนเซอร์พกพา (วัดรายจุด) ไหม?\n• ไม่ดึงข้อมูลย้อนหลังจากตัวนี้อีก (ข้อมูลในเซนเซอร์จะปนหลายจุด)\n• ปิด "สั่งวัด FFT ตามตาราง" ของตัวนี้ · ฐานติดตั้งเป็นฐานแม่เหล็ก\n• ข้อมูลเก่าของ "'+sv.asset+'" อยู่ที่เดิม · เปลี่ยนกลับได้ในหน้าเซนเซอร์\n\nกด OK เพื่อใช้เป็นเซนเซอร์พกพา'))return false;
+  setSensorMode(id,'portable');return true;
+}
 async function spotConnect(){
   if(ble.busy)return toast('รอให้งานกับเซนเซอร์เสร็จก่อน');
   if(portableNow())return spotReadOnce();
+  // a fixed sensor already connected on this page: offer it instead of opening the chooser again
+  if(ble.device&&S.sensors[ble.device.id]){if(!askPortable(ble.device.id))return;return spotOnConnect()}
   try{await loadKnownSensors()}catch(e){}
   const id=portableIds().find(i=>scan.known&&scan.known.has(i));
   if(id)return useDevice(scan.known.get(id));
-  toast(portableIds().length?'เลือกเซนเซอร์พกพาจากหน้าต่างของ Chrome':'เลือกเซนเซอร์ แล้วตั้งเป็น "พกพา" ในหน้าเซนเซอร์');
-  await pickAndUse();
+  toast('เลือกเซนเซอร์ที่จะใช้เป็นเซนเซอร์พกพาจากหน้าต่างของ Chrome');
+  SPOT.wantPortable=true;
+  try{await pickAndUse()}finally{SPOT.wantPortable=false}
 }
 // called by useDevice() for a portable sensor instead of a trend download
 async function spotOnConnect(){
@@ -148,6 +159,7 @@ async function spotOnConnect(){
 // one read of the system structure (read-only; the clock is set first if the sensor lost it, as the app does)
 async function spotReadOnce(keep){
   const dev=ble.device;if(!dev||ble.busy)return null;
+  if(typeof MM!=='undefined'&&MM.on){toast('กำลังวัดทั้งเครื่องอยู่ รอให้เสร็จก่อน');return null}
   ble.busy=true;updateBleButton();let err=null,s=null;const t0=Date.now();ble.attempts=0;
   try{
     const ch=await bleConnect(dev,SP.timer?2:4);if(!ch.sys)throw new Error('ไม่พบช่องสถานะของเซนเซอร์');
@@ -237,7 +249,7 @@ function renderSpot(){
       <p class="muted" style="margin:8px 0 0;font-size:12.5px">${dueN?`ถึงกำหนดตรวจ ${dueN} เครื่อง · `:''}หรือสแกน QR ที่ติดเครื่องด้วยกล้องมือถือ</p>
       <div class="sp-list">${list.map(x=>`<button class="sp-row" data-m="${esc(x.m)}"><span><b>${esc(x.m)}</b><small>${x.pts.length?`${x.pts.length} จุด${x.sp?` · วัดรายจุด ${x.sp}`:''} · `:''}${x.last?'วัดล่าสุด '+ago(x.last):'ยังไม่มีข้อมูล'}</small></span>${x.sp?dueTag(x.due):''}</button>`).join('')||'<p class="muted">ไม่พบเครื่อง</p>'}</div>
       <button class="sp-add" id="spAddM">+ เพิ่มเครื่องจักรใหม่</button>
-      <div id="spNewM" hidden class="sp-form"><label>ชื่อเครื่องจักร<input id="spMName" placeholder="P-301 ปั๊มน้ำหล่อเย็น"></label>
+      <div id="spNewM" hidden class="sp-form"><label>ชื่อเครื่องจักร<input id="spMName" list="spMList" placeholder="พิมพ์แล้วเลือกจากรายชื่อ"><datalist id="spMList">${typeof catalogOptions==='function'?catalogOptions():''}</datalist></label>
         <label>ต้นกำลัง<select id="spMDrv"><option value="motor">มอเตอร์</option><option value="turbine">เทอร์ไบน์</option></select></label>
         <div class="row"><button class="btn primary" id="spMOk">เพิ่มแล้วเลือกจุดวัด</button><button class="btn" id="spMNo">ยกเลิก</button></div>
         <p class="muted" style="margin:0;font-size:12px">ข้อมูลอื่นกรอกทีหลังได้ในหน้า "ตั้งค่าเครื่องจักร"</p></div>
@@ -257,7 +269,7 @@ function renderSpot(){
     const a=SPOT.point,c=cfg(a),ax=sensorAxesOf(c,a),s=SP.lastS,run=!!SP.timer,left=Math.max(0,Math.ceil((SP.t0+SP.settle-Date.now())/1000));
     body=head(esc(pointLabel(a))+' · วางเซนเซอร์')+`<div class="panel pbody sp-card">
       <div class="sp-box"><b>${esc((c.spec&&c.spec.mountHint)||MOUNT_HINT)}</b><div class="muted">${esc(machineOf(a))} · ทิศแกน ${['x','y','z'].map(k=>`${k.toUpperCase()}=${AX_TH[ax[k]]||ax[k]}`).join(' · ')}${ax.unknown&&ax.unknown.length?' · <span class="up">มีรหัสทิศที่ยังไม่รู้จัก</span>':''}</div></div>
-      ${!dev?`<p>ยังไม่ได้เชื่อมต่อเซนเซอร์พกพา</p><button class="btn primary big" id="spConn2">เชื่อมต่อเซนเซอร์พกพา</button>`
+      ${!dev?(ble.device&&S.sensors[ble.device.id]?`<p>เชื่อมต่อเซนเซอร์ <b>${esc(S.sensors[ble.device.id].mac||S.sensors[ble.device.id].asset)}</b> อยู่ แต่ตั้งไว้เป็น "ติดตั้งถาวร" ที่จุด "${esc(S.sensors[ble.device.id].asset)}"</p><button class="btn primary big" id="spConn2">ใช้ตัวนี้เป็นเซนเซอร์พกพา</button>`:`<p>ยังไม่ได้เชื่อมต่อเซนเซอร์พกพา</p><button class="btn primary big" id="spConn2">เชื่อมต่อเซนเซอร์พกพา</button>`)
       :`<div class="sp-ring ${run?'on':''}">${run?(left>0?`<b>${left}</b><small>วินาที รอค่านิ่ง</small>`:`<b>${SP.samples.length}/${SP.need}</b><small>ค่าที่วัดใหม่</small>`):'<b>พร้อม</b><small>วางเซนเซอร์แล้วกดเริ่ม</small>'}</div>
         ${s?`<div class="sp-v">${['x','y','z'].map((k,i)=>`<div><small>${ax[k]}</small><b>${fv(s.checkV[i])}</b></div>`).join('')}</div><p class="muted" style="text-align:center;margin:0;font-size:12px">ค่าล่าสุดจากเซนเซอร์ (${uv()}) · เซนเซอร์อัปเดตค่าทุก ${SP.wake||'?'} วินาที${SP.wake>300?' · <span class="up">รอนาน แนะนำวัด FFT แทน</span>':''}</p>`:''}
         ${SP.err?`<p class="up" style="margin:0">${esc(SP.err)}</p>`:''}
@@ -288,7 +300,9 @@ function spotBind(){
     on('spAddM',()=>{$('#spNewM').hidden=false;$('#spMName').focus()});on('spMNo',()=>{$('#spNewM').hidden=true});
     on('spMOk',()=>{const n=$('#spMName').value.trim();if(!n)return toast('ใส่ชื่อเครื่องจักร');
       if(allPoints().some(a=>machineOf(a)===n))return spotGo(2,{machine:n});
-      SPOT.newMachine=n;SPOT.newDrv=$('#spMDrv').value;spotGo(2,{machine:n})});
+      SPOT.newMachine=n;SPOT.newDrv=$('#spMDrv').value;
+      if(typeof addCatalogMachine==='function'){addCatalogMachine(n,{'spec.driver':SPOT.newDrv});appLog('edit',`เพิ่มเครื่องจักร "${n}" ในรายชื่อ`);save()}
+      spotGo(2,{machine:n})});
     on('spRep',spotReport);on('spRoute',spotMakeRoute);
   }else if(SPOT.step===2){
     p.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{const a=b.dataset.p;if(!isSpotPoint(a)&&Object.values(S.sensors).some(v=>v.asset===a&&!v.mode)&&!confirm(`"${pointLabel(a)}" มีเซนเซอร์ติดตั้งถาวรอยู่แล้ว วัดรายจุดเพิ่ม (ใช้ยืนยันค่า) ไหม?`))return;spotGo(3,{point:a})});
@@ -310,9 +324,7 @@ function spotBind(){
   }else{
     on('spAgain',()=>{SP.samples=[];spotGo(3)});
     on('spSave',()=>spotSave($('#spNote').value.trim()));
-    on('spFft',async()=>{ble.cfg.asset=SPOT.point;const t=S.lastMeasure||0;await bleMeasureFFT();
-      if((S.lastMeasure||0)>t&&ble.device&&S.sensors[ble.device.id]){const sv=S.sensors[ble.device.id];(sv.fftLog=sv.fftLog||[]).push(S.lastMeasure);sv.fftLog=sv.fftLog.filter(x=>Date.now()-x<60*DAY);save()}
-      renderSpot()});
+    on('spFft',async()=>{ble.cfg.asset=SPOT.point;await bleMeasureFFT();renderSpot()}); // bleMeasureFFT logs the FFT for the battery budget
   }
 }
 function spotMakeRoute(){
@@ -409,7 +421,7 @@ const ORI_BYTES=i=>(i>=56&&i<=57)||(i>=64&&i<=67); // the 12 orientation bits li
 async function writeSensorAxes(id,axes){
   const dev=ble.device;
   if(!dev||!sibIds(id).concat(id).includes(dev.id)){toast('เชื่อมต่อเซนเซอร์ตัวนี้ก่อน แล้วกดบันทึกอีกครั้ง');return false}
-  if(ble.busy){toast('รอให้งานกับเซนเซอร์เสร็จก่อน');return false}
+  if(ble.busy||(typeof MM!=='undefined'&&MM.on)){toast('รอให้งานกับเซนเซอร์เสร็จก่อน');return false}
   const since=Date.now()-(S.lastOriWrite||0);if(since<ORI_WRITE_GAP_MS){toast(`เขียนทิศแกนได้อีกครั้งใน ${Math.ceil((ORI_WRITE_GAP_MS-since)/1000)} วินาที`);return false}
   const codes={};for(const k of['x','y','z']){codes[k]=oriCodeOf(axes[k]);if(!codes[k]){toast('ยังไม่รู้รหัสของ '+AXN[axes[k]]);return false}}
   if(SP.timer)spotStop();

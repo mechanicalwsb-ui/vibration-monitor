@@ -29,6 +29,8 @@ function machineShareSync(mark,stamp){
       const order=pts.slice().sort((x,y)=>completeness(y).pct-completeness(x).pct),d={};
       for(const a of order)for(const[p,v]of Object.entries(sharedSlice(S.assets[a])))if(!(p in d))d[p]=v;
       M=S.machines[m]={data:d,mt:Date.now()};if(typeof appLog==='function')appLog('edit',`เริ่มใช้ค่าตั้งร่วมของเครื่อง "${m}" (${pts.length} จุดวัด)`)}
+    // a listed machine (no point yet) meets its first point: its values win, the point fills the rest
+    if(M.cat&&!M.joined){for(const a of pts)for(const[p,v]of Object.entries(sharedSlice(S.assets[a])))if(!(p in M.data))M.data[p]=v;M.joined=true;M.mt=Date.now()}
     if(src){M.data=sharedSlice(S.assets[src]);M.mt=Date.now()}
     const j=JSON.stringify(M.data);
     for(const a of pts){const c=S.assets[a];if(JSON.stringify(sharedSlice(c))!==j){applySlice(c,M.data);syncMeasured(c)}}
@@ -95,8 +97,10 @@ async function renderMachinePage(){
     return`<tr data-pt="${esc(x)}" style="cursor:pointer"><td><span class="dot z${zz||''}"></span> <b>${esc(pointLabel(x))}</b><br><small class="muted">${SIDE_TH[pointSide(x)]} ${pointEnd(x)!=='?'?pointEnd(x):''}</small></td>
       <td>${zz?`<span class="tag z${zz}">${ZL[zz]}</span>`:'–'}</td><td class="num">${fv(overall(r))}</td><td class="num">${fv(r.vx)} / ${fv(r.vy)} / ${fv(r.vz)}</td>
       <td class="num">${ra.ax!=null&&ra.rad?(ra.ax/ra.rad).toFixed(2):'–'}</td><td class="num">${r.temp!=null?ft(r.temp):'–'}</td><td class="num">${bd!=null?(bd>=0?'+':'')+bd.toFixed(0)+'%':'–'}</td><td>${ago(r.t)}</td></tr>`};
+  const mmh=typeof mmMachineHtml==='function'?mmMachineHtml(m):{btn:'',banner:''};
   p.innerHTML=`<div class="mainhead"><h2>${esc(m)} ${z?`<span class="tag z${z}"><span class="dot z${z}"></span>${ZL[z]} (จุดที่แย่ที่สุด)</span>`:''}${crit?`<span class="crit ${crit}">สำคัญ ${crit}</span>`:''}</h2>
-      <div class="row"><button class="btn" id="mlAI">✨ วิเคราะห์ทั้งเครื่องด้วย AI</button><button class="btn" id="mlRep">รายงานทั้งเครื่อง</button><button class="btn" onclick="setView('setup')">⚙ ตั้งค่าเครื่อง</button></div></div>
+      <div class="row">${mmh.btn}<button class="btn" id="mlAI">✨ วิเคราะห์ทั้งเครื่องด้วย AI</button><button class="btn" id="mlRep">รายงานทั้งเครื่อง</button><button class="btn" onclick="setView('setup')">⚙ ตั้งค่าเครื่อง</button></div></div>
+    ${mmh.banner}
     <div class="panel"><div class="ph"><h3>จุดวัด ${pts.length} จุด · ค่าล่าสุด</h3></div><div class="tablewrap"><table>
       <thead><tr><th>จุดวัด</th><th>สถานะ</th><th class="num">รวม (${uv()})</th><th class="num">${AXES.map(x=>x[1].split(' ')[0]).join(' / ')}</th><th class="num" title="axial ÷ radial">Axial/Radial</th><th class="num">อุณหภูมิ</th><th class="num">เทียบ baseline</th><th>อัปเดต</th></tr></thead>
       <tbody>${pts.map(row).join('')}</tbody></table></div><p class="muted fa-note">แตะแถวเพื่อเปิดภาพรวมของจุดนั้น · Axial/Radial ≥ 0.5 ที่ฝั่งคัปปลิ้งมักบอกแนวเพลาไม่ตรง</p></div>
@@ -106,6 +110,7 @@ async function renderMachinePage(){
     </div>
     <div class="panel"><div class="ph"><h3>สเปกตรัมล่าสุดของแต่ละจุด (สเกลเท่ากัน)</h3></div><div class="pbody" id="mlSpec"><p class="muted">กำลังโหลด…</p></div></div>`;
   p.querySelectorAll('[data-pt]').forEach(tr=>tr.onclick=()=>{S.sel=tr.dataset.pt;setView('overview')});
+  if($('#mlMeasure'))$('#mlMeasure').onclick=()=>openMeasureMachine(m);
   $('#mlAI').onclick=()=>{S.sel=a;S.view='ai';save();render();setTimeout(()=>aiRunMachine(a),50)};
   $('#mlRep').onclick=()=>{S.rep=S.rep||{};S.rep.scope='machine';S.sel=a;setView('report')};
   // trend: overall per point
@@ -120,6 +125,7 @@ async function renderMachinePage(){
   if(!items.length){box.innerHTML='<p class="muted">ยังไม่มี FFT ของจุดใด (สั่งวัด FFT ที่แต่ละจุด)</p>';return}
   let top=0,fmax=0;const env=items.map(it=>{const e=faEnvelope(it.d,['x','y','z']).filter(q=>q.x>=VEL_MIN_HZ);for(const q of e){if(q.y>top)top=q.y;if(q.x>fmax)fmax=q.x}return e});
   const f1s=items.map(it=>speedOf(it.rec,it.d,cfg(it.x))),hi=Math.min(fmax,(vmax(f1s.filter(Boolean))||25)*15);
+  {const h=box.closest('.panel')&&box.closest('.panel').querySelector('.ph h3');if(h&&typeof mmSpecNote==='function')h.innerHTML='สเปกตรัมล่าสุดของแต่ละจุด (สเกลเท่ากัน)<small class="muted" style="font-weight:400">'+mmSpecNote(items.map(it=>it.rec))+'</small>'}
   box.innerHTML=items.map((it,i)=>`<div class="cmp-row"><div class="cmp-title"><i style="background:${pal[i%pal.length]}"></i><b>${esc(pointLabel(it.x))}</b> ${esc(dFull(it.rec.ts*1000))}${f1s[i]?` · 1X ${(f1s[i]*60).toFixed(0)} RPM`:''}</div><div class="cmp-box"><canvas data-ms="${i}"></canvas></div></div>`).join('')+
     `<p class="muted fa-note">แสดงค่าสูงสุดของ 3 แกน ช่วง 0–${Math.round(hi)} Hz · ชี้/แตะกราฟเพื่อดูความถี่เดียวกันทุกจุด · ดูละเอียดที่เมนูวิเคราะห์ FFT</p>`;
   FA._syncGroup=[];
@@ -164,4 +170,52 @@ async function aiRunMachine(asset){
   finally{AI.preparing=false}
   AI.chat[asset]=[];
   aiAsk(asset,`${AI_MACHINE_PROMPT}\n\nข้อมูล (JSON):\n${JSON.stringify(ctx)}`,`วิเคราะห์ทั้งเครื่อง ${m}`,`วิเคราะห์ทั้งเครื่อง ${m}`);
+}
+
+// ---------- plant machine list ----------
+// Names offered when adding a machine, naming a sensor's machine or grouping points (Eastern Sugar mill yard,
+// as given by the maintenance team on 2026-10-28). A machine from the list, or imported from a machine-list
+// CSV, lives in S.machines[name] (cat: true) before it has any point; its values go to the first point that joins.
+const PLANT_MACHINES=['ไฮดลอลิคยกดั๊มพ์ เบอร์ 1 (Hydraulic Truck Tipper No.1)','ไฮดลอลิคยกดั๊มพ์ เบอร์ 2 (Hydraulic Truck Tipper No.2)','ไฮดลอลิคยกดั๊มพ์ เบอร์ 3 (Hydraulic Truck Tipper No.3)',
+  'ตะกาวโกยอ้อย เบอร์ 1 (Cane Rake No.1)','ตะกาวโกยอ้อย เบอร์ 2 (Cane Rake No.2)','สะพานดั๊มพ์ (Side Cane Carrier)','ใบเกลี่ยสะพานดั๊มพ์ (Cane Leveller for Side cane carrier)',
+  'สะพานสิ่งไร้สาระ เบอร์ 1 (Sand conveyer No.1)','สะพานสิ่งไร้สาระ เบอร์ 2 (Sand conveyer No.2)','ใบเตะสะพานดั๊มพ์ เบอร์ 1 (Kicker No.1)','ใบเตะสะพานดั๊มพ์ เบอร์ 2 (Kicker No.2)',
+  'สะพานเมน (Main cane carrier)','ใบมีด Precutter (Pre-cutter for main cane carrier)','ใบมีดสะพานเมน เบอร์ 1 (Cane cutter No.1)','ใบมีดสะพานเมน เบอร์ 2 (Cane cutter No.2)',
+  'ใบเกลี่ยสะพานเมน (Cane Leveller for Main cane carrier)','ใบเตะสะพานเมน เบอร์ 3 (Kicker No.3)','แม่เหล็กก่อนลงเชร็ดเดอร์ (Magnetic separator (for Shredder))',
+  'เชร็ดเดอร์ (Heavy Duty Shredder)','เทอร์ไบน์ (Turbine for Heavy Duty Shredder)','สะพานเชร็ดเดอร์ (Shredder Elevator)','สายพานยาง High speed belt (High speed belt)',
+  'แม่เหล็กสำหรับสะพานยาง (Magnetic separator (for speed belt))','สะพานข้ามชุด เบอร์ 1 (Intermediate Carrier No.1)','สะพานข้ามชุด เบอร์ 2 (Intermediate Carrier No.2)',
+  'สะพานข้ามชุด เบอร์ 3 (Intermediate Carrier No.3)','โรตารี่สกีน (Rotary screen)','รางสว่าน (Screw Conveyer)','ใบเกลี่ย High Speed Belt'];
+function machineCatalog(){
+  const inUse=Object.values(S.assets||{}).map(c=>(c.machine||'').trim()).filter(Boolean);
+  return[...new Set([...PLANT_MACHINES,...Object.keys(S.machines||{}),...inUse])];
+}
+const catalogOptions=()=>machineCatalog().map(n=>`<option value="${esc(n)}">`).join('');
+// a machine with no point yet: an entry in S.machines that the first point merges with (see machineShareSync)
+function addCatalogMachine(name,data){
+  name=String(name||'').trim();if(!name)return null;S.machines=S.machines||{};
+  const M=S.machines[name]||(S.machines[name]={data:{},mt:Date.now(),cat:true});
+  if(data){Object.assign(M.data,data);M.mt=Date.now()}
+  return M;
+}
+// machine-list CSV: one row per machine, the machine-wide settings that every point of it shares
+const MCAT_COLS=[['name',null],['tag','profile.tag'],['area','profile.area'],['location','profile.loc'],['type','profile.type'],['driver','spec.driver'],['kw','profile.kw'],['criticality','spec.crit'],['hours_per_day','spec.hoursDay'],['note','spec.note']];
+function machineListCsv(){
+  const q=v=>v==null?'':/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':String(v);
+  const rows=machineCatalog().map(m=>{const M=(S.machines||{})[m],pt=Object.keys(S.assets||{}).find(a=>(S.assets[a].machine||'').trim()===m||(!S.assets[a].machine&&a===m));
+    const d=M?M.data:pt?sharedSlice(S.assets[pt]):{};return MCAT_COLS.map(([k,p])=>k==='name'?m:d[p]).map(q).join(',')});
+  return'﻿'+[MCAT_COLS.map(x=>x[0]).join(','),...rows].join('\n');
+}
+function machineListExport(){download('รายชื่อเครื่องจักร.csv',new Blob([machineListCsv()],{type:'text/csv'}));appLog('data','ส่งออกรายชื่อเครื่องจักร')}
+async function machineListImport(file){
+  const rows=parseCSV(await file.text());if(rows.length<2)return toast('ไฟล์ว่าง');
+  const h=rows[0].map(x=>String(x).trim().toLowerCase().replace(/^﻿/,'')),col=k=>h.indexOf(k);if(col('name')<0)return toast('ไม่พบคอลัมน์ name');
+  let n=0;
+  for(const r of rows.slice(1)){const m=String(r[col('name')]||'').trim();if(!m)continue;const d={};
+    for(const[k,p]of MCAT_COLS){const i=col(k);if(!p||i<0)continue;const raw=String(r[i]??'').trim();if(raw==='')continue;
+      d[p]=p==='profile.kw'||p==='spec.hoursDay'?+raw:p==='spec.crit'?raw.toUpperCase():p==='spec.driver'?(/turb|เทอร์/i.test(raw)?'turbine':'motor'):raw}
+    // a machine that already has points: the values go to every point (shared settings)
+    const pts=Object.keys(S.assets||{}).filter(a=>(S.assets[a].machine||'').trim()===m);
+    if(pts.length){for(const a of pts)for(const[p,v]of Object.entries(d))setPath(S.assets[a],p,v);if(S.machines&&S.machines[m]){Object.assign(S.machines[m].data,d);S.machines[m].mt=Date.now()}}
+    else addCatalogMachine(m,d);
+    n++}
+  save();render();appLog('data',`นำเข้ารายชื่อเครื่องจักร ${n} เครื่อง จาก ${file.name}`);toast(`นำเข้ารายชื่อเครื่องจักรแล้ว ${n} เครื่อง`);
 }

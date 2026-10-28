@@ -12,21 +12,22 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.20.0"></script>
-<script src="fft-analysis.js?v=2.20.0"></script>
-<script src="store.js?v=2.20.0"></script>
-<script src="activity.js?v=2.20.0"></script>
-<script src="insights.js?v=2.20.0"></script>
-<script src="pages.js?v=2.20.0"></script>
-<script src="ai.js?v=2.20.0"></script>
-<script src="tools.js?v=2.20.0"></script>
-<script src="machine.js?v=2.20.0"></script>
-<script src="machine-setup.js?v=2.20.0"></script>
-<script src="machine-level.js?v=2.20.0"></script>
-<script src="sensor-config.js?v=2.20.0"></script>
-<script src="spot.js?v=2.20.0"></script>
-<script src="site-config.js?v=2.20.0"></script>
-<script src="gdrive.js?v=2.20.0"></script>
+<script src="ia3-fft.js?v=2.21.0"></script>
+<script src="fft-analysis.js?v=2.21.0"></script>
+<script src="store.js?v=2.21.0"></script>
+<script src="activity.js?v=2.21.0"></script>
+<script src="insights.js?v=2.21.0"></script>
+<script src="pages.js?v=2.21.0"></script>
+<script src="ai.js?v=2.21.0"></script>
+<script src="tools.js?v=2.21.0"></script>
+<script src="machine.js?v=2.21.0"></script>
+<script src="machine-setup.js?v=2.21.0"></script>
+<script src="machine-level.js?v=2.21.0"></script>
+<script src="machine-measure.js?v=2.21.0"></script>
+<script src="sensor-config.js?v=2.21.0"></script>
+<script src="spot.js?v=2.21.0"></script>
+<script src="site-config.js?v=2.21.0"></script>
+<script src="gdrive.js?v=2.21.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -113,6 +114,15 @@ select,input:not([type]),input[type=number],input[type=text],input[type=password
 .mainhead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
 .mainhead h2{margin:0;font-size:20px;font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 /* spot checks (spot.js): one step per screen, finger-sized buttons */
+/* machine-wide measuring (machine-measure.js) */
+.mm-dlg{width:min(640px,calc(100vw - 24px))}.mm-body{padding:12px 16px;max-height:68vh;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.mm-list{display:flex;flex-direction:column;gap:6px}
+.mm-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;cursor:pointer}.mm-row.off{cursor:default;opacity:.85}
+.mm-row input{width:18px;height:18px;flex:none}.mm-name{display:flex;flex-direction:column;flex:1;min-width:0}.mm-name small{font-size:12px}
+.mm-opts{display:flex;flex-direction:column;gap:4px;font-size:13.5px}.mm-note{margin:0;font-size:12.5px}
+.mm-prog{width:100%;border-collapse:collapse;font-size:13.5px}.mm-prog td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.mm-prog .mm-msg{color:var(--muted);font-size:12.5px}.mm-prog tr.mm-ok td:nth-child(2){color:var(--za)}.mm-prog tr.mm-fail td:nth-child(2),.mm-prog tr.mm-old td:nth-child(2){color:var(--zd)}
+.mm-prog tr.mm-trig td:nth-child(2),.mm-prog tr.mm-collect td:nth-child(2),.mm-prog tr.mm-measuring td:nth-child(2){color:var(--accent);font-weight:600}
 #spotPage [hidden]{display:none!important}
 #spotPage .sp-card{max-width:620px;display:flex;flex-direction:column;gap:10px}
 .sp-dots{display:flex;gap:6px;max-width:620px;margin:0 0 6px}.sp-dots i{flex:1;height:5px;border-radius:3px;background:var(--line)}.sp-dots i.on{background:var(--accent)}
@@ -589,7 +599,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.20.0',APP_BUILD='2026-10-28T16:34:15+07:00';
+const APP_VERSION='2.21.0',APP_BUILD='2026-10-28T17:17:04+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -1422,6 +1432,7 @@ async function bleSyncTime(){
 }
 async function bleFetch(){
   if(ble.busy||!ble.device)return;
+  if(typeof MM!=='undefined'&&MM.on)return void bleLog('กำลังวัดทั้งเครื่องอยู่ รอให้เสร็จก่อน'); // machine-wide run owns the link
   if(ble.cfg&&ble.cfg.portable)return spotReadOnce(); // portable: no trend download (its memory mixes every point it visited)
   ble.busy=true;updateBleButton();
   const dev=ble.device;let err=null,sysRead=null;
@@ -1430,46 +1441,7 @@ async function bleFetch(){
     const full=$('#bleForm').full.checked;
     $('#bleForm').full.checked=false; // one-off; auto-repeat should stay incremental
     const ch=await bleConnect(dev);
-    if(ch.sys){
-      try{
-        const s=parseSys(await rd(ch.sys),ble.cfg.scale);
-        if(s){
-          sysRead=s;
-          if(s.mac)bleLog('MAC เซนเซอร์: '+s.mac);
-          sensorIdentity(dev,s); // may rename the machine so two sensors never share one name
-          bleLog(`นาฬิกาเซนเซอร์: ${dFull(s.clock*1000)} (${fmtDrift(s.clock-Math.floor(Date.now()/1000))})`);
-          if(timeSyncNeeded(s)){bleLog('⚠ นาฬิกาเซนเซอร์ยังไม่ได้ตั้งเวลา (มักเกิดหลังเซนเซอร์รีสตาร์ท)');
-            try{const s2=await autoSyncTime(ch,dev);if(s2){Object.assign(s,s2);sysRead=s}}catch(e){bleLog('ตั้งเวลาอัตโนมัติไม่สำเร็จ: '+e.message)}}
-          if(!clockOk(s))bleLog('⚠ นาฬิกาเซนเซอร์ยังไม่ตรง trend ใหม่จะมีเวลาผิดและถูกข้าม'+(timeSyncNeeded(s)?' ลองกด "ตั้งเวลาเซนเซอร์" ในแผงค่าสด':' ให้ใช้แอป i-ALERT ตั้งเวลา'));
-          bleLog(`trend ล่าสุดในเซนเซอร์: ${s.lastTrend?dFull(s.lastTrend*1000):'-'}`);
-          applySys(s);
-        }else bleLog('อ่านสถานะเซนเซอร์ได้ไม่ครบ ข้ามการเช็กนาฬิกา');
-      }catch(e){bleLog('อ่านสถานะเซนเซอร์ไม่ได้: '+e.message)}
-    }
-    // Range from the newest downloaded reading; live reads (r.live, added by applySys) are skipped
-    // because they can sit after a gap that was never downloaded
-    const asset=ble.cfg.asset,last=series(asset).filter(r=>!r.live).at(-1);
-    const scale=ble.cfg.scale; // may have been corrected from the sensor's device type
-    // Same as the app: send the newest stored timestamp itself (not +1); a value that matches no record
-    // makes the sensor return just one record. The repeated record is dropped by the de-duplication below.
-    const from=last&&!full?Math.floor(last.t/1000):0;
-    bleLog(from?'ขอเฉพาะค่าหลัง '+dFull(last.t):'ขอข้อมูลทั้งหมดในเซนเซอร์');
-    const recs=parseTrend(await bulkRequest(ch,from),scale);
-    if(recs.length){
-      const ts=recs.map(r=>r.t),lo=vmin(ts),hi=vmax(ts);
-      let unordered=0;for(let i=1;i<ts.length;i++)if(ts[i]<ts[i-1])unordered++;
-      bleLog(`ข้อมูลที่ได้: ${recs.length} ค่า ตั้งแต่ ${dFull(lo)} ถึง ${dFull(hi)}`+(unordered?` · เรียงไม่ตามเวลา ${unordered} จุด`:''));
-    }
-    const idx=new Map(S.readings.map((r,i)=>[r.asset+'|'+r.t,i]));
-    let added=0;
-    for(const r of recs){r.asset=asset;const k=asset+'|'+r.t;
-      if(idx.has(k)){delete S.readings[idx.get(k)].live;continue} // now confirmed by a download
-      idx.set(k,S.readings.length);S.readings.push(r);added++}
-    cfg(asset);ble.last=Date.now();
-    if(added){S.sel=asset;save();render()}
-    bleLog(added?`เพิ่ม ${added} ค่าใหม่ให้ ${asset}`:'ไม่มีค่าใหม่');
-    toast(added?`ดึงข้อมูลจากเซนเซอร์ได้ ${added} ค่า`:'เซนเซอร์ยังไม่มีค่าใหม่');
-    if(added)checkAlerts(asset,recs);
+    const r=await fetchTrendCore(dev,ch,{full});sysRead=r.sysRead;
   }catch(e){
     err=e;bleLog('ผิดพลาด: '+e.message);toast('ดึงข้อมูลจากเซนเซอร์ไม่สำเร็จ: '+e.message);
   }finally{
@@ -1483,6 +1455,52 @@ async function bleFetch(){
     if(!ble.liveTimer)try{if(dev.gatt.connected)dev.gatt.disconnect()}catch(e){}
     bleFinish(dev,err);fillLive();
   }
+}
+// The trend download itself, on an open link to ble.device (also used by the machine-wide run in
+// machine-measure.js): status + clock, then new trend records. opt.full = everything, opt.quiet = no toasts.
+async function fetchTrendCore(dev,ch,opt={}){
+  let sysRead=null;
+  if(ch.sys){
+    try{
+      const s=parseSys(await rd(ch.sys),ble.cfg.scale);
+      if(s){
+        sysRead=s;
+        if(s.mac)bleLog('MAC เซนเซอร์: '+s.mac);
+        sensorIdentity(dev,s); // may rename the machine so two sensors never share one name
+        bleLog(`นาฬิกาเซนเซอร์: ${dFull(s.clock*1000)} (${fmtDrift(s.clock-Math.floor(Date.now()/1000))})`);
+        if(timeSyncNeeded(s)){bleLog('⚠ นาฬิกาเซนเซอร์ยังไม่ได้ตั้งเวลา (มักเกิดหลังเซนเซอร์รีสตาร์ท)');
+          try{const s2=await autoSyncTime(ch,dev);if(s2){Object.assign(s,s2);sysRead=s}}catch(e){bleLog('ตั้งเวลาอัตโนมัติไม่สำเร็จ: '+e.message)}}
+        if(!clockOk(s))bleLog('⚠ นาฬิกาเซนเซอร์ยังไม่ตรง trend ใหม่จะมีเวลาผิดและถูกข้าม'+(timeSyncNeeded(s)?' ลองกด "ตั้งเวลาเซนเซอร์" ในแผงค่าสด':' ให้ใช้แอป i-ALERT ตั้งเวลา'));
+        bleLog(`trend ล่าสุดในเซนเซอร์: ${s.lastTrend?dFull(s.lastTrend*1000):'-'}`);
+        applySys(s);
+      }else bleLog('อ่านสถานะเซนเซอร์ได้ไม่ครบ ข้ามการเช็กนาฬิกา');
+    }catch(e){bleLog('อ่านสถานะเซนเซอร์ไม่ได้: '+e.message)}
+  }
+  // Range from the newest downloaded reading; live reads (r.live, added by applySys) are skipped
+  // because they can sit after a gap that was never downloaded
+  const asset=ble.cfg.asset,last=series(asset).filter(r=>!r.live).at(-1);
+  const scale=ble.cfg.scale; // may have been corrected from the sensor's device type
+  // Same as the app: send the newest stored timestamp itself (not +1); a value that matches no record
+  // makes the sensor return just one record. The repeated record is dropped by the de-duplication below.
+  const from=last&&!opt.full?Math.floor(last.t/1000):0;
+  bleLog(from?'ขอเฉพาะค่าหลัง '+dFull(last.t):'ขอข้อมูลทั้งหมดในเซนเซอร์');
+  const recs=parseTrend(await bulkRequest(ch,from),scale);
+  if(recs.length){
+    const ts=recs.map(r=>r.t),lo=vmin(ts),hi=vmax(ts);
+    let unordered=0;for(let i=1;i<ts.length;i++)if(ts[i]<ts[i-1])unordered++;
+    bleLog(`ข้อมูลที่ได้: ${recs.length} ค่า ตั้งแต่ ${dFull(lo)} ถึง ${dFull(hi)}`+(unordered?` · เรียงไม่ตามเวลา ${unordered} จุด`:''));
+  }
+  const idx=new Map(S.readings.map((r,i)=>[r.asset+'|'+r.t,i]));
+  let added=0;
+  for(const r of recs){r.asset=asset;const k=asset+'|'+r.t;
+    if(idx.has(k)){delete S.readings[idx.get(k)].live;continue} // now confirmed by a download
+    idx.set(k,S.readings.length);S.readings.push(r);added++}
+  cfg(asset);ble.last=Date.now();
+  if(added){if(!opt.quiet)S.sel=asset;save();if(!opt.quiet)render()}
+  bleLog(added?`เพิ่ม ${added} ค่าใหม่ให้ ${asset}`:'ไม่มีค่าใหม่');
+  if(!opt.quiet)toast(added?`ดึงข้อมูลจากเซนเซอร์ได้ ${added} ค่า`:'เซนเซอร์ยังไม่มีค่าใหม่');
+  if(added)checkAlerts(asset,recs);
+  return{added,sysRead};
 }
 // Each physical sensor gets its own machine name. The sensor advertises no name, so a second
 // sensor would otherwise land in the same default machine ("i-ALERT3") and mix the data.
@@ -1557,6 +1575,7 @@ async function downloadManualFFTOnce(ch,keep){
 // FFT_LAST asks for only the most recent alarm capture; 'manual' (opcode 2) returns the last manual FFT.
 async function bleFetchFFT(mode){
   if(ble.busy||!ble.device)return;
+  if(typeof MM!=='undefined'&&MM.on)return toast('กำลังวัดทั้งเครื่องอยู่ รอให้เสร็จก่อน');
   if(ble.cfg.portable&&(mode!=='manual'||!ble.cfg.asset))return toast(mode!=='manual'?'เซนเซอร์พกพาไม่ดึง FFT ตอน alarm (ไม่รู้ว่าวัดที่จุดไหน)':'เลือกจุดวัดในหน้า "วัดรายจุด" ก่อน');
   ble.busy=true;updateBleButton();fillLive();
   const dev=ble.device,asset=ble.cfg.asset;let err=null;
@@ -1642,71 +1661,100 @@ function buildMeasureWrite(read,nowSec){
   dv.setUint32(64,nowSec>>>0,true);  // lastParamTimestamp, as the app writes on every system-structure write
   return out;
 }
+// Spacing between measure commands, per physical sensor (MAC): several sensors of one machine can be
+// measured one after another, and one sensor still gets at most one command per 2 minutes (battery).
+// The old app-wide S.lastMeasure stays the value for every sensor until the first per-sensor time is stored.
+const measKey=dev=>{const sv=S.sensors[dev.id]||{};return sv.mac||dev.id};
+function lastMeasureOf(dev){return S.measureT?S.measureT[measKey(dev)]||0:S.lastMeasure||0}
+function noteMeasure(dev){const now=Date.now();S.measureT=S.measureT||{};S.measureT[measKey(dev)]=now;
+  const sv=S.sensors[dev.id];if(sv){(sv.fftLog=sv.fftLog||[]).push(now);sv.fftLog=sv.fftLog.filter(t=>now-t<60*DAY)}}
+// every FFT measure command of one physical sensor (all browser ids of its MAC), for the battery budget
+function fftTimesOf(id){const sv=S.sensors[id]||{},ids=sv.mac?Object.keys(S.sensors).filter(k=>S.sensors[k].mac===sv.mac):[id];return ids.flatMap(k=>S.sensors[k].fftLog||[])}
+function measureCfgCheck(read,b){const d=diffBytes(read,b,CONFIG_RANGES);
+  if(d.length){const msg='⚠ ค่าตั้งค่าในเซนเซอร์ต่างจากก่อนสั่งวัด ที่ไบต์ '+d.map(i=>`${i} (${hex2(read[i])}→${hex2(b[i])})`).join(', ');
+    bleLog(msg);alert(msg+'\n\nกรุณาตรวจค่าเกณฑ์และการตั้งค่าในแอป i-ALERT');}
+  else bleLog('ตรวจซ้ำแล้ว: ค่าตั้งค่า (เกณฑ์ alarm, ช่วงเวลาวัด, settings, FFT options, tag, MAC) ไม่เปลี่ยน ✓')}
+// Part 1 (on an open link to ble.device): every check, the write, then wait until the sensor shows it started.
+// opt.check(s) may return a reason not to measure (machine stopped, battery ...); opt.sched logs a scheduled run.
+// Returns {read, t0, flag0, done}: done = the bytes after it finished (very fast sensors), else null.
+async function triggerMeasure(dev,ch,opt={}){
+  if(!ch.sys||!(ch.sys.properties.write||ch.sys.properties.writeWithoutResponse))throw new Error('ช่องค่าตั้งค่าของเซนเซอร์เขียนไม่ได้');
+  let read=sysBytes(await rd(ch.sys));
+  if(timeSyncNeeded(parseSys(new DataView(read.buffer),ble.cfg.scale))){ // same as the app: set the clock first
+    try{if(await autoSyncTime(ch,dev))read=sysBytes(await rd(ch.sys))}catch(e){bleLog('ตั้งเวลาอัตโนมัติไม่สำเร็จ: '+e.message)}}
+  const why=measurePreflight(read);
+  if(why.length)throw new Error('ไม่ได้สั่งวัด: '+why.join(' · '));
+  const s=parseSys(new DataView(read.buffer),ble.cfg.scale);applySys(s);
+  if(opt.check){const r=opt.check(s);if(r)throw new Error('ไม่ได้สั่งวัด: '+r)}
+  const out=buildMeasureWrite(read,Math.floor(Date.now()/1000));
+  const changed=diffBytes(read,out);
+  if(changed.some(i=>!(i<=3||(i>=64&&i<=67))))throw new Error('ตรวจพบไบต์ที่ไม่ควรเปลี่ยน ยกเลิกการเขียน'); // defensive, cannot happen
+  bleLog('เขียนลงเซนเซอร์: '+changed.map(i=>`ไบต์ ${i} ${hex2(read[i])}→${hex2(out[i])}`).join(', ')+' (ไบต์อื่นคงเดิม)');
+  setBle('transfer','ส่งคำสั่งวัด FFT');
+  noteMeasure(dev);
+  if(opt.sched){const sv=S.sensors[dev.id];(sv.schedLog||(sv.schedLog=[])).push(Date.now());sv.schedLog=sv.schedLog.filter(t=>Date.now()-t<7*864e5)}
+  save();
+  if(ch.sys.properties.write)await ch.sys.writeValueWithResponse(out);else await ch.sys.writeValueWithoutResponse(out);
+  bleLog('ส่งคำสั่งวัด FFT แล้ว กำลังรอเซนเซอร์วัด…');
+  // Only reads from here on. Started = the sensor showed busy, or already flagged "manual FFT complete".
+  // If it shows neither within START_GRACE_MS, it did not take the command.
+  const START_GRACE_MS=12000,t0=Date.now();let last=read;
+  const flag0=new DataView(read.buffer).getUint16(8,true)&Q_MANUAL_FFT; // a flag left from the previous measurement is not "done"
+  while(Date.now()-t0<START_GRACE_MS+3000){
+    await sleep(1500);
+    if(!dev.gatt.connected){const e=new Error('การเชื่อมต่อหลุดระหว่างวัด เซนเซอร์จะวัดต่อเองจนเสร็จ รอสักครู่แล้วกด "ดึง FFT manual ล่าสุด"');e.trig={read,t0,flag0,done:null};throw e} // written: the result can still be collected
+    const b=sysBytes(await rd(ch.sys)),bdv=new DataView(b.buffer);last=b;
+    setBle('transfer',`เซนเซอร์กำลังวัด FFT (${Math.round((Date.now()-t0)/1000)} วินาที)`);
+    if(bdv.getUint32(0,true)&BUSY_BITS){bleLog('เซนเซอร์เริ่มวัดแล้ว (busy)');return{read,t0,flag0,done:null}}
+    if(!flag0&&(bdv.getUint16(8,true)&Q_MANUAL_FFT))return{read,t0,flag0,done:b};
+    if(Date.now()-t0>START_GRACE_MS)break;
+  }
+  measureCfgCheck(read,last);
+  throw new Error('เซนเซอร์ไม่ได้เริ่มวัด (ไม่มีสถานะ busy หลังสั่ง) ไม่ได้ส่งคำสั่งอื่นเพิ่ม ลองเปิดแอป i-ALERT เชื่อมต่อเซนเซอร์ 1 ครั้งแล้วค่อยลองใหม่');
+}
+// Part 2 (same link, or a new one after the machine-wide run disconnected): wait until the sensor is idle,
+// check that no configuration byte changed, then download the new capture (read-only opcode 2).
+// opt.run tags the capture with the machine-wide run it belongs to. Returns {ts, isNew}.
+async function collectMeasure(dev,ch,trig,opt={}){
+  let after=trig.done,last=trig.read;const t1=Date.now();
+  while(!after&&Date.now()-t1<MEASURE_WAIT_MS){
+    if(!dev.gatt.connected)throw new Error('การเชื่อมต่อหลุดระหว่างวัด เซนเซอร์จะวัดต่อเองจนเสร็จ รอสักครู่แล้วกด "ดึง FFT manual ล่าสุด"');
+    const b=sysBytes(await rd(ch.sys)),bdv=new DataView(b.buffer);last=b;
+    setBle('transfer',`เซนเซอร์กำลังวัด FFT (${Math.round((Date.now()-trig.t0)/1000)} วินาที)`);
+    if(bdv.getUint32(0,true)&BUSY_BITS){await sleep(1500);continue}
+    after=b;
+  }
+  if(!after){measureCfgCheck(trig.read,last);throw new Error('เซนเซอร์ยังวัดไม่เสร็จใน 90 วินาที หยุดรอแล้วโดยไม่ส่งคำสั่งอื่น ลองกด "ดึง FFT manual ล่าสุด" ภายหลัง')}
+  measureCfgCheck(trig.read,after);
+  if(new DataView(after.buffer).getUint16(8,true)&Q_MANUAL_FFT)bleLog('เซนเซอร์แจ้งว่าวัด FFT manual เสร็จ');
+  applySys(parseSys(new DataView(after.buffer),ble.cfg.scale));
+  const asset=ble.cfg.asset,have=await FFTDB.list(asset),prev=(have.find(h=>h.kind==='manual')||{}).ts||0,sNow=ble.live&&ble.live.sys;
+  const keep=async(kind,bytes,ts)=>{const key=asset+'|m|'+ts;if(have.some(h=>h.key===key))return false;
+    const rec={key,asset,ts,kind,rev:sNow?sNow.rev:null,devType:sNow?sNow.devType:null,rpm:sNow&&sNow.rpm||null,bytes,axes:axSnap(asset),
+      ...(ble.cfg.portable?{src:'spot',mount:'magnet'}:{}),...(opt.run?{run:opt.run}:{})};
+    await FFTDB.put(rec);FUI.key=key;setTimeout(()=>onFftSaved(rec),0);return true};
+  const r=await downloadManualFFT(ch,keep);
+  if(r.ts<=prev)bleLog('⚠ ได้ FFT ชุดเดิม (เวลาไม่ใหม่กว่าเดิม) เซนเซอร์อาจไม่ได้วัดใหม่');
+  return{ts:r.ts,isNew:r.ts>prev};
+}
 // opt.auto: started by the per-sensor FFT schedule (#20) the user switched on; same checks, no dialog
 async function bleMeasureFFT(opt={}){
   if(ble.busy||!ble.device)return;
+  if(typeof MM!=='undefined'&&MM.on)return toast('กำลังวัดทั้งเครื่องอยู่ รอให้เสร็จก่อน');
   if(ble.cfg.portable&&!ble.cfg.asset)return toast('เลือกจุดวัดในหน้า "วัดรายจุด" ก่อนสั่งวัด FFT');
   const auto=!!(opt&&opt.auto);
-  const since=Date.now()-(S.lastMeasure||0);
+  const since=Date.now()-lastMeasureOf(ble.device);
   if(since<MEASURE_GAP_MS)return toast(`สั่งวัดได้อีกครั้งใน ${Math.ceil((MEASURE_GAP_MS-since)/1000)} วินาที (ถนอมแบตเซนเซอร์)`);
   if(auto)bleLog('สั่งวัด FFT ตามตารางที่ตั้งไว้ (ใช้ขั้นตอนป้องกันเดียวกับปุ่มสั่งวัด)');
   else if(!confirm('สั่งให้เซนเซอร์วัด FFT ใหม่ตอนนี้?\n\nหน้าเว็บจะเขียนคำสั่ง "วัด FFT" ลงเซนเซอร์แบบเดียวกับปุ่มในแอป i-ALERT\n• เปลี่ยนแค่ช่องคำสั่ง และเวลาที่สั่ง\n• ค่าตั้งค่าอื่น (เกณฑ์ alarm ฯลฯ) คงเดิมทุกไบต์ และจะตรวจซ้ำหลังวัด\n• ใช้เวลาประมาณ 10–30 วินาที แล้วดาวน์โหลดผลให้อัตโนมัติ\n\nกด OK เพื่อสั่งวัด'))return;
   ble.busy=true;updateBleButton();fillLive();
-  const dev=ble.device,asset=ble.cfg.asset;let err=null;
+  const dev=ble.device;let err=null;
   try{
     const ch=await bleConnect(dev);
-    if(!ch.sys||!(ch.sys.properties.write||ch.sys.properties.writeWithoutResponse))throw new Error('ช่องค่าตั้งค่าของเซนเซอร์เขียนไม่ได้');
-    let read=sysBytes(await rd(ch.sys));
-    if(timeSyncNeeded(parseSys(new DataView(read.buffer),ble.cfg.scale))){ // same as the app: set the clock first
-      try{if(await autoSyncTime(ch,dev))read=sysBytes(await rd(ch.sys))}catch(e){bleLog('ตั้งเวลาอัตโนมัติไม่สำเร็จ: '+e.message)}}
-    const why=measurePreflight(read);
-    if(why.length)throw new Error('ไม่ได้สั่งวัด: '+why.join(' · '));
-    const s=parseSys(new DataView(read.buffer),ble.cfg.scale);applySys(s);
-    const out=buildMeasureWrite(read,Math.floor(Date.now()/1000));
-    const changed=diffBytes(read,out);
-    if(changed.some(i=>!(i<=3||(i>=64&&i<=67))))throw new Error('ตรวจพบไบต์ที่ไม่ควรเปลี่ยน ยกเลิกการเขียน'); // defensive, cannot happen
-    bleLog('เขียนลงเซนเซอร์: '+changed.map(i=>`ไบต์ ${i} ${hex2(read[i])}→${hex2(out[i])}`).join(', ')+' (ไบต์อื่นคงเดิม)');
-    setBle('transfer','ส่งคำสั่งวัด FFT');
-    S.lastMeasure=Date.now();
-    if(auto){const sv=S.sensors[dev.id];(sv.schedLog||(sv.schedLog=[])).push(Date.now());sv.schedLog=sv.schedLog.filter(t=>Date.now()-t<7*864e5)}
-    save();
-    if(ch.sys.properties.write)await ch.sys.writeValueWithResponse(out);else await ch.sys.writeValueWithoutResponse(out);
-    bleLog('ส่งคำสั่งวัด FFT แล้ว กำลังรอเซนเซอร์วัด…');
-    // Only reads from here on: poll the system structure until no measurement bits are pending
-    // Done = the sensor showed it was busy (or flagged "manual FFT complete") and is idle again.
-    // If it never shows either within START_GRACE_MS, it did not take the command.
-    const START_GRACE_MS=12000,t0=Date.now();let after=null,sawBusy=false,last=read;
-    const flag0=new DataView(read.buffer).getUint16(8,true)&Q_MANUAL_FFT; // a flag left from the previous measurement is not "done"
-    while(Date.now()-t0<MEASURE_WAIT_MS){
-      await sleep(1500);
-      if(!dev.gatt.connected)throw new Error('การเชื่อมต่อหลุดระหว่างวัด เซนเซอร์จะวัดต่อเองจนเสร็จ รอสักครู่แล้วกด "ดึง FFT manual ล่าสุด"');
-      const b=sysBytes(await rd(ch.sys)),bdv=new DataView(b.buffer);last=b;
-      setBle('transfer',`เซนเซอร์กำลังวัด FFT (${Math.round((Date.now()-t0)/1000)} วินาที)`);
-      if(bdv.getUint32(0,true)&BUSY_BITS){if(!sawBusy)bleLog('เซนเซอร์เริ่มวัดแล้ว (busy)');sawBusy=true;continue}
-      if(sawBusy||(!flag0&&(bdv.getUint16(8,true)&Q_MANUAL_FFT))){after=b;break}
-      if(Date.now()-t0>START_GRACE_MS)break;
-    }
-    const cfgCheck=b=>{const d=diffBytes(read,b,CONFIG_RANGES);
-      if(d.length){const msg='⚠ ค่าตั้งค่าในเซนเซอร์ต่างจากก่อนสั่งวัด ที่ไบต์ '+d.map(i=>`${i} (${hex2(read[i])}→${hex2(b[i])})`).join(', ');
-        bleLog(msg);alert(msg+'\n\nกรุณาตรวจค่าเกณฑ์และการตั้งค่าในแอป i-ALERT');}
-      else bleLog('ตรวจซ้ำแล้ว: ค่าตั้งค่า (เกณฑ์ alarm, ช่วงเวลาวัด, settings, FFT options, tag, MAC) ไม่เปลี่ยน ✓')};
-    if(!after){
-      cfgCheck(last);
-      throw new Error(sawBusy?'เซนเซอร์ยังวัดไม่เสร็จใน 90 วินาที หยุดรอแล้วโดยไม่ส่งคำสั่งอื่น ลองกด "ดึง FFT manual ล่าสุด" ภายหลัง'
-        :'เซนเซอร์ไม่ได้เริ่มวัด (ไม่มีสถานะ busy หลังสั่ง) ไม่ได้ส่งคำสั่งอื่นเพิ่ม ลองเปิดแอป i-ALERT เชื่อมต่อเซนเซอร์ 1 ครั้งแล้วค่อยลองใหม่');
-    }
-    cfgCheck(after);
-    if(new DataView(after.buffer).getUint16(8,true)&Q_MANUAL_FFT)bleLog('เซนเซอร์แจ้งว่าวัด FFT manual เสร็จ');
-    applySys(parseSys(new DataView(after.buffer),ble.cfg.scale));
-    // Download the new capture (read-only opcode 2)
-    const have=await FFTDB.list(asset),prev=(have.find(h=>h.kind==='manual')||{}).ts||0,sNow=ble.live&&ble.live.sys;
-    const keep=async(kind,bytes,ts)=>{const key=asset+'|m|'+ts;if(have.some(h=>h.key===key))return false;
-      const rec={key,asset,ts,kind,rev:sNow?sNow.rev:null,devType:sNow?sNow.devType:null,rpm:sNow&&sNow.rpm||null,bytes,axes:axSnap(asset),...(ble.cfg.portable?{src:'spot',mount:'magnet'}:{})};
-      await FFTDB.put(rec);FUI.key=key;setTimeout(()=>onFftSaved(rec),0);return true};
-    const r=await downloadManualFFT(ch,keep);
-    if(r.ts<=prev)bleLog('⚠ ได้ FFT ชุดเดิม (เวลาไม่ใหม่กว่าเดิม) เซนเซอร์อาจไม่ได้วัดใหม่');
-    toast(r.ts>prev?'วัด FFT ใหม่เสร็จแล้ว':'ได้ FFT ชุดเดิม เซนเซอร์อาจไม่ได้วัดใหม่');
-    if(auto&&r.ts>prev){const sv=S.sensors[dev.id];if(sv&&sv.schedFail){sv.schedFail=0;save()}}
+    const trig=await triggerMeasure(dev,ch,{sched:auto});
+    const r=await collectMeasure(dev,ch,trig);
+    toast(r.isNew?'วัด FFT ใหม่เสร็จแล้ว':'ได้ FFT ชุดเดิม เซนเซอร์อาจไม่ได้วัดใหม่');
+    if(auto&&r.isNew){const sv=S.sensors[dev.id];if(sv&&sv.schedFail){sv.schedFail=0;save()}}
     await renderFFT();
   }catch(e){err=e;bleLog('สั่งวัด FFT ไม่สำเร็จ: '+e.message);toast(e.message);
     if(auto){const sv=S.sensors[dev.id];if(sv){sv.schedFail=(sv.schedFail||0)+1;save()}}}
@@ -1889,6 +1937,7 @@ function applySys(s){
 }
 async function bleLiveRead(){
   if(ble.busy||!ble.device)return;
+  if(typeof MM!=='undefined'&&MM.on)return toast('กำลังวัดทั้งเครื่องอยู่ รอให้เสร็จก่อน');
   ble.busy=true;updateBleButton();
   const dev=ble.device;let err=null;
   try{
@@ -2032,7 +2081,7 @@ function updateBleButton(){
 }
 function openBle(){setView('sensor')}
 function renderSensorPage(){
-  $('#assetList').innerHTML=names().map(n=>`<option value="${esc(n)}">`).join('');
+  $('#assetList').innerHTML=[...new Set([...names(),...(typeof machineCatalog==='function'?machineCatalog():[])])].map(n=>`<option value="${esc(n)}">`).join('');
   const f=$('#bleForm');
   if(ble.cfg)f.scale.value=String(ble.cfg.scale);
   f.auto.checked=!!ble.timer;
@@ -2251,21 +2300,27 @@ async function pickAndUse(name){
   bleLog('เลือกแล้ว: '+(dev.name||dev.id));
   return useDevice(dev);
 }
-async function useDevice(dev){
-  if(ble.busy&&ble.device!==dev)return toast('รอให้งานกับเซนเซอร์ตัวนี้เสร็จก่อน แล้วค่อยเปลี่ยนเซนเซอร์');
-  const f=$('#bleForm');
-  rememberDevice(dev);
-  if(!dev._ia3Watch){
-    dev._ia3Watch=true;
+// One listener per device: tells our own disconnects (after a fetch, ble.selfDisc in a machine-wide run)
+// apart from the sensor dropping the link, which aborts a running transfer
+function watchDisconnect(dev){
+  if(dev._ia3Watch)return;
+  dev._ia3Watch=true;
     dev.addEventListener('gattserverdisconnected',()=>{
-      if(!ble.busy){ // our own disconnect after a fetch, or the link dropped while live mode holds it open
+      if(ble.device!==dev&&!ble.liveTimer)return;
+      if(!ble.busy||ble.selfDisc){ // our own disconnect after a fetch, or the link dropped while live mode holds it open
         if(ble.liveTimer&&ble.device===dev){bleLog('สัญญาณหลุด จะเชื่อมใหม่ในรอบถัดไป');setBle('lost')}
         return;
       }
       bleLog('เซนเซอร์ตัดการเชื่อมต่อ');
       if(ble.abort)ble.abort('เซนเซอร์ตัดการเชื่อมต่อระหว่างส่งข้อมูล ลองดึงใหม่อีกครั้ง (ครั้งต่อไปจะดึงต่อจากค่าล่าสุดที่ได้)');
     });
-  }
+}
+async function useDevice(dev){
+  if(typeof MM!=='undefined'&&MM.on)return toast('กำลังวัดทั้งเครื่องอยู่ รอให้เสร็จก่อน');
+  if(ble.busy&&ble.device!==dev)return toast('รอให้งานกับเซนเซอร์ตัวนี้เสร็จก่อน แล้วค่อยเปลี่ยนเซนเซอร์');
+  const f=$('#bleForm');
+  rememberDevice(dev);
+  watchDisconnect(dev);
   // switching sensors: close the previous one's live link first (one sensor at a time)
   if(ble.device&&ble.device!==dev){
     if(ble.liveTimer)toggleLive();
@@ -2273,8 +2328,13 @@ async function useDevice(dev){
     ble.ch=null;
   }
   const saved=S.sensors[dev.id];
-  if(saved&&isPortable(dev.id)){ // portable: no machine name, no auto-download; the spot page picks the point
-    ble.device=dev;ble.cfg={asset:SPOT.point||null,scale:saved.scale||816,portable:true};
+  // picked from the spot page: a new sensor becomes the portable one, a fixed one is offered (askPortable)
+  if(typeof SPOT!=='undefined'&&SPOT.wantPortable){
+    if(!saved){S.sensors[dev.id]={asset:'เซนเซอร์พกพา',scale:+f.scale.value||816,auto:true};setSensorMode(dev.id,'portable')}
+    else if(!askPortable(dev.id)){bleLog('ไม่ได้ใช้เซนเซอร์ตัวนี้เป็นเซนเซอร์พกพา');setBle('idle');return}
+  }
+  if(S.sensors[dev.id]&&isPortable(dev.id)){ // portable: no machine name, no auto-download; the spot page picks the point
+    ble.device=dev;ble.cfg={asset:SPOT.point||null,scale:S.sensors[dev.id].scale||816,portable:true};
     clearInterval(ble.timer);ble.timer=null;f.asset.value='';renderScan();
     return spotOnConnect();
   }

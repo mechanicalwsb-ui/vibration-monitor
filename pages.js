@@ -383,6 +383,7 @@ function renderRoute(){
       <div class="panel pbody route-card">
         <h2 style="margin:0">${esc(a)} ${z?`<span class="tag z${z}">${ZL[z]}</span>`:''}</h2>
         <p class="muted" style="margin:4px 0 12px">${[pr.loc,pr.area,pr.tag].filter(Boolean).map(esc).join(' · ')||'—'} · ${r?`ค่าล่าสุด ${fv(overall(r))} ${uv()} (${ago(r.t)})`:'ยังไม่มีค่า'}${spot?' · วัดรายจุด':''}</p>
+        ${!spot&&pointsOf(machineOf(a)).length>1?`<button class="btn big" id="rtMach" ${ble.busy||(typeof MM!=='undefined'&&MM.on)?'disabled':''}>📡 วัดทั้งเครื่อง ${esc(machineOf(a))}</button>`:''}
         <button class="btn primary big" id="rtFetch" ${ble.busy?'disabled':''}>${spot?(fetchedNow?'✓ วัดแล้ว — วัดอีกครั้ง':'วัดรายจุด (เซนเซอร์พกพา)'):fetchedNow?'✓ ดึงข้อมูลแล้ว — ดึงอีกครั้ง':'เชื่อมต่อเซนเซอร์และดึงข้อมูล'}</button>
         <div class="sub-h" style="margin-top:14px">ตรวจด้วยตา/หู</div>
         <div class="row">${CHECKS.map(x=>`<label class="check chk-big"><input type="checkbox" value="${x}" ${res.checks.includes(x)?'checked':''}> ${x}</label>`).join('')}</div>
@@ -391,6 +392,7 @@ function renderRoute(){
           <button class="btn" id="rtSkip">ข้ามเครื่องนี้</button>
           <div class="row"><button class="btn" id="rtStop">หยุดเดินตรวจ</button><button class="btn primary" id="rtNext">บันทึก → เครื่องถัดไป</button></div></div>
       </div>`;
+    if($('#rtMach'))$('#rtMach').onclick=()=>openMeasureMachine(machineOf(a));
     $('#rtFetch').onclick=()=>spot?openSpot(a,{fromRoute:true}):connectAsset(a).then(()=>render());
     $('#rtSkip').onclick=()=>{run.i++;run.stepAt=Date.now();save();render()};
     $('#rtStop').onclick=()=>{if(confirm('หยุดเดินตรวจ? ผลที่บันทึกแล้วยังอยู่'))S.routeRun=null;save();render()};

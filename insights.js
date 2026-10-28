@@ -180,7 +180,7 @@ function noteFetchFailure(asset){
 // Keep a tablet's screen on while auto-fetch runs (it stops when the screen sleeps)
 let wakeLock=null;
 async function updateWakeLock(){
-  const want=!!(ble.timer&&S.notify&&S.notify.wake!==false&&document.visibilityState==='visible');
+  const want=!!((ble.timer||(typeof MM!=='undefined'&&MM.on))&&S.notify&&S.notify.wake!==false&&document.visibilityState==='visible');
   try{
     if(want&&!wakeLock&&navigator.wakeLock){wakeLock=await navigator.wakeLock.request('screen');wakeLock.addEventListener('release',()=>{wakeLock=null})}
     else if(!want&&wakeLock){await wakeLock.release();wakeLock=null}
@@ -272,12 +272,13 @@ const SCHED_MS={day:864e5,week:7*864e5},SCHED_MAX_PER_DAY=2;
 async function scheduledMeasureDue(dev,s){
   const sv=S.sensors[dev.id];if(!sv||!((sv.sched&&sv.sched.on)||(sv.cond&&sv.cond.on)))return false;
   if(typeof isPortable==='function'&&isPortable(dev.id))return false;
+  if(typeof fftBudget==='function'&&!fftBudget(fftTimesOf(dev.id),Date.now()).okDay)return false; // shared with the machine-wide run and spot checks
   const log=sv.schedLog||[],now=Date.now();
   if((sv.schedFail||0)>=3){bleLog('FFT ตามตาราง: หยุดชั่วคราวเพราะสั่งวัดไม่สำเร็จ 3 ครั้งติด (เปิดใหม่ได้ในหน้าเซนเซอร์)');return false}
   // conditional (B6): measure now when the newest reading is in warning/alarm, at most every 12 h
   const c0=cfg(sv.asset),z0=s.rec?status(s.rec,c0):null,condDue=sv.cond&&sv.cond.on&&(z0==='C'||z0==='D')&&now-(sv.condLast||0)>=12*36e5;
   if(condDue){if(log.filter(t=>now-t<DAY).length>=SCHED_MAX_PER_DAY)return false;if(s.flags.battery||!clockOk(s)||!s.flags.running)return false;
-    if(now-(S.lastMeasure||0)<MEASURE_GAP_MS)return false;sv.condLast=now;save();bleLog(`FFT ตามเงื่อนไข: ค่าล่าสุดอยู่ระดับ${z0==='D'?'อันตราย':'เฝ้าระวัง'} สั่งวัด FFT เพื่อเก็บหลักฐาน`);return true}
+    if(now-lastMeasureOf(dev)<MEASURE_GAP_MS)return false;sv.condLast=now;save();bleLog(`FFT ตามเงื่อนไข: ค่าล่าสุดอยู่ระดับ${z0==='D'?'อันตราย':'เฝ้าระวัง'} สั่งวัด FFT เพื่อเก็บหลักฐาน`);return true}
   if(!sv.sched||!sv.sched.on)return false;
   if(log.length&&now-Math.max(...log)<(SCHED_MS[sv.sched.per]||DAY))return false;
   if(log.filter(t=>now-t<DAY).length>=SCHED_MAX_PER_DAY)return false;
@@ -285,7 +286,7 @@ async function scheduledMeasureDue(dev,s){
   if(!clockOk(s)){bleLog('FFT ตามตาราง: ข้าม เพราะนาฬิกาเซนเซอร์ไม่ตรง');return false}
   const c=cfg(sv.asset),r=s.rec;
   if(!s.flags.running||(r&&isRunning(r,c)===false)){bleLog('FFT ตามตาราง: ข้าม เพราะเครื่องหยุดอยู่ (จะลองใหม่รอบถัดไป)');return false}
-  if(now-(S.lastMeasure||0)<MEASURE_GAP_MS)return false;
+  if(now-lastMeasureOf(dev)<MEASURE_GAP_MS)return false;
   return true;
 }
 
