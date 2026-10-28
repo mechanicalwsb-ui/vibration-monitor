@@ -31,7 +31,7 @@ function runInfo(rs,c,from=-Infinity){
 }
 
 // ---- data gaps ----
-function sensorKeysOf(asset){return Object.entries(S.sensors||{}).filter(([,v])=>v.asset===asset).map(([id,v])=>v.mac||id)}
+function sensorKeysOf(asset){return Object.entries(S.sensors||{}).filter(([id,v])=>v.asset===asset&&!(typeof isPortable==='function'&&isPortable(id))).map(([id,v])=>v.mac||id)}
 function findGaps(rs,asset,c){
   if(rs.length<3)return[];
   const step=medianStep(rs),thr=Math.max(3*step,2*36e5),out=[];
@@ -157,7 +157,8 @@ function checkAlerts(asset,recs){
     if(cr&&last.rpm&&last.rpm>=+cr[1]&&last.rpm<=+cr[2])notify(asset+'|crit','⚠ เทอร์ไบน์เดินในช่วงรอบวิกฤต: '+asset,`${last.rpm} RPM อยู่ในช่วง ${cr[1]}–${cr[2]} RPM ไม่ควรเดินค้างในช่วงนี้`,asset)}
   const z=status(last,c);
   // only after N readings in a row are in C/D (N from the rule or the machine's criticality), so one spike does not alarm
-  const n=typeof alarmPersist==='function'?alarmPersist(c):1,lastN=series(asset).filter(r=>!r.live).slice(-n);
+  // a spot check is one reading days apart: two in a row confirm it (the first asks for a re-measurement)
+  const n=last.src==='spot'?2:typeof alarmPersist==='function'?alarmPersist(c):1,lastN=series(asset).filter(r=>!r.live).slice(-n);
   const held=lastN.length>=n&&lastN.every(r=>{const s=status(r,c);return s==='C'||s==='D'});
   if(al.risePct>0){const ov=overall(last);let ref=null;
     if(al.riseRef==='baseline'&&c.baseline)ref=vmax(c.baseline.mean.filter(x=>x!=null));
@@ -270,6 +271,7 @@ function healthSummary(id){
 const SCHED_MS={day:864e5,week:7*864e5},SCHED_MAX_PER_DAY=2;
 async function scheduledMeasureDue(dev,s){
   const sv=S.sensors[dev.id];if(!sv||!((sv.sched&&sv.sched.on)||(sv.cond&&sv.cond.on)))return false;
+  if(typeof isPortable==='function'&&isPortable(dev.id))return false;
   const log=sv.schedLog||[],now=Date.now();
   if((sv.schedFail||0)>=3){bleLog('FFT ตามตาราง: หยุดชั่วคราวเพราะสั่งวัดไม่สำเร็จ 3 ครั้งติด (เปิดใหม่ได้ในหน้าเซนเซอร์)');return false}
   // conditional (B6): measure now when the newest reading is in warning/alarm, at most every 12 h
@@ -328,6 +330,7 @@ function handleHash(){
   openAssetLink(decodeURIComponent(m[1]));history.replaceState(null,'',location.pathname+location.search);
 }
 function openAssetLink(asset){
+  if(typeof isSpotPoint==='function'&&isSpotPoint(asset))return openSpot(asset); // QR on a spot-check point: straight to measuring
   S.sel=asset;S.view='overview';save();render();
   const has=Object.values(S.sensors).some(v=>v.asset===asset);
   S._qrAsset=has?asset:null;render();

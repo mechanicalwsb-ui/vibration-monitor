@@ -32,10 +32,10 @@ function sensorConfig(hex){
   return{s,raw:hex,
     chk:[30,32,34].map(vth),runThr:u16(36),runMin:u16(38),band1:[u16(40),u16(42),u16(44)],band2:[u16(46),u16(48),u16(50)],tOff:s16(52)/100,
     lastParam:u32(64),syncTs:u32(72),basePts:u16(100),tag:decodeTag(dv),
-    set:{raw:set,sdk:set>>>31&1,locked:set>>>30&1,claimed:set>>>29&1,pos:(set>>>12)&15||1,ori,oriAxes:{x:ORI[ori.x],y:ORI[ori.y],z:ORI[ori.z]}},
+    set:{raw:set,sdk:set>>>31&1,locked:set>>>30&1,claimed:set>>>29&1,pos:(set>>>12)&15||1,ori,oriAxes:(OM=>({x:OM[ori.x],y:OM[ori.y],z:OM[ori.z]}))(typeof oriMap==='function'?oriMap():ORI)},
     fft:{low:fo&3,high:(fo>>2)&3,flux:(fo>>4)&3},mode:u8(117),rsbw:u8(114)};
 }
-function sysRawFor(a){let best=null;for(const[id,sv]of Object.entries(S.sensors||{}))if(sv.asset===a&&sv.sysRaw&&(!best||sv.sysRaw.t>best.r.t))best={id,r:sv.sysRaw};return best}
+function sysRawFor(a){let best=null;for(const[id,sv]of Object.entries(S.sensors||{}))if(sv.asset===a&&sv.sysRaw&&!(typeof isPortable==='function'&&isPortable(id))&&(!best||sv.sysRaw.t>best.r.t))best={id,r:sv.sysRaw};return best}
 const fmtSec=s=>!s?'–':s%3600===0?`${s/3600} ชั่วโมง`:s%60===0?`${s/60} นาที`:`${s} วินาที`;
 const tsTxt=t=>t&&t>1420070400?dFull(t*1000):'–';
 function sensorConfigHtml(cf,readAt){
@@ -80,6 +80,6 @@ function openSensorConfig(a){
     `<div class="row" style="margin-top:8px">${ble.device&&S.sensors[ble.device.id]&&S.sensors[ble.device.id].asset===a?'<button type="button" class="btn sm" id="scRead">อ่านค่าล่าสุดจากเซนเซอร์</button>':''}
      ${dif?`<button type="button" class="btn sm" id="scAxes">ใช้ทิศแกนตามแอปในเว็บ (${['x','y','z'].map(k=>k.toUpperCase()+'='+cf.set.oriAxes[k]).join(', ')})</button>`:''}</div>`);
   if($('#scCopy'))$('#scCopy').onclick=()=>navigator.clipboard.writeText(cf.raw).then(()=>toast('คัดลอกแล้ว'),()=>toast('คัดลอกไม่ได้'));
-  if($('#scAxes'))$('#scAxes').onclick=()=>{specOf(c).axes={...cf.set.oriAxes};applyAxisNames(c);save();$('#infoDlg').close();render();toast('ตั้งทิศแกนตามแอปแล้ว')};
+  if($('#scAxes'))$('#scAxes').onclick=()=>{const sp=specOf(c);delete sp.axes;sp.axesSrc='sensor';applyAxisNames(c);save();$('#infoDlg').close();render();toast('ใช้ทิศแกนตามที่ตั้งในเซนเซอร์แล้ว')};
   if($('#scRead'))$('#scRead').onclick=async()=>{$('#infoDlg').close();await bleLiveRead();openSensorConfig(a)};
 }

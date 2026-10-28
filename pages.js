@@ -42,10 +42,10 @@ function showMaint(id){
 function renderFleet(){
   const p=$('#fleetPage'),ns=names();
   if(!ns.length){p.innerHTML='<div class="panel empty"><h2>ยังไม่มีเครื่องจักร</h2><p>เชื่อมต่อเซนเซอร์หรือนำเข้า CSV ก่อน</p><button class="btn primary" onclick="setView(\'sensor\')">เชื่อมต่อเซนเซอร์</button></div>';return}
-  const items=ns.map(a=>{const c=cfg(a),r=lastOf(a),z=status(r,c),stale=Date.now()-r.t>3*DAY;
+  const items=ns.map(a=>{const c=cfg(a),r=lastOf(a),z=status(r,c),spot=typeof isSpotPoint==='function'&&isSpotPoint(a),stale=spot?spotDue(a).state==='over':Date.now()-r.t>3*DAY;
     const key=sensorKeysOf(a)[0],h=key&&S.health[key]?S.health[key].filter(x=>x.batt).at(-1):null;
     const fc=forecast(series(a),c,'ov');
-    return{a,c,r,z,stale,batt:h&&h.batt,batLow:h&&h.batLow,fc,area:(c.profile&&c.profile.area)||'ไม่ระบุพื้นที่'}});
+    return{a,c,r,z,stale,spot,batt:h&&h.batt,batLow:h&&h.batLow,fc,area:(c.profile&&c.profile.area)||'ไม่ระบุพื้นที่'}});
   const cnt=k=>items.filter(i=>i.z===k).length;
   const F=S.fleetF||'all',sort=S.fleetSort||'machine';
   let list=items.filter(i=>F==='all'||(F==='need'&&(i.z==='C'||i.z==='D'||i.batLow||(i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<30)))||(F==='stale'&&i.stale)||(F==='critA'&&critOf(i.c)==='A')||(F==='pm'&&pmAll().some(x=>x.a===i.a&&x.due)));
@@ -63,6 +63,7 @@ function renderFleet(){
       <div class="fc-v num">${fv(overall(i.r))}<small> ${uv()}</small></div>
       <canvas class="spark" data-a="${esc(i.a)}" width="220" height="44"></canvas>
       <div class="fc-sub">${i.stale?'<span class="up">ข้อมูลเก่า</span> · ':''}${ago(i.r.t)}${i.batt?` · แบต ${i.batt.toFixed(2)} V${i.batLow?' ⚠':''}`:''}</div>
+      ${i.spot?`<div class="fc-sub">📍 วัดรายจุด ${dueTag(spotDue(i.a))}</div>`:''}
       ${pmAll().some(x=>x.a===i.a&&x.due)?`<div class="fc-sub up">🔧 งาน PM ถึงกำหนด ${pmStatus(i.a).filter(x=>x.due).length} งาน</div>`:''}
       ${openFailures(i.a).length?`<div class="fc-sub up">รายงานความผิดปกติเปิดอยู่ ${openFailures(i.a).length} เรื่อง</div>`:''}
       ${i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60?`<div class="fc-sub up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</div>`:''}</div>`;
@@ -70,7 +71,7 @@ function renderFleet(){
   const FV=S.fleetView||'card';
   const sections=sort==='machine'?mGroups.map(g=>({multi:g.all.length>1,g,items:g.its})):groups.map(([g,l])=>({title:g,items:l}));
   const mHead=g=>`<span class="dot z${g.wz||''}"></span><b>${esc(g.m)}</b>${g.crit?`<span class="crit ${g.crit}" title="ความสำคัญ">${g.crit}</span>`:''}${g.wz?`<span class="tag z${g.wz}">${ZL[g.wz]}</span>`:''}<span class="muted">${g.all.length} เซนเซอร์${g.its.length<g.all.length?` (แสดง ${g.its.length})`:''}</span>${g.pm?`<span class="up">🔧 PM ถึงกำหนด ${g.pm}</span>`:''}<span class="mg-act"><button type="button" class="btn sm" data-mach="${esc(g.its[0].a)}">ภาพรวมทั้งเครื่อง</button></span>`;
-  const flags=i=>[i.stale&&'<span class="up">ข้อมูลเก่า</span>',pmAll().some(x=>x.a===i.a&&x.due)&&'🔧 PM',openFailures(i.a).length&&`<span class="up">รายงานเปิด ${openFailures(i.a).length}</span>`,i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60&&`<span class="up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</span>`].filter(Boolean).join(' · ');
+  const flags=i=>[i.spot&&'📍 รายจุด',i.stale&&(i.spot?'<span class="up">เลยกำหนดวัด</span>':'<span class="up">ข้อมูลเก่า</span>'),pmAll().some(x=>x.a===i.a&&x.due)&&'🔧 PM',openFailures(i.a).length&&`<span class="up">รายงานเปิด ${openFailures(i.a).length}</span>`,i.fc.ok&&i.fc.dAlarm!=null&&i.fc.dAlarm<60&&`<span class="up">ถึงอันตราย${fmtDays(i.fc.dAlarm)}</span>`].filter(Boolean).join(' · ');
   const tile=(i,pt)=>`<div role="button" tabindex="0" class="fcard ftile z${i.z||''}" data-a="${esc(i.a)}" title="${esc(i.a)} · ${i.z?ZL[i.z]:''} · ${ago(i.r.t)}"><b>${esc(pt?pointLabel(i.a):i.a)}</b><span class="num">${fv(overall(i.r))}</span><small>${i.z?ZL[i.z]:'–'}${i.stale?' · เก่า':''}</small></div>`;
   const lrow=(i,pt)=>{const r=i.r;return`<tr class="frow" data-a="${esc(i.a)}" tabindex="0"><td>${favBtn(i.a)}</td><td><span class="dot z${i.z||''}"></span> <b>${esc(pt?pointLabel(i.a):i.a)}</b>${pt&&pointLabel(i.a)!==i.a?`<br><small class="muted">${esc(i.a)}</small>`:''}</td>
       <td>${i.z?`<span class="tag z${i.z}">${ZL[i.z]}</span>`:'–'}</td><td class="num">${fv(overall(r))}</td><td class="num">${fv(r.vx)} / ${fv(r.vy)} / ${fv(r.vz)}</td><td class="num">${r.temp!=null?ft(r.temp):'–'}</td>
@@ -366,23 +367,23 @@ function renderRoute(){
   const p=$('#routePage'),ns=names();S.routes=S.routes||[];
   const run=S.routeRun,R=run&&S.routes.find(r=>r.id===run.id);
   if(R){ // ---- running a route ----
-    const list=R.assets.filter(x=>ns.includes(x)),i=Math.min(run.i,list.length),done=Object.keys(run.res).length;
+    const list=R.assets.filter(x=>ns.includes(x)||(typeof isSpotPoint==='function'&&isSpotPoint(x))),i=Math.min(run.i,list.length),done=Object.keys(run.res).length;
     if(i>=list.length){
       p.innerHTML=`<div class="mainhead"><h2>เดินตรวจเสร็จ · ${esc(R.name)}</h2></div><div class="panel pbody">
         <p>ตรวจ ${done}/${list.length} เครื่อง · เริ่ม ${dFull(run.start)} · จบ ${dFull(Date.now())}</p>
         <div class="tablewrap"><table><thead><tr><th>เครื่อง</th><th>สถานะ</th><th>ดึงข้อมูล</th><th>ผลตรวจ</th><th>หมายเหตุ</th></tr></thead><tbody>
-        ${list.map(a=>{const r=run.res[a],z=status(lastOf(a),cfg(a));return`<tr><td>${esc(a)}</td><td>${z?`<span class="tag z${z}">${ZL[z]}</span>`:''}</td><td>${r&&r.fetched?'✓':'–'}</td><td style="white-space:normal">${r?esc(r.checks.join(', ')||'-'):'ข้าม'}</td><td style="white-space:normal">${r?esc(r.note||''):''}</td></tr>`}).join('')}</tbody></table></div>
+        ${list.map(a=>{const r=run.res[a],l=lastOf(a),z=l?status(l,cfg(a)):null;return`<tr><td>${esc(a)}</td><td>${z?`<span class="tag z${z}">${ZL[z]}</span>`:''}</td><td>${r&&r.fetched?'✓':'–'}</td><td style="white-space:normal">${r?esc(r.checks.join(', ')||'-'):'ข้าม'}</td><td style="white-space:normal">${r?esc(r.note||''):''}</td></tr>`}).join('')}</tbody></table></div>
         <div class="row" style="margin-top:10px"><button class="btn primary" id="rtEnd">ปิดรอบเดินตรวจ</button></div></div>`;
       $('#rtEnd').onclick=()=>{S.routeRun=null;save();render()};return;
     }
-    const a=list[i],c=cfg(a),r=lastOf(a),z=status(r,c),pr=c.profile||{},res=run.res[a]||{checks:[],note:''};
+    const a=list[i],c=cfg(a),r=lastOf(a),z=r?status(r,c):null,spot=typeof isSpotPoint==='function'&&isSpotPoint(a),pr=c.profile||{},res=run.res[a]||{checks:[],note:''};
     const fetchedNow=ble.cfg&&ble.cfg.asset===a&&ble.last&&ble.last>run.stepAt;
     p.innerHTML=`<div class="mainhead"><h2>เดินตรวจ · ${esc(R.name)}</h2><span class="muted">${i+1} / ${list.length}</span></div>
       <div class="zstack" style="margin-bottom:12px"><i style="flex:${i};background:var(--accent)"></i><i style="flex:${list.length-i};background:var(--line)"></i></div>
       <div class="panel pbody route-card">
         <h2 style="margin:0">${esc(a)} ${z?`<span class="tag z${z}">${ZL[z]}</span>`:''}</h2>
-        <p class="muted" style="margin:4px 0 12px">${[pr.loc,pr.area,pr.tag].filter(Boolean).map(esc).join(' · ')||'—'} · ค่าล่าสุด ${fv(overall(r))} ${uv()} (${ago(r.t)})</p>
-        <button class="btn primary big" id="rtFetch" ${ble.busy?'disabled':''}>${fetchedNow?'✓ ดึงข้อมูลแล้ว — ดึงอีกครั้ง':'เชื่อมต่อเซนเซอร์และดึงข้อมูล'}</button>
+        <p class="muted" style="margin:4px 0 12px">${[pr.loc,pr.area,pr.tag].filter(Boolean).map(esc).join(' · ')||'—'} · ${r?`ค่าล่าสุด ${fv(overall(r))} ${uv()} (${ago(r.t)})`:'ยังไม่มีค่า'}${spot?' · วัดรายจุด':''}</p>
+        <button class="btn primary big" id="rtFetch" ${ble.busy?'disabled':''}>${spot?(fetchedNow?'✓ วัดแล้ว — วัดอีกครั้ง':'วัดรายจุด (เซนเซอร์พกพา)'):fetchedNow?'✓ ดึงข้อมูลแล้ว — ดึงอีกครั้ง':'เชื่อมต่อเซนเซอร์และดึงข้อมูล'}</button>
         <div class="sub-h" style="margin-top:14px">ตรวจด้วยตา/หู</div>
         <div class="row">${CHECKS.map(x=>`<label class="check chk-big"><input type="checkbox" value="${x}" ${res.checks.includes(x)?'checked':''}> ${x}</label>`).join('')}</div>
         <label class="form" style="padding:10px 0 0;display:block">หมายเหตุ<input type="text" id="rtNote" value="${esc(res.note)}" style="width:100%"></label>
@@ -390,7 +391,7 @@ function renderRoute(){
           <button class="btn" id="rtSkip">ข้ามเครื่องนี้</button>
           <div class="row"><button class="btn" id="rtStop">หยุดเดินตรวจ</button><button class="btn primary" id="rtNext">บันทึก → เครื่องถัดไป</button></div></div>
       </div>`;
-    $('#rtFetch').onclick=()=>connectAsset(a).then(()=>render());
+    $('#rtFetch').onclick=()=>spot?openSpot(a,{fromRoute:true}):connectAsset(a).then(()=>render());
     $('#rtSkip').onclick=()=>{run.i++;run.stepAt=Date.now();save();render()};
     $('#rtStop').onclick=()=>{if(confirm('หยุดเดินตรวจ? ผลที่บันทึกแล้วยังอยู่'))S.routeRun=null;save();render()};
     $('#rtNext').onclick=()=>{

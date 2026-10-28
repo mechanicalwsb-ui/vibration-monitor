@@ -89,9 +89,13 @@ function machineSetupMarks(f1,c,fmax,k){
 }
 
 // ---------- sensor axes ----------
-const AXN={V:'Vertical',H:'Horizontal',A:'Axial'};
-function sensorAxesOf(c){const a=(c&&c.spec&&c.spec.axes)||{};return{x:a.x||'V',y:a.y||'A',z:a.z||'H'}}
-function applyAxisNames(c){const o=sensorAxesOf(c);AXES.forEach(r=>{r[1]=r[0].toUpperCase()+' ('+AXN[o[r[0]]]+')'})}
+const AXN={V:'Vertical',H:'Horizontal',A:'Axial',R:'Radial'};
+// Which way each sensor axis points at a point: set for this point only (spec.axes, unless spec.axesSrc says
+// 'sensor'), else as stored in the sensor (spot.js axesFromSensor), else the i-ALERT3 default X=V Y=A Z=H
+function sensorAxesOf(c,a){const s=(c&&c.spec)||{},o=s.axes;
+  if(o&&s.axesSrc!=='sensor')return{x:o.x||'V',y:o.y||'A',z:o.z||'H',src:'point'};
+  const so=typeof axesFromSensor==='function'?axesFromSensor(c,a):null;return so||{x:'V',y:'A',z:'H',src:'default'}}
+function applyAxisNames(c){const o=sensorAxesOf(c);AXES.forEach(r=>{r[1]=r[0].toUpperCase()+' ('+(AXN[o[r[0]]]||o[r[0]])+')'})}
 
 // ---------- alarm rules (P2) ----------
 const critOf=c=>(c.spec&&c.spec.crit)||'';
@@ -256,9 +260,13 @@ function renderSetupPage(){
       </div></div>`}).join('')}</div>
     <div class="form" style="padding:0">${F('เพลาตั้ง (vertical)','spec.vertical',{check:1,rr:1})}${F('อุณหภูมิ bearing ที่ใช้คำนวณ','spec.lubeTemp',{num:1,unit:'°C',ph:T?String(Math.round(T)):'',rr:1})}</div>
     <p class="muted" style="font-size:11.5px">รอบเติมจาระบีใช้สูตรทั่วไปของผู้ผลิต (K × (14×10⁶/(n·√d) − 4d), ลดครึ่งทุก 15 °C เหนือ 70 °C) ปริมาณ G = 0.005·D·B กรัม · เป็นค่าประมาณ ควรเทียบกับคู่มือผู้ผลิตเครื่อง/bearing</p>`}
-  else if(MS.tab==='sensor'){const ax=sensorAxesOf(c),sens=Object.entries(S.sensors||{}).filter(([,x])=>x.asset===a);
-    const axSel=k=>`<label>แกน ${k.toUpperCase()} ของเซนเซอร์<select data-ax="${k}">${Object.entries(AXN).map(([v,l])=>`<option value="${v}" ${ax[k]===v?'selected':''}>${l}${v==='V'?' (แนวตั้ง)':v==='H'?' (แนวนอน)':' (แนวเพลา)'}</option>`).join('')}</select></label>`;
-    body=`<div class="form">${axSel('x')}${axSel('y')}${axSel('z')}
+  else if(MS.tab==='sensor'){const ax=sensorAxesOf(c,a),sens=Object.entries(S.sensors||{}).filter(([id,x])=>x.asset===a&&!(typeof isPortable==='function'&&isPortable(id)));
+    const src=ax.src==='point'?'ตั้งเฉพาะจุดนี้ในเว็บ':ax.src==='sensor'?'ตามที่ตั้งในเซนเซอร์':'ค่าเริ่มต้น (ยังไม่ได้อ่านจากเซนเซอร์)';
+    body=`<div class="form">
+    <div class="full ms-box"><b>วิธีวัดจุดนี้:</b> <label class="check"><input type="radio" name="msSpot" value="0" ${!s.spot?'checked':''}> เซนเซอร์ติดตั้งถาวร</label> <label class="check"><input type="radio" name="msSpot" value="1" ${s.spot?'checked':''}> วัดรายจุด (เซนเซอร์พกพา ฐานแม่เหล็ก)</label></div>
+    ${s.spot?F('รอบวัดรายจุด','spec.spotEvery',{num:1,unit:'วัน',ph:String(SPOT_EVERY[critOf(c)]||30)})+F('คำแนะนำการวาง (ขึ้นตอนวัด)','spec.mountHint',{full:1,ph:MOUNT_HINT}):''}
+    <div class="full ms-box"><b>ทิศแกน:</b> ${['x','y','z'].map(k=>k.toUpperCase()+' = '+(AXN[ax[k]]||ax[k])).join(' · ')} <span class="muted">(${src})</span>${ax.unknown&&ax.unknown.length?' · <span class="up">รหัสที่ยังไม่รู้จัก '+esc(ax.unknown.join(', '))+'</span>':''}
+      <div class="row" style="margin-top:6px"><button type="button" class="btn sm" onclick="openAxisDialog({a:S.sel})">ตั้งทิศแกน</button><button type="button" class="btn sm" onclick="openTapTest(S.sel)">ทดสอบเคาะ</button></div></div>
     ${F('ตรวจทิศแกนกับของจริงแล้ว','spec.axesOk',{check:1})}
     ${typeof sysRawFor==='function'&&sysRawFor(a)?(()=>{const cf=sensorConfig(sysRawFor(a).r.hex);return cf?`<div class="full ms-box"><b>ตามที่ตั้งในเซนเซอร์ (แอป i-ALERT):</b> ${['x','y','z'].map(k=>k.toUpperCase()+' = '+(AXN[cf.set.oriAxes[k]]||'?')).join(' · ')} · trend ทุก ${fmtSec(cf.s.trendSec)} · เกณฑ์ warning ${cf.s.thr.warn.map(v=>v==null?'–':fv(v)).join('/')} ${uv()} <button type="button" class="btn sm" onclick="openSensorConfig(S.sel)">ดูค่าทั้งหมดในเซนเซอร์</button></div>`:''})():''}
     <p class="full muted" style="margin:0;font-size:12px">ค่าเริ่มต้นของ i-ALERT3: X = Vertical, Y = Axial, Z = Horizontal (ติดบนฝาครอบ bearing แนวตั้ง) ถ้าติดด้านข้างหรือแนวเพลา ให้เปลี่ยนตามจริง ชื่อแกนในกราฟจะเปลี่ยนตาม</p>
@@ -352,6 +360,7 @@ function msBind(a,c){
   p.querySelectorAll('[data-mkpm]').forEach(b=>b.onclick=()=>{const pos=b.dataset.mkpm,lbl=(bpos(c).find(x=>x[0]===pos)||[])[1],code=(brgAt(c,pos)||{}).code||'';
     (s.pm=s.pm||[]).push({id:uid(),name:`เติมจาระบี ${lbl} ${code}${b.dataset.g?' · '+b.dataset.g+' g':''}`,every:+b.dataset.h,unit:'runh',lube:pos,created:((s.lube||{})[pos]||{}).last||Date.now()});
     save();MS.tab='pm';re();toast('สร้างงานเติมจาระบีแล้ว')});
+  p.querySelectorAll('input[name=msSpot]').forEach(r=>r.onchange=()=>{s.spot=r.value==='1';if(typeof appLog==='function')appLog('set',`จุด "${a}": ${s.spot?'วัดรายจุด':'เซนเซอร์ติดตั้งถาวร'}`);save();re()});
   // axes
   p.querySelectorAll('[data-ax]').forEach(sl=>sl.onchange=()=>{s.axes=Object.assign(sensorAxesOf(c),{[sl.dataset.ax]:sl.value});const v=Object.values(s.axes);if(new Set(v).size<3)toast('แต่ละแกนควรเป็นคนละทิศ');applyAxisNames(c);save();re()});
   if($('#msIso'))$('#msIso').onclick=()=>{const k=isoClassFor(c.profile);c.cls=k;c.z=[...CLASSES[k].z];if(c.thrSrc==='sensor')c.thrSrc='iso';save();re();toast('ใช้เกณฑ์ '+CLASSES[k].n)};

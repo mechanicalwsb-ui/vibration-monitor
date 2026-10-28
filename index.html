@@ -12,20 +12,21 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="ia3-fft.js?v=2.19.0"></script>
-<script src="fft-analysis.js?v=2.19.0"></script>
-<script src="store.js?v=2.19.0"></script>
-<script src="activity.js?v=2.19.0"></script>
-<script src="insights.js?v=2.19.0"></script>
-<script src="pages.js?v=2.19.0"></script>
-<script src="ai.js?v=2.19.0"></script>
-<script src="tools.js?v=2.19.0"></script>
-<script src="machine.js?v=2.19.0"></script>
-<script src="machine-setup.js?v=2.19.0"></script>
-<script src="machine-level.js?v=2.19.0"></script>
-<script src="sensor-config.js?v=2.19.0"></script>
-<script src="site-config.js?v=2.19.0"></script>
-<script src="gdrive.js?v=2.19.0"></script>
+<script src="ia3-fft.js?v=2.20.0"></script>
+<script src="fft-analysis.js?v=2.20.0"></script>
+<script src="store.js?v=2.20.0"></script>
+<script src="activity.js?v=2.20.0"></script>
+<script src="insights.js?v=2.20.0"></script>
+<script src="pages.js?v=2.20.0"></script>
+<script src="ai.js?v=2.20.0"></script>
+<script src="tools.js?v=2.20.0"></script>
+<script src="machine.js?v=2.20.0"></script>
+<script src="machine-setup.js?v=2.20.0"></script>
+<script src="machine-level.js?v=2.20.0"></script>
+<script src="sensor-config.js?v=2.20.0"></script>
+<script src="spot.js?v=2.20.0"></script>
+<script src="site-config.js?v=2.20.0"></script>
+<script src="gdrive.js?v=2.20.0"></script>
 <style>
 :root{
   --bg:#f5f6f8;--panel:#ffffff;--ink:#15191e;--muted:#5d6670;--line:#e2e5e9;--soft:#eef1f4;
@@ -111,6 +112,31 @@ select,input:not([type]),input[type=number],input[type=text],input[type=password
 .tag.stale{color:var(--muted)}
 .mainhead{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
 .mainhead h2{margin:0;font-size:20px;font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+/* spot checks (spot.js): one step per screen, finger-sized buttons */
+#spotPage [hidden]{display:none!important}
+#spotPage .sp-card{max-width:620px;display:flex;flex-direction:column;gap:10px}
+.sp-dots{display:flex;gap:6px;max-width:620px;margin:0 0 6px}.sp-dots i{flex:1;height:5px;border-radius:3px;background:var(--line)}.sp-dots i.on{background:var(--accent)}
+.sp-st{margin:0 0 10px;font-size:13px}
+.sp-list{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+.sp-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:56px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:inherit;font:inherit;text-align:left;cursor:pointer}
+.sp-row:hover{background:var(--soft)}.sp-row.next{border:2px solid var(--accent)}
+.sp-row span:first-child{display:flex;flex-direction:column;min-width:0}.sp-row small{color:var(--muted);font-size:12.5px}
+.sp-add{min-height:48px;border:1px dashed var(--muted);border-radius:10px;background:none;color:var(--accent);font:inherit;font-weight:600;cursor:pointer}
+.sp-form{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--line);border-radius:10px}
+.sp-form label{display:flex;flex-direction:column;gap:3px;font-size:13px}.sp-form label.check{flex-direction:row;align-items:center}
+.sp-form input:not([type=checkbox]),.sp-form select,#spotPage #spNote,#spotPage #spQ{min-height:42px;font-size:15px}
+#spotPage .btn.big{min-height:48px;font-size:15px;flex:1}
+.sp-box{padding:12px;border-radius:10px;background:var(--soft)}.sp-box b{display:block}
+.sp-res{display:flex;justify-content:space-between;align-items:center}.sp-res b.num{font-size:28px}
+.sp-ring{width:132px;height:132px;margin:6px auto;border-radius:50%;border:8px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.sp-ring.on{border-top-color:var(--accent);animation:sp-spin 1.6s linear infinite}.sp-ring b{font-size:26px}.sp-ring small{font-size:11.5px;color:var(--muted);max-width:96px}
+.sp-ring.on b,.sp-ring.on small{animation:sp-spin 1.6s linear infinite reverse}
+@keyframes sp-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.sp-ring.on,.sp-ring.on b,.sp-ring.on small{animation:none}}
+.sp-v{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}.sp-v div{padding:8px;border-radius:8px;background:var(--soft)}.sp-v small{display:block;color:var(--muted)}.sp-v b{font-size:18px}
+.ax-dlg{max-width:380px;margin:0 auto}.ax-svg{width:100%;max-width:300px;display:block;margin:0 auto}
+.ax-f{display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--line)}.ax-f b{width:20px;font-size:18px}.ax-f select{flex:1;min-height:38px}
+.ax-where{display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:13px}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
 .seg button{border:0;background:none;padding:6px 10px;cursor:pointer}
 .seg button+button{border-left:1px solid var(--line)}
@@ -462,6 +488,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
     <div class="nav-sec">งานซ่อมบำรุง</div>
     <button class="nav-i" data-v="setup"><svg viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>ตั้งค่าเครื่องจักร</button>
     <button class="nav-i" data-v="asset"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>ข้อมูลเครื่อง / บันทึกซ่อม</button>
+    <button class="nav-i" data-v="spot"><svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="3"/><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/></svg>วัดรายจุด</button>
     <button class="nav-i" data-v="route"><svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3h-3zM18 18h3v3h-3z"/></svg>เดินตรวจ / QR</button>
     <button class="nav-i" data-v="report"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h5"/></svg>รายงาน</button>
     <button class="nav-i" data-v="video"><svg viewBox="0 0 24 24"><path d="M15 10l5-3v10l-5-3zM3 6h12v12H3z"/></svg>ขยายการสั่นจากวิดีโอ</button>
@@ -488,6 +515,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
   <main id="aiPage" hidden></main>
   <main id="assetPage" hidden></main>
   <main id="routePage" hidden></main>
+  <main id="spotPage" hidden></main>
   <main id="reportPage" hidden></main>
   <main id="videoPage" hidden></main>
   <main id="sensorPage" hidden>
@@ -561,7 +589,7 @@ table.ai-t th,table.ai-t td{white-space:normal;text-align:left;vertical-align:to
 <script>
 const $=s=>document.querySelector(s);
 // Stamped by deploy.sh when publishing (VERSION file + build time); the working copy shows "dev"
-const APP_VERSION='2.19.0',APP_BUILD='2026-10-19T13:31:58+07:00';
+const APP_VERSION='2.20.0',APP_BUILD='2026-10-28T16:34:15+07:00';
 (()=>{
   const el=$('#appVer');
   if(APP_VERSION.startsWith('__')){el.textContent='เวอร์ชันทดสอบ';return}
@@ -785,7 +813,7 @@ function exportCSV(){
 // Pages in the left menu; each has its own <main>. The sensor page is static HTML (it holds the
 // connection log), the others are re-rendered
 const VIEWS={fleet:['fleetPage','ทุกเครื่อง'],overview:['main','ภาพรวมเครื่อง'],mach:['machPage','ภาพรวมทั้งเครื่อง'],fft:['fftPage','วิเคราะห์ FFT'],stats:['statsPage','สถิติและเปรียบเทียบ'],ai:['aiPage','วิเคราะห์ด้วย AI'],
-  setup:['setupPage','ตั้งค่าเครื่องจักร'],asset:['assetPage','ข้อมูลเครื่อง / บันทึกซ่อม'],route:['routePage','เดินตรวจ / QR'],report:['reportPage','รายงาน'],video:['videoPage','ขยายการสั่นจากวิดีโอ'],
+  setup:['setupPage','ตั้งค่าเครื่องจักร'],asset:['assetPage','ข้อมูลเครื่อง / บันทึกซ่อม'],route:['routePage','เดินตรวจ / QR'],spot:['spotPage','วัดรายจุด'],report:['reportPage','รายงาน'],video:['videoPage','ขยายการสั่นจากวิดีโอ'],
   sensor:['sensorPage','เซนเซอร์ / เชื่อมต่อ'],settings:['setPage','ตั้งค่าและข้อมูล']};
 function applyTheme(){
   if(S.theme==='light'||S.theme==='dark')document.documentElement.dataset.theme=S.theme;else delete document.documentElement.dataset.theme;
@@ -807,7 +835,7 @@ function render(){
   if(v!=='overview'){charts.forEach(c=>c.destroy());charts=[]}
   pDestroy();
   try{({overview:()=>renderMain(ns),fft:renderFFTPage,sensor:renderSensorPage,settings:()=>renderSettings(ns),
-    fleet:renderFleet,mach:renderMachinePage,setup:renderSetupPage,stats:renderStats,ai:renderAIPage,asset:renderAssetPage,route:renderRoute,report:renderReport,video:renderVideoPage})[v]()}
+    fleet:renderFleet,mach:renderMachinePage,setup:renderSetupPage,stats:renderStats,ai:renderAIPage,asset:renderAssetPage,route:renderRoute,spot:renderSpot,report:renderReport,video:renderVideoPage})[v]()}
   catch(e){console.error(e);$('#'+VIEWS[v][0]).innerHTML=`<div class="panel empty"><h2>หน้านี้แสดงผลไม่ได้</h2><p>${esc(e.message)}</p>
     <p>ลองกดรีเฟรชแบบล้างแคช (Ctrl+Shift+R) ถ้ายังไม่หาย กดคัดลอกข้อความนี้ส่งมาให้ผู้ดูแล</p><button class="btn" onclick="location.reload()">รีเฟรช</button></div>`}
   if(v!=='sensor')stopScan();
@@ -1394,6 +1422,7 @@ async function bleSyncTime(){
 }
 async function bleFetch(){
   if(ble.busy||!ble.device)return;
+  if(ble.cfg&&ble.cfg.portable)return spotReadOnce(); // portable: no trend download (its memory mixes every point it visited)
   ble.busy=true;updateBleButton();
   const dev=ble.device;let err=null,sysRead=null;
   const t0=Date.now();ble.attempts=0;
@@ -1447,7 +1476,7 @@ async function bleFetch(){
     ble.busy=false; // before disconnecting, so our own disconnect is not logged as the sensor dropping
     recordHealth(dev,sysRead,{ok:!err,attempts:ble.attempts,ms:Date.now()-t0});
     if(err)noteFetchFailure(ble.cfg&&ble.cfg.asset);else noteFetchFailure(null);
-    if(!err&&sysRead&&!ble.liveTimer&&await scheduledMeasureDue(dev,sysRead)){ // keeps the link: one connection for both
+    if(!err&&sysRead&&!ble.liveTimer&&!ble.cfg.portable&&await scheduledMeasureDue(dev,sysRead)){ // keeps the link: one connection for both
       ble.busy=false;bleFinish(dev,null);fillLive();
       return bleMeasureFFT({auto:true});
     }
@@ -1460,6 +1489,7 @@ async function bleFetch(){
 function sensorIdentity(dev,s){
   const me=S.sensors[dev.id]||(S.sensors[dev.id]={asset:ble.cfg.asset,scale:ble.cfg.scale});
   if(!s.mac)return;
+  if(ble.cfg.portable){me.mac=s.mac;save();return} // portable: measures whichever point is picked
   // same sensor seen before under another browser id (permissions cleared, other browser profile)
   const twin=Object.entries(S.sensors).find(([id,v])=>id!==dev.id&&v.mac===s.mac);
   if(twin&&!me.mac&&me.auto){me.asset=twin[1].asset;bleLog(`รู้จักเซนเซอร์นี้แล้ว (MAC เดียวกัน) ใช้ชื่อเครื่อง "${me.asset}"`)}
@@ -1527,6 +1557,7 @@ async function downloadManualFFTOnce(ch,keep){
 // FFT_LAST asks for only the most recent alarm capture; 'manual' (opcode 2) returns the last manual FFT.
 async function bleFetchFFT(mode){
   if(ble.busy||!ble.device)return;
+  if(ble.cfg.portable&&(mode!=='manual'||!ble.cfg.asset))return toast(mode!=='manual'?'เซนเซอร์พกพาไม่ดึง FFT ตอน alarm (ไม่รู้ว่าวัดที่จุดไหน)':'เลือกจุดวัดในหน้า "วัดรายจุด" ก่อน');
   ble.busy=true;updateBleButton();fillLive();
   const dev=ble.device,asset=ble.cfg.asset;let err=null;
   try{
@@ -1536,7 +1567,7 @@ async function bleFetchFFT(mode){
     const keep=async(kind,bytes,ts)=>{
       const key=asset+'|'+(kind==='alarm'?'':kind[0]+'|')+ts;
       if(have.some(h=>h.key===key))return false;
-      const rec={key,asset,ts,kind,rev:s?s.rev:null,devType:s?s.devType:null,rpm:s&&s.rpm||null,bytes};
+      const rec={key,asset,ts,kind,rev:s?s.rev:null,devType:s?s.devType:null,rpm:s&&s.rpm||null,bytes,axes:axSnap(asset)};
       await FFTDB.put(rec);FUI.key=key;setTimeout(()=>onFftSaved(rec),0);return true;
     };
     let added=0;
@@ -1582,6 +1613,8 @@ const SYS_LEN=220,Q_MANUAL_FFT=1<<3,BUSY_BITS=0x7F,MEASURE_GAP_MS=120000,MEASURE
 const CONFIG_RANGES=[[10,60],[102,112],[114,115],[117,120],[212,218]]; // intervals, thresholds, bands, packet size, settings, tag, FFT options, mode/type/rev, MAC
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const hex2=v=>v.toString(16).padStart(2,'0');
+// axis directions at measuring time, kept with each FFT so a later change does not relabel old captures
+const axSnap=a=>{try{const o=sensorAxesOf(cfg(a),a);return{x:o.x,y:o.y,z:o.z}}catch(e){return null}};
 function sysBytes(v){return new Uint8Array(v.buffer,v.byteOffset,v.byteLength).slice()}
 function diffBytes(a,b,ranges){
   const d=[],chk=i=>{if(a[i]!==b[i])d.push(i)};
@@ -1612,6 +1645,7 @@ function buildMeasureWrite(read,nowSec){
 // opt.auto: started by the per-sensor FFT schedule (#20) the user switched on; same checks, no dialog
 async function bleMeasureFFT(opt={}){
   if(ble.busy||!ble.device)return;
+  if(ble.cfg.portable&&!ble.cfg.asset)return toast('เลือกจุดวัดในหน้า "วัดรายจุด" ก่อนสั่งวัด FFT');
   const auto=!!(opt&&opt.auto);
   const since=Date.now()-(S.lastMeasure||0);
   if(since<MEASURE_GAP_MS)return toast(`สั่งวัดได้อีกครั้งใน ${Math.ceil((MEASURE_GAP_MS-since)/1000)} วินาที (ถนอมแบตเซนเซอร์)`);
@@ -1667,7 +1701,7 @@ async function bleMeasureFFT(opt={}){
     // Download the new capture (read-only opcode 2)
     const have=await FFTDB.list(asset),prev=(have.find(h=>h.kind==='manual')||{}).ts||0,sNow=ble.live&&ble.live.sys;
     const keep=async(kind,bytes,ts)=>{const key=asset+'|m|'+ts;if(have.some(h=>h.key===key))return false;
-      const rec={key,asset,ts,kind,rev:sNow?sNow.rev:null,devType:sNow?sNow.devType:null,rpm:sNow&&sNow.rpm||null,bytes};
+      const rec={key,asset,ts,kind,rev:sNow?sNow.rev:null,devType:sNow?sNow.devType:null,rpm:sNow&&sNow.rpm||null,bytes,axes:axSnap(asset),...(ble.cfg.portable?{src:'spot',mount:'magnet'}:{})};
       await FFTDB.put(rec);FUI.key=key;setTimeout(()=>onFftSaved(rec),0);return true};
     const r=await downloadManualFFT(ch,keep);
     if(r.ts<=prev)bleLog('⚠ ได้ FFT ชุดเดิม (เวลาไม่ใหม่กว่าเดิม) เซนเซอร์อาจไม่ได้วัดใหม่');
@@ -1839,6 +1873,7 @@ function applySys(s){
     ble.cfg.scale=s.scale;
     const f=$('#bleForm');if(f)f.scale.value=String(s.scale);
   }
+  if(ble.cfg.portable){if(ble.device&&S.sensors[ble.device.id])S.sensors[ble.device.id].scale=ble.cfg.scale;save();return} // the sensor's own thresholds and stored trend belong to no point
   if(ble.device)S.sensors[ble.device.id]=Object.assign(S.sensors[ble.device.id]||{},{asset:ble.cfg.asset,scale:ble.cfg.scale});
   const ac=cfg(ble.cfg.asset);
   if(s.thr.alarm.some(v=>v!=null)||s.thr.warn.some(v=>v!=null)){
@@ -1917,7 +1952,7 @@ function sensorStatusHtml(s){
 }
 function fillLive(){
   const el=$('#livePanel');if(!el)return;
-  if(!ble.live){el.hidden=true;return}
+  if(!ble.live||!ble.cfg||ble.cfg.portable){el.hidden=true;return}
   el.hidden=false;
   const s=ble.live.sys,r=s.rec,c=cfg(ble.cfg.asset);
   const ov=r?Math.max(r.vx,r.vy,r.vz):null,z=r?vibZone([r.vx,r.vy,r.vz],c):null;
@@ -1966,7 +2001,7 @@ function bleStatusText(full){
   const st=ble.state||{phase:'idle'},label=(BS[st.phase]||BS.idle)[1];
   // error details can be long: the header chip keeps the label, the dialog shows everything
   const parts=[label+(st.detail&&(full||st.phase!=='error')?' '+st.detail:'')];
-  if(ble.cfg&&st.phase!=='idle')parts.push(ble.cfg.asset);
+  if(ble.cfg&&st.phase!=='idle')parts.push(ble.cfg.portable?'เซนเซอร์พกพา'+(ble.cfg.asset?' · '+ble.cfg.asset:''):ble.cfg.asset);
   if(ble.last)parts.push('ดึงล่าสุด '+hm(ble.last));
   if(ble.timer&&ble.autoMs){
     const next=ble.autoStart+Math.ceil((Date.now()-ble.autoStart+1)/ble.autoMs)*ble.autoMs;
@@ -2024,8 +2059,9 @@ function renderHealth(){
   const sc={ok:['zA','ปกติ'],warn:['zC','ควรดู'],bad:['zD','ต้องแก้'],none:['','ยังไม่มีประวัติ']};
   el.innerHTML=`<div class="ph"><h3>สุขภาพเซนเซอร์ (${ids.length})</h3></div><div class="pbody">${ids.map(id=>{
     const sv=S.sensors[id],h=healthSummary(id),l=h.last||{},sch=sv.sched||{};
-    return`<div class="hcard"><h4>${esc(sv.asset)} <span class="tag ${sc[h.score][0]}">${sc[h.score][1]}</span>${sv.mac?`<span class="muted mono" style="font-size:12px">${esc(sv.mac)}</span>`:''}${copies[id]>1?`<span class="muted" style="font-size:11.5px" title="เซนเซอร์ตัวเดียวกันที่เชื่อมต่อจากหลายเบราว์เซอร์/แท็บเล็ต หรือผ่าน Gateway"> · พบจาก ${copies[id]} อุปกรณ์</span>`:''}</h4>
-      ${sysRawFor(sv.asset)?`<button type="button" class="btn sm" style="margin:0 0 6px" onclick="openSensorConfig(this.dataset.a)" data-a="${esc(sv.asset)}">⚙ ดูค่าที่ตั้งในเซนเซอร์</button>`:''}
+    return`<div class="hcard"><h4>${esc(sensorLabel(id))} <span class="tag ${sc[h.score][0]}">${sc[h.score][1]}</span>${sv.mac?`<span class="muted mono" style="font-size:12px">${esc(sv.mac)}</span>`:''}${copies[id]>1?`<span class="muted" style="font-size:11.5px" title="เซนเซอร์ตัวเดียวกันที่เชื่อมต่อจากหลายเบราว์เซอร์/แท็บเล็ต หรือผ่าน Gateway"> · พบจาก ${copies[id]} อุปกรณ์</span>`:''}</h4>
+      <div class="row" style="margin:0 0 6px;font-size:12.5px">ประเภท <div class="seg" data-mode="${esc(id)}"><button type="button" data-v="fixed" class="${isPortable(id)?'':'on'}">ติดตั้งถาวร</button><button type="button" data-v="portable" class="${isPortable(id)?'on':''}">พกพา</button></div>
+        <button type="button" class="btn sm" data-axd="${esc(id)}">ตั้งทิศแกน</button>${sysRawFor(sv.asset)?`<button type="button" class="btn sm" onclick="openSensorConfig(this.dataset.a)" data-a="${esc(sv.asset)}">⚙ ดูค่าที่ตั้งในเซนเซอร์</button>`:''}${isPortable(id)?portableBudgetHtml(id):''}</div>
       <div class="hgrid">
         <div>แบตเตอรี่<b>${l.batt?l.batt.toFixed(2)+' V':'–'}${h.bars?' · '+'▮'.repeat(h.bars)+'▯'.repeat(4-h.bars):''}</b>${h.bars?`เต็ม &gt; ${h.cut[2].toFixed(2)} V · เปลี่ยนเมื่อ ≤ ${h.cut[0].toFixed(2)} V<br>`:''}${h.bpts&&h.bpts.length?`≈ ${Math.round(h.bpts.at(-1).pct)}%`:''}</div>
         <div>นาฬิกาเซนเซอร์<b>${l.drift==null?'–':h.clockBad?'ไม่ได้ตั้งเวลา':(l.fixed||(l.fixed==null&&l.reset&&Math.abs(l.drift)<=86400))?'ตั้งเวลาแล้ว ✓':fmtDrift(l.drift)}</b>รีสตาร์ท ${h.resets?h.resets.length:0} ครั้ง</div>
@@ -2039,12 +2075,12 @@ function renderHealth(){
           :`<div class="muted">คาดการณ์วันเปลี่ยนแบต</div><b>${h.bars===1?'ควรเปลี่ยนแล้ว':'ยังคาดการณ์ไม่ได้'}</b><div class="muted" style="font-size:12px">${esc((h.bfc&&h.bfc.why)||'')}</div>`}
           <div class="muted" style="font-size:11px;margin-top:6px">% ประมาณจากแรงดันเทียบเกณฑ์ของแอป i-ALERT (0% = 1 ขีด ควรเปลี่ยน) แบตลิเธียมแรงดันจะทรงตัวนานแล้วตกเร็วช่วงท้าย วันที่คาดการณ์จะปรับใหม่ทุกครั้งที่เชื่อมต่อ</div></div></div>`:''}
       ${h.issues.length?`<ul style="margin:8px 0 0;padding-left:18px;font-size:12.5px">${h.issues.map(([k,t])=>`<li class="${k==='bad'?'up':''}">${t}</li>`).join('')}</ul>`:''}
-      <div class="row" style="margin-top:8px;font-size:12.5px;border-top:1px solid var(--line);padding-top:8px">
+      ${isPortable(id)?'<p class="muted" style="font-size:12px;margin:8px 0 0;border-top:1px solid var(--line);padding-top:8px">เซนเซอร์พกพา (ฐานแม่เหล็ก): ไม่ดึงข้อมูลย้อนหลัง ไม่ดึง FFT ตอน alarm และไม่สั่งวัด FFT ตามตาราง · วัดจากหน้า "วัดรายจุด"</p>':`      <div class="row" style="margin-top:8px;font-size:12.5px;border-top:1px solid var(--line);padding-top:8px">
         <label class="check"><input type="checkbox" data-sch="${esc(id)}" ${sch.on?'checked':''}> สั่งวัด FFT ตามตาราง</label>
         <select data-schper="${esc(id)}"><option value="day" ${sch.per!=='week'?'selected':''}>วันละครั้ง</option><option value="week" ${sch.per==='week'?'selected':''}>สัปดาห์ละครั้ง</option></select>
         <label class="check"><input type="checkbox" data-cond="${esc(id)}" ${sv.cond&&sv.cond.on?'checked':''}> สั่งวัด FFT เมื่อค่าเกินเกณฑ์</label>
         <span class="muted">${sch.on?`ครั้งล่าสุด ${sv.schedLog&&sv.schedLog.length?dFull(Math.max(...sv.schedLog)):'ยังไม่เคย'}${sv.schedFail>=3?' · <span class="up">หยุดชั่วคราว (ไม่สำเร็จ 3 ครั้ง)</span>':''}`:'ปิดอยู่'}</span>
-      </div></div>`}).join('')||'<p class="muted" style="margin:0">ยังไม่มีเซนเซอร์</p>'}
+      </div>`}</div>`}).join('')||'<p class="muted" style="margin:0">ยังไม่มีเซนเซอร์</p>'}
     <p class="muted" style="margin:4px 0 0;font-size:12px">ข้อมูลสุขภาพเก็บทุกครั้งที่ดึงข้อมูล · "สั่งวัด FFT ตามตาราง" เขียนคำสั่งวัดลงเซนเซอร์แบบเดียวกับปุ่ม "สั่งวัด FFT ใหม่" (ผ่านด่านป้องกันทุกข้อ) ทำงานเฉพาะตอนที่ดึงข้อมูลอยู่และเครื่องเดิน ไม่เกินวันละ 2 ครั้ง และข้ามเมื่อแบตต่ำ</p></div>`;
   (window._hCharts||[]).forEach(c=>c.destroy());window._hCharts=[];
   el.querySelectorAll('canvas[data-bc]').forEach(cv_=>{
@@ -2057,6 +2093,11 @@ function renderHealth(){
     o.plugins.tooltip.callbacks.label=it=>{const p=h.bpts[it.dataIndex];return it.datasetIndex?'คาดการณ์ '+it.parsed.y.toFixed(0)+'%':`${it.parsed.y.toFixed(0)}% · ${p?p.v.toFixed(2)+' V'+(p.T!=null?' @ '+p.T.toFixed(0)+' °C':''):''}`};
     window._hCharts.push(new Chart(cv_,{type:'line',data:{datasets:ds},options:o}));
   });
+  el.querySelectorAll('[data-mode] button').forEach(b=>b.onclick=()=>{const id=b.closest('[data-mode]').dataset.mode,to=b.dataset.v;if(sensorMode(id)===to)return;
+    if(to==='portable'&&!confirm('ตั้งเซนเซอร์ตัวนี้เป็น "พกพา" (วัดรายจุด)?\n\n• ไม่ดึงข้อมูลย้อนหลังจากเซนเซอร์อีก (ข้อมูลในเซนเซอร์จะปนหลายจุด)\n• ปิด "สั่งวัด FFT ตามตาราง" ของตัวนี้\n• ฐานติดตั้งเป็นฐานแม่เหล็ก ไม่ใช้อุณหภูมิแจ้งเตือน\n• ข้อมูลเก่าของ "'+S.sensors[id].asset+'" อยู่ที่เดิม\n\nกด OK เพื่อเปลี่ยน'))return;
+    if(to==='fixed'&&!confirm('ตั้งกลับเป็น "ติดตั้งถาวร" ที่จุด "'+S.sensors[id].asset+'"?\nการเชื่อมต่อครั้งถัดไปจะดึงข้อมูลย้อนหลังในเซนเซอร์เข้าจุดนี้'))return;
+    setSensorMode(id,to);renderHealth()});
+  el.querySelectorAll('[data-axd]').forEach(b=>b.onclick=()=>openAxisDialog({id:b.dataset.axd}));
   el.querySelectorAll('[data-sch]').forEach(i=>i.onchange=()=>{
     const sv=S.sensors[i.dataset.sch];
     if(i.checked&&!confirm(`เปิด "สั่งวัด FFT ตามตาราง" ให้ ${sv.asset}?\n\n• หน้าเว็บจะเขียนคำสั่งวัด FFT ลงเซนเซอร์เองโดยไม่ถามทุกครั้ง (คำสั่งเดียวกับปุ่ม "สั่งวัด FFT ใหม่")\n• ทำเฉพาะตอนที่กำลังดึงข้อมูล เครื่องเดินอยู่ แบตไม่ต่ำ และนาฬิกาตรง\n• ไม่เกินวันละ 2 ครั้ง และหยุดเองถ้าไม่สำเร็จ 3 ครั้งติด\n• การวัดแต่ละครั้งใช้แบตเซนเซอร์เพิ่ม\n\nกด OK เพื่อเปิด`)){i.checked=false;return}
@@ -2232,6 +2273,11 @@ async function useDevice(dev){
     ble.ch=null;
   }
   const saved=S.sensors[dev.id];
+  if(saved&&isPortable(dev.id)){ // portable: no machine name, no auto-download; the spot page picks the point
+    ble.device=dev;ble.cfg={asset:SPOT.point||null,scale:saved.scale||816,portable:true};
+    clearInterval(ble.timer);ble.timer=null;f.asset.value='';renderScan();
+    return spotOnConnect();
+  }
   let typed=f.asset.value.trim(),auto=false;
   if(!saved&&!typed){ // first connection of this sensor: ask for the machine name before any data arrives
     const others=new Set(Object.values(S.sensors).map(v=>v.asset));
